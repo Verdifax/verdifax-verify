@@ -1,0 +1,9 @@
+# Built binary
+/verdifax-verify
+verdifax-verify.exe
+
+# Go build cache + temp
+*.test
+*.out
+.idea/
+.vscode/
