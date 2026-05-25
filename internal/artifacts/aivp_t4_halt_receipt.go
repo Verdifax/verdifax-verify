@@ -6,17 +6,17 @@ package artifacts
 //
 // Fits into the Phase 10/11/12 sealed-artifact family:
 //
-//   - DenyReceipt        — pre-execution policy halted at admission
-//   - CCVHaltReceipt     — runtime budget exceeded mid-execution
-//   - MACCHaltReceipt    — cumulative cross-run budget exceeded
-//   - AivpT4HaltReceipt  — Tier-4 governance refused to RELEASE the AI output
+//   - DenyReceipt: pre-execution policy halted at admission
+//   - CCVHaltReceipt: runtime budget exceeded mid-execution
+//   - MACCHaltReceipt: cumulative cross-run budget exceeded
+//   - AivpT4HaltReceipt , Tier-4 governance refused to RELEASE the AI output
 //
 // All five share the same canonical-bytes + SHA-256 sealing machinery,
 // the same independent-verifier API, and the same chain-of-custody
 // binding to the originating envelope + AllowToken (when present).
 //
 // What's bound into this seal:
-//   - The PIA (Proof Integrity Audit) hash from AIVP_T4 — the canonical
+//   - The PIA (Proof Integrity Audit) hash from AIVP_T4, the canonical
 //     T4 governance seal over the model invocation, the cognitive-state
 //     snapshot, the contradiction check, the policy evaluation, and the
 //     enforcement decision.
@@ -35,7 +35,7 @@ package artifacts
 // version (currently "vfa.aivp_t4_halt.v1").
 type AivpT4HaltReceipt struct {
 	// AdapterID identifies which AIVP-T4 ModelAdapter produced the
-	// governance decision — e.g., "mock-claude", "live-claude-api". The
+	// governance decision, e.g., "mock-claude", "live-claude-api". The
 	// verifier can use this to scope its trust evaluation: a mock-mode
 	// halt receipt should NOT be presented to a third party as evidence
 	// the run was governed by a real model.
@@ -50,7 +50,7 @@ type AivpT4HaltReceipt struct {
 	// AllowTokenHash is the §0-compliant hash of the AllowToken that
 	// initially admitted this run (when PEPG ran). The AIVP-T4 halt
 	// happened DESPITE the allow because Tier-4 governance refused to
-	// release the AI output — binding the original allow into the halt
+	// release the AI output, binding the original allow into the halt
 	// receipt preserves the full causal chain. Empty string when PEPG
 	// was not wired or skipped.
 	AllowTokenHash string `json:"allow_token_hash"`
@@ -85,7 +85,7 @@ type AivpT4HaltReceipt struct {
 	// "AIVP_T4_DEFER".
 	HaltReasonCode string `json:"halt_reason_code"`
 
-	// PiaHash is the AIVP-T4 Proof Integrity Audit hash — the canonical
+	// PiaHash is the AIVP-T4 Proof Integrity Audit hash, the canonical
 	// T4 governance seal binding the cognitive state snapshot, the
 	// contradiction check, the cognition validation, the policy
 	// evaluation, and the enforcement action into a single sealed

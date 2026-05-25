@@ -25,7 +25,7 @@
 // # Caller-attested context
 //
 // Some fields in the audit bundle (model_provider, actor_id, policy_id,
-// etc.) cannot come from Verdifax itself — Verdifax does not call any AI
+// etc.) cannot come from Verdifax itself, Verdifax does not call any AI
 // or run any business policy. They are caller-attested: provided by the
 // integration in the /execute request and recorded verbatim. When absent,
 // the corresponding fields are populated as "self_attested_deterministic"
@@ -35,7 +35,7 @@
 // # Scaffold honesty
 //
 // Several fields (TPM quote, Rekor entry, ZK proof bytes) are scaffold
-// today — the real values land in Phase 6/7. The audit bundle never
+// today, the real values land in Phase 6/7. The audit bundle never
 // pretends these fields are real. They are emitted with a "scaffold: true"
 // flag and a short note explaining what activates the real value.
 package artifacts

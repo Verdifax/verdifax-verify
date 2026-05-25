@@ -1,10 +1,10 @@
 package artifacts
 
-// Category 1 — Request Substance
+// Category 1, Request Substance
 //
 // Captures what the request actually was. Most fields are caller-attested
 // (the orchestrator does not see the prompt or the model output). A few
-// — latency breakdown, request origin, auth method — are observed by the
+//, latency breakdown, request origin, auth method, are observed by the
 // orchestrator itself and populated server-side.
 
 // RequestSubstance is the canonical record of "what exactly happened in
@@ -15,31 +15,31 @@ package artifacts
 type RequestSubstance struct {
 	Kind string `json:"kind"` // "verdifax.request_substance.v1"
 
-	// Prompt — the input the caller fed to a model (if any).
+	// Prompt, the input the caller fed to a model (if any).
 	Prompt PromptRecord `json:"prompt,omitempty"`
 
-	// Output — what the model produced before any post-processing.
+	// Output, what the model produced before any post-processing.
 	Output OutputRecord `json:"output,omitempty"`
 
-	// Post-processing — any transformations the caller applied to the
+	// Post-processing, any transformations the caller applied to the
 	// raw model output before turning it into a decision. Each entry is
 	// hash-bound so the chain is reconstructable.
 	PostProcessing []PostProcessingStep `json:"post_processing,omitempty"`
 
-	// Cost — how expensive the run was. Auditors and finance teams care.
+	// Cost, how expensive the run was. Auditors and finance teams care.
 	Cost CostBreakdown `json:"cost,omitempty"`
 
-	// Latency — per-stage timing breakdown. Used both for SLA evidence
+	// Latency, per-stage timing breakdown. Used both for SLA evidence
 	// and for side-channel anomaly detection (substitution attacks
 	// usually leave a latency signature). Server-observed.
 	Latency LatencyBreakdown `json:"latency,omitempty"`
 
-	// Origin — where the request came from. Server-observed from the
+	// Origin, where the request came from. Server-observed from the
 	// HTTP request headers. IPs and user-agent are hashed by default
 	// to avoid storing raw PII; opt-in inline available for debugging.
 	Origin RequestOrigin `json:"origin,omitempty"`
 
-	// Authentication — how the caller authenticated. Server-observed.
+	// Authentication, how the caller authenticated. Server-observed.
 	Authentication AuthenticationRecord `json:"authentication,omitempty"`
 
 	Hash string        `json:"hash"`
@@ -82,7 +82,7 @@ type PostProcessingStep struct {
 	ToolID      string `json:"tool_id,omitempty"`      // e.g. "regex_filter_v1"
 }
 
-// CostBreakdown — caller-attested cost, unit-of-account in USD. The
+// CostBreakdown, caller-attested cost, unit-of-account in USD. The
 // orchestrator does not compute this; the caller records what their AI
 // provider billed them.
 type CostBreakdown struct {
@@ -93,7 +93,7 @@ type CostBreakdown struct {
 	BillingTier      string  `json:"billing_tier,omitempty"` // "standard" | "batch" | "priority"
 }
 
-// LatencyBreakdown — per-stage timing in milliseconds, observed by the
+// LatencyBreakdown, per-stage timing in milliseconds, observed by the
 // orchestrator. Used for SLA evidence and anomaly detection.
 type LatencyBreakdown struct {
 	TotalMs       int64            `json:"total_ms"`

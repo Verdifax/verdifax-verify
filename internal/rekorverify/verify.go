@@ -15,7 +15,7 @@
 //     P-256 over the c2sp note format.)
 //
 // Both checks must pass for an anchor to be considered verified. The
-// verifier never contacts Rekor — the inclusion proof + signed
+// verifier never contacts Rekor, the inclusion proof + signed
 // checkpoint travel with the audit bundle, and the Rekor public key is
 // embedded at build time. This is the operationalization of Verdifax's
 // "no network access required to verify a sealed run" claim, extended
@@ -31,7 +31,7 @@
 //	    TreeSize:       1000,
 //	    RootHashHex:    "def456...",
 //	    InclusionPath:  []string{"hash1", "hash2", ...},
-//	    Checkpoint:     "rekor.sigstore.dev\n1000\ndef456...\n\n— signature\n",
+//	    Checkpoint:     "rekor.sigstore.dev\n1000\ndef456...\n\n,  signature\n",
 //	    LogID:          "...",
 //	})
 //	if err != nil {
@@ -105,7 +105,7 @@ type AnchorInput struct {
 	// the embedded Rekor public key.
 	Checkpoint string
 
-	// LogID is the Rekor log identifier — the hex SHA-256 of the public
+	// LogID is the Rekor log identifier, the hex SHA-256 of the public
 	// key. Used as a sanity check: the verifier confirms the embedded
 	// public key's hash matches this LogID.
 	LogID string
@@ -153,14 +153,14 @@ func VerifyAnchor(in AnchorInput) error {
 		return fmt.Errorf("rekorverify: merkle root recompute: %w", err)
 	}
 	if !bytesEqual(computedRoot, claimedRoot) {
-		return fmt.Errorf("rekorverify: merkle root mismatch — recomputed %x, claimed %s",
+		return fmt.Errorf("rekorverify: merkle root mismatch, recomputed %x, claimed %s",
 			computedRoot, in.RootHashHex)
 	}
 
 	// 4. Verify the signed checkpoint binds (RootHashHex, TreeSize)
 	// under Rekor's public key. This is what stops an attacker who
 	// crafted a fake leaf+path+root from convincing a verifier that
-	// Rekor agreed with the (root, tree_size) — only Rekor can sign.
+	// Rekor agreed with the (root, tree_size), only Rekor can sign.
 	rekorPubKey, err := loadRekorPublicKey()
 	if err != nil {
 		return fmt.Errorf("rekorverify: load embedded rekor pubkey: %w", err)
@@ -178,7 +178,7 @@ func VerifyAnchor(in AnchorInput) error {
 		return fmt.Errorf("rekorverify: compute expected log id: %w", err)
 	}
 	if !strings.EqualFold(in.LogID, expectedLogID) {
-		return fmt.Errorf("rekorverify: log_id mismatch — proof claims %s, embedded key produces %s",
+		return fmt.Errorf("rekorverify: log_id mismatch, proof claims %s, embedded key produces %s",
 			in.LogID, expectedLogID)
 	}
 
@@ -200,7 +200,7 @@ func VerifyAnchor(in AnchorInput) error {
 //
 // The leaf hash is provided ALREADY DOMAIN-PREFIXED by Rekor (the
 // "data.hash.value" in a hashedrekord entry IS the leaf hash for
-// inclusion-proof purposes — Rekor handles the 0x00 prefix at submit
+// inclusion-proof purposes, Rekor handles the 0x00 prefix at submit
 // time). So this function only applies the 0x01 internal-node prefix
 // when combining siblings.
 func recomputeRootRFC6962(leafHash []byte, logIndex, treeSize int64, siblings [][]byte) ([]byte, error) {
@@ -276,7 +276,7 @@ func hashChildren(left, right []byte) []byte {
 //	<base64 root hash>\n
 //	[optional extension lines...]\n
 //	\n
-//	— <key_name> <base64-signature>\n
+//	,  <key_name> <base64-signature>\n
 //
 // The signature is over everything before the blank separator line.
 // Multiple signature lines may follow; we accept the first one whose
@@ -290,7 +290,7 @@ func verifySignedCheckpoint(checkpoint, expectedRootHashHex string, expectedTree
 		return fmt.Errorf("body: %w", err)
 	}
 
-	// Compute the Rekor short key hint — the first 4 bytes of
+	// Compute the Rekor short key hint, the first 4 bytes of
 	// SHA-256(public-key-SubjectPublicKeyInfo-DER), base64-encoded.
 	keyHint, err := rekorKeyHint(pubKey)
 	if err != nil {
@@ -303,7 +303,7 @@ func verifySignedCheckpoint(checkpoint, expectedRootHashHex string, expectedTree
 	for _, sigLine := range signatures {
 		sigBytes, err := decodeCheckpointSignatureLine(sigLine, keyHint)
 		if err != nil {
-			continue // wrong key hint — skip
+			continue // wrong key hint, skip
 		}
 		if ecdsa.VerifyASN1(pubKey, hash[:], sigBytes) {
 			return nil
@@ -337,7 +337,7 @@ func splitCheckpoint(checkpoint string) (body string, signatures []string, err e
 		if line == "" {
 			continue
 		}
-		if !strings.HasPrefix(line, "— ") {
+		if !strings.HasPrefix(line, ",  ") {
 			return "", nil, fmt.Errorf("unexpected signature line: %q", line)
 		}
 		signatures = append(signatures, line)
@@ -360,7 +360,7 @@ func validateCheckpointBody(body, expectedRootHashHex string, expectedTreeSize i
 	if len(lines) < 3 {
 		return fmt.Errorf("body has fewer than 3 lines (origin/size/root)")
 	}
-	// lines[0] = origin (we don't pin origin here — the LogID check
+	// lines[0] = origin (we don't pin origin here, the LogID check
 	// already binds the proof to a specific Rekor instance via the key)
 
 	gotSize, err := strconv.ParseInt(strings.TrimSpace(lines[1]), 10, 64)
@@ -368,7 +368,7 @@ func validateCheckpointBody(body, expectedRootHashHex string, expectedTreeSize i
 		return fmt.Errorf("parse tree_size on line 2: %w", err)
 	}
 	if gotSize != expectedTreeSize {
-		return fmt.Errorf("tree_size mismatch — checkpoint says %d, expected %d", gotSize, expectedTreeSize)
+		return fmt.Errorf("tree_size mismatch, checkpoint says %d, expected %d", gotSize, expectedTreeSize)
 	}
 
 	rootB64 := strings.TrimSpace(lines[2])
@@ -378,21 +378,21 @@ func validateCheckpointBody(body, expectedRootHashHex string, expectedTreeSize i
 	}
 	gotRootHex := hex.EncodeToString(rootBytes)
 	if !strings.EqualFold(gotRootHex, expectedRootHashHex) {
-		return fmt.Errorf("root hash mismatch — checkpoint says %s, expected %s", gotRootHex, expectedRootHashHex)
+		return fmt.Errorf("root hash mismatch, checkpoint says %s, expected %s", gotRootHex, expectedRootHashHex)
 	}
 	return nil
 }
 
 // decodeCheckpointSignatureLine parses one c2sp note signature line.
-// Line format: "— <key_name> <base64-signature-with-key-hint-prefix>\n"
+// Line format: ",  <key_name> <base64-signature-with-key-hint-prefix>\n"
 //
 // The signature blob is 4 bytes of key-hint prefix followed by the raw
 // signature. This function returns the raw signature ONLY when the
 // key hint matches keyHint (returns nil error and signature bytes), or
 // returns an error when the line doesn't match the expected key.
 func decodeCheckpointSignatureLine(line string, keyHint []byte) ([]byte, error) {
-	// Strip "— " (em-dash + space).
-	const prefix = "— "
+	// Strip ",  " (em-dash + space).
+	const prefix = ",  "
 	if !strings.HasPrefix(line, prefix) {
 		return nil, errors.New("missing em-dash prefix")
 	}
@@ -430,7 +430,7 @@ func rekorKeyHint(pubKey *ecdsa.PublicKey) ([]byte, error) {
 }
 
 // computeRekorLogID returns the hex SHA-256 of the SubjectPublicKeyInfo
-// DER form of the Rekor public key — the canonical Rekor LogID.
+// DER form of the Rekor public key, the canonical Rekor LogID.
 func computeRekorLogID(pubKey *ecdsa.PublicKey) (string, error) {
 	der, err := x509.MarshalPKIXPublicKey(pubKey)
 	if err != nil {
@@ -447,11 +447,11 @@ func computeRekorLogID(pubKey *ecdsa.PublicKey) (string, error) {
 // loadRekorPublicKey decodes the embedded Rekor production public key
 // (see rekor_pubkey.go) into an *ecdsa.PublicKey ready for signature
 // verification. Returns an error if the embedded key is empty or
-// cannot be parsed — both of which indicate the operator forgot to
+// cannot be parsed, both of which indicate the operator forgot to
 // populate rekor_pubkey.go before building.
 func loadRekorPublicKey() (*ecdsa.PublicKey, error) {
 	if strings.TrimSpace(RekorPublicKeyPEM) == "" {
-		return nil, errors.New("RekorPublicKeyPEM is empty — populate cmd/.../rekor_pubkey.go with the current Rekor production key (see comment in that file)")
+		return nil, errors.New("RekorPublicKeyPEM is empty, populate cmd/.../rekor_pubkey.go with the current Rekor production key (see comment in that file)")
 	}
 	block, _ := pem.Decode([]byte(RekorPublicKeyPEM))
 	if block == nil {

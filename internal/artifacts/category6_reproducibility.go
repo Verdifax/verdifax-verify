@@ -7,7 +7,7 @@ package artifacts
 // ReproducibilityContext is the caller-supplied "what runtime environment
 // was this computation executed in" block. Like AttestedContext, every
 // field is optional and Verdifax records the block verbatim into the
-// audit bundle — Verdifax does NOT inspect or validate the container,
+// audit bundle, Verdifax does NOT inspect or validate the container,
 // dependencies, or git state; the caller is responsible for accurate
 // declaration.
 //
@@ -15,7 +15,7 @@ package artifacts
 // ReproducibilityContext canonical bytes. Two runs with identical
 // payload + identical context produce identical bundle hashes. Two
 // runs with the same payload but different dependency pins produce
-// DIFFERENT bundle hashes — surfacing environment drift as a
+// DIFFERENT bundle hashes, surfacing environment drift as a
 // verifiable property, not a hidden source of non-reproducibility.
 //
 // Use cases:
@@ -31,7 +31,7 @@ package artifacts
 //     FDA reviewer can verify the pipeline ran in the declared state.
 //
 // Empty zero-value is the honest "not declared" record. The bundle's
-// reproducibility section then renders as "declared: false" — distinct
+// reproducibility section then renders as "declared: false", distinct
 // from a fabricated environment claim.
 
 // ReproducibilityContext captures the runtime environment fingerprint a
@@ -54,7 +54,7 @@ type ReproducibilityContext struct {
 	// passing.
 	ContainerImageHash string `json:"container_image_hash,omitempty"`
 
-	// RuntimeName identifies the language runtime — e.g. "python",
+	// RuntimeName identifies the language runtime, e.g. "python",
 	// "R", "julia", "node", "go", "rust". Stable lowercase string;
 	// recommended but not enforced.
 	RuntimeName string `json:"runtime_name,omitempty"`
@@ -80,14 +80,14 @@ type ReproducibilityContext struct {
 	GitCommitSHA string `json:"git_commit_sha,omitempty"`
 
 	// RandomSeeds lists PRNG seed declarations made at run setup.
-	// Each entry is "library_name=seed_value" — e.g. "numpy=42",
+	// Each entry is "library_name=seed_value", e.g. "numpy=42",
 	// "torch=1337", "tensorflow=2024". Sorted by library name for
 	// canonical determinism. The caller is responsible for actually
 	// applying these seeds in their code; Verdifax records the
 	// declaration verbatim.
 	RandomSeeds []string `json:"random_seeds,omitempty"`
 
-	// Platform is the GOOS/GOARCH-style platform descriptor — e.g.
+	// Platform is the GOOS/GOARCH-style platform descriptor, e.g.
 	// "linux/amd64", "darwin/arm64", "linux/arm64". Floating-point
 	// determinism depends on platform; recording it surfaces
 	// hardware drift as a verifiable property of the bundle hash.

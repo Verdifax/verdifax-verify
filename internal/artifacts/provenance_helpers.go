@@ -30,7 +30,7 @@ func getContainerImageDigest() string { return buildContainerDigest }
 // Exported accessors for the running orchestrator's build-time provenance.
 // Used by the API's /health endpoint so the customer dashboard, status
 // pages, and uptime monitors can confirm which binary is actually serving
-// traffic — independent of the API contract version (ServiceVersion).
+// traffic, independent of the API contract version (ServiceVersion).
 func OrchestratorVersion() string { return buildOrchestratorVersion }
 func OrchestratorGitSHA() string  { return buildOrchestratorGitSHA }
 

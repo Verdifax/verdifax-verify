@@ -127,7 +127,7 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Fprintln(os.Stderr, `verdifax-verify — independent verifier for Verdifax audit bundles
+	fmt.Fprintln(os.Stderr, `verdifax-verify, independent verifier for Verdifax audit bundles
 
 USAGE
   verdifax-verify [flags] <bundle.json>
@@ -209,7 +209,7 @@ func verify(b *artifacts.AuditBundle) *Report {
 	r.BundleHash = mk("bundle", b.BundleHash, artifacts.RecomputeBundleHash(b), false)
 	r.BundleHashOK = r.BundleHash.Match
 
-	// Seal references — every artifact's seal must point to the bundle's
+	// Seal references, every artifact's seal must point to the bundle's
 	// manifest_hash. A mismatch indicates the artifact was lifted from
 	// another bundle, or the bundle's manifest_hash was edited after seal.
 	type sealed struct {
@@ -245,7 +245,7 @@ func verify(b *artifacts.AuditBundle) *Report {
 		})
 	}
 
-	// Day-3+ Rekor anchor verification — runs only when the bundle was
+	// Day-3+ Rekor anchor verification, runs only when the bundle was
 	// sealed under VERDIFAX_LEDGER_MODE=rekor (Backend == "rekor").
 	// Mock-ledger bundles skip this check; the report surfaces
 	// Performed=false so a reader can see the run wasn't anchored on
@@ -333,7 +333,7 @@ func mk(name, recorded, computed string, scaffold bool) HashCheck {
 
 func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	fmt.Println()
-	fmt.Println("verdifax-verify", Version, "—", b.Kind)
+	fmt.Println("verdifax-verify", Version, ", ", b.Kind)
 	fmt.Println()
 	fmt.Println("Manifest hash:", b.ManifestHash)
 	fmt.Println("Bundle hash:  ", b.BundleHash)
@@ -374,7 +374,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 
 	switch {
 	case r.AllPassed && !r.HasScaffold:
-		fmt.Println("VERDICT: ✓ VERIFIED — every hash recomputes correctly, no scaffold values flagged.")
+		fmt.Println("VERDICT: ✓ VERIFIED, every hash recomputes correctly, no scaffold values flagged.")
 	case r.AllPassed && r.HasScaffold:
 		fmt.Println("VERDICT: ✓ VERIFIED (with scaffold flags)")
 		fmt.Println("  Scaffold artifacts (will be activated in Phase 6/7):")
@@ -383,7 +383,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 		}
 		fmt.Println("  These are honestly self-declared by the orchestrator. Use --strict to fail on them.")
 	default:
-		fmt.Println("VERDICT: ✗ FAILED — at least one hash did not recompute correctly.")
+		fmt.Println("VERDICT: ✗ FAILED, at least one hash did not recompute correctly.")
 		fmt.Println("  This bundle has been tampered with, or was produced by a tool that is")
 		fmt.Println("  out of sync with this verifier's schema. Investigate before relying on it.")
 	}
@@ -435,13 +435,13 @@ func printRekorAnchor(a RekorAnchorCheck, logEntryID string) {
 	}
 
 	if a.Match {
-		fmt.Printf("  ✓  rekor anchor verified offline — log index %d\n", a.LogIndex)
+		fmt.Printf("  ✓  rekor anchor verified offline, log index %d\n", a.LogIndex)
 		fmt.Printf("     Inclusion proof and signed checkpoint both verify under the\n")
 		fmt.Printf("     embedded Rekor public key. View on https://search.sigstore.dev/?logIndex=%s\n", logEntryID)
 		return
 	}
 
-	fmt.Printf("  ✗  rekor anchor FAILED — log index %d\n", a.LogIndex)
+	fmt.Printf("  ✗  rekor anchor FAILED, log index %d\n", a.LogIndex)
 	fmt.Printf("     Reason: %s\n", a.Reason)
 	fmt.Println("     This bundle's public-log claim does not verify. Either the")
 	fmt.Println("     anchor was tampered with, the embedded Rekor public key is")

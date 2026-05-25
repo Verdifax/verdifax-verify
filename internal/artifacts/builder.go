@@ -291,7 +291,7 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 		TranscriptHash: in.TranscriptHash,
 		Scaffold: ScaffoldNote{
 			IsScaffold:  true,
-			ActivatedBy: "phase 6 (real ZK prover — winterfell)",
+			ActivatedBy: "phase 6 (real ZK prover, winterfell)",
 			Note:        "Transcript is currently the deterministic R1CS hash facade. Real Fiat-Shamir transcript bytes are emitted once the winterfell prover is wired (see ZK_PROVER_EVALUATION.md).",
 		},
 	}
@@ -318,7 +318,7 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 		},
 		Scaffold: ScaffoldNote{
 			IsScaffold:  true,
-			ActivatedBy: "phase 7 (live cloud — TPM2 / SEV-SNP)",
+			ActivatedBy: "phase 7 (live cloud, TPM2 / SEV-SNP)",
 			Note:        "Real attested hardware lands when the orchestrator is deployed on a SEV-SNP / vTPM2 cloud instance per PHASE5_HARDWARE_REQUIREMENTS.md. Until then this artifact is honest about being a policy scaffold.",
 		},
 	}
@@ -357,7 +357,7 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 		BindsTo:            []string{"envelope_id", "aer_hash", "program_id", "registry_record_hash"},
 		Scaffold: ScaffoldNote{
 			IsScaffold:  true,
-			ActivatedBy: "phase 6 (real ZK prover — winterfell)",
+			ActivatedBy: "phase 6 (real ZK prover, winterfell)",
 			Note:        "Verification status reflects the transitional R1CS hash facade. Real STARK proof bytes land when winterfell is wired.",
 		},
 	}
@@ -455,7 +455,7 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 	})
 	vfa.Seal = seal("final_vfa_hash", in.FinalVfaHash)
 
-	// ── Category 1 — RequestSubstance ───────────────────────────────────────
+	// ── Category 1, RequestSubstance ───────────────────────────────────────
 	// Merge caller-supplied substance with server-observed values.
 	requestSubstance := RequestSubstance{
 		Kind: "verdifax.request_substance.v1",
@@ -503,7 +503,7 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 	requestSubstance.Hash = MustCanonicalHash(requestSubstance)
 	requestSubstance.Seal = seal("request_substance", requestSubstance.Hash)
 
-	// ── Category 2 — AuthorizationChain ─────────────────────────────────────
+	// ── Category 2, AuthorizationChain ─────────────────────────────────────
 	authChain := AuthorizationChain{Kind: "verdifax.authorization_chain.v1"}
 	if in.AuthorizationChain != nil {
 		authChain = *in.AuthorizationChain
@@ -514,7 +514,7 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 	authChain.Hash = MustCanonicalHash(authChain)
 	authChain.Seal = seal("authorization_chain", authChain.Hash)
 
-	// ── Category 3 — RegulatoryScaffolding ──────────────────────────────────
+	// ── Category 3, RegulatoryScaffolding ──────────────────────────────────
 	reg := RegulatoryScaffolding{Kind: "verdifax.regulatory_scaffolding.v1"}
 	if in.RegulatoryScaffolding != nil {
 		reg = *in.RegulatoryScaffolding
@@ -532,7 +532,7 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 	reg.Hash = MustCanonicalHash(reg)
 	reg.Seal = seal("regulatory_scaffolding", reg.Hash)
 
-	// ── Category 4 — CausalGraph ────────────────────────────────────────────
+	// ── Category 4, CausalGraph ────────────────────────────────────────────
 	causal := CausalGraph{Kind: "verdifax.causal_graph.v1"}
 	if in.CausalGraph != nil {
 		causal = *in.CausalGraph
@@ -543,18 +543,18 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 	causal.Hash = MustCanonicalHash(causal)
 	causal.Seal = seal("causal_graph", causal.Hash)
 
-	// ── Category 5 — SystemProvenance (fully server-observed) ───────────────
+	// ── Category 5, SystemProvenance (fully server-observed) ───────────────
 	prov := buildSystemProvenance(region)
 	prov.Hash = ""
 	prov.Seal = SealReference{}
 	prov.Hash = MustCanonicalHash(prov)
 	prov.Seal = seal("system_provenance", prov.Hash)
 
-	// ── Category 6 — ReproducibilityContext (caller-attested) ──────────────
+	// ── Category 6, ReproducibilityContext (caller-attested) ──────────────
 	// Captures the runtime fingerprint (container image hash, language
 	// pinned deps, git SHA, random seeds, platform) declared by the
 	// caller. Empty zero-value renders as Declared:false in the bundle
-	// — honest "not declared" rather than a fabricated environment.
+	//, honest "not declared" rather than a fabricated environment.
 	repro := ReproducibilityContext{}
 	if in.ReproducibilityContext != nil {
 		repro = *in.ReproducibilityContext
@@ -643,7 +643,7 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 		bundle.SystemProvenance.Hash, bundle.ReproducibilityContext.Hash,
 	})
 
-	// Day-3 Rekor anchor — populate from BuildInput. For mock-ledger
+	// Day-3 Rekor anchor, populate from BuildInput. For mock-ledger
 	// runs the input fields are zero values, which produces a
 	// RekorAnchor with Backend="mock" (or empty) and the verifier
 	// will skip the offline Rekor proof check.
@@ -665,7 +665,7 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 		IntegratedTime:       in.LedgerIntegratedTime,
 	}
 
-	// Phase-13 AIVP-T4 — populate from BuildInput. For runs that
+	// Phase-13 AIVP-T4, populate from BuildInput. For runs that
 	// didn't engage governance (e.g. AivpT4 governor wasn't wired,
 	// or pre-Phase-13 runs being rebuilt) all fields are zero and
 	// Outcome defaults to "skipped" so downstream renderers know to
@@ -683,7 +683,7 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 		HaltReceiptHash: in.AivpHaltReceiptHash,
 	}
 
-	// Phase-15 NREP — Ed25519 actor signing evidence. Empty values
+	// Phase-15 NREP, Ed25519 actor signing evidence. Empty values
 	// produce a "skipped" section (anonymous runs, pre-Phase-15 runs,
 	// runs halted before NREP stage). The pipeline always populates
 	// these manifest fields when an actor identity is present, so
@@ -753,7 +753,7 @@ func canonicalHashOf(kind string, pairs []kv) string {
 		sb.WriteString(",\"")
 		sb.WriteString(p.k)
 		sb.WriteString("\":")
-		// JSON-encode the value (string only — that's all this helper handles).
+		// JSON-encode the value (string only, that's all this helper handles).
 		sb.WriteByte('"')
 		sb.WriteString(jsonEscape(p.v))
 		sb.WriteByte('"')
@@ -765,7 +765,7 @@ func canonicalHashOf(kind string, pairs []kv) string {
 
 // jsonEscape minimally escapes a string for inclusion inside a JSON
 // double-quoted value. Verdifax artifact values are constrained to
-// hex hashes, IDs, and short ASCII tokens — so we only need to handle
+// hex hashes, IDs, and short ASCII tokens, so we only need to handle
 // backslash and double-quote (other characters in our domain are safe).
 func jsonEscape(s string) string {
 	if !strings.ContainsAny(s, `"\`) {

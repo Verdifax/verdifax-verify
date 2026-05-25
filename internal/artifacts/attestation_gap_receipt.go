@@ -40,7 +40,7 @@ type AttestationGapReceipt struct {
 	// so this may be the partial envelope ID computed from the request
 	// payload + program_id + route_id. The chain-of-custody guarantee
 	// is "this exact request, identified by this exact ID, was halted
-	// because of these missing fields" — not full envelope semantics.
+	// because of these missing fields", not full envelope semantics.
 	EnvelopeID string `json:"envelope_id"`
 
 	// EvaluatorVersion is the PEPG software version that made the gap
@@ -99,7 +99,7 @@ type AttestationGapReceipt struct {
 
 // ErrAttestationGapReceiptHashMismatch is returned when verification
 // recomputes a receipt's hash and finds it disagrees with the stored
-// Hash field — an indication of tampering or a software-version mismatch
+// Hash field, an indication of tampering or a software-version mismatch
 // between the seal-time and verify-time canonicalizers.
 var ErrAttestationGapReceiptHashMismatch = errors.New(
 	"artifacts: attestation gap receipt hash mismatch",
@@ -183,7 +183,7 @@ func VerifyAttestationGapReceiptHash(receipt *AttestationGapReceipt) error {
 
 // HumanSummary returns a one-paragraph buyer-readable explanation of
 // the gap, suitable for sidecar display next to the sealed receipt.
-// NOT bound into the receipt hash — purely an advisory rendering
+// NOT bound into the receipt hash, purely an advisory rendering
 // helper. The PDF and verify page may compose richer text on top of
 // this; they all share this baseline summary.
 func (r *AttestationGapReceipt) HumanSummary() string {

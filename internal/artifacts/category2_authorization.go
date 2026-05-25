@@ -1,6 +1,6 @@
 package artifacts
 
-// Category 2 — Authorization Chain
+// Category 2, Authorization Chain
 //
 // Records the full authorization story for the run: who approved (possibly
 // multiple people), what thresholds were checked, whether human review
@@ -15,26 +15,26 @@ package artifacts
 type AuthorizationChain struct {
 	Kind string `json:"kind"` // "verdifax.authorization_chain.v1"
 
-	// Approvers — every party that signed off on this decision, in order.
+	// Approvers, every party that signed off on this decision, in order.
 	// For single-actor decisions this is empty (the actor in
 	// AttestedContext is the sole approver).
 	Approvers []Approver `json:"approvers,omitempty"`
 
-	// ThresholdChecks — every dollar / risk / volume threshold that was
+	// ThresholdChecks, every dollar / risk / volume threshold that was
 	// evaluated, with the observed value and whether it breached.
 	ThresholdChecks []ThresholdCheck `json:"threshold_checks,omitempty"`
 
-	// HumanInLoop — was human review required by policy, and was it done?
+	// HumanInLoop, was human review required by policy, and was it done?
 	HumanInLoop HITLStatus `json:"human_in_loop,omitempty"`
 
-	// Risk — what risk class did the caller assign to this decision?
+	// Risk, what risk class did the caller assign to this decision?
 	Risk *RiskAssessment `json:"risk,omitempty"`
 
-	// SegregationOfDuties — did the actor have authority to both
+	// SegregationOfDuties, did the actor have authority to both
 	// initiate and approve this kind of decision? Bank auditors care.
 	SegregationOfDuties SegregationStatus `json:"segregation_of_duties,omitempty"`
 
-	// Delegation — if the actor was acting on behalf of someone else,
+	// Delegation, if the actor was acting on behalf of someone else,
 	// the chain of delegation.
 	Delegation []DelegationRef `json:"delegation,omitempty"`
 
@@ -65,7 +65,7 @@ type ThresholdCheck struct {
 	PolicyTriggered   string  `json:"policy_triggered,omitempty"` // policy id that the breach activated
 }
 
-// HITLStatus — Human-In-The-Loop status.
+// HITLStatus, Human-In-The-Loop status.
 type HITLStatus struct {
 	Required        bool   `json:"required"`
 	Performed       bool   `json:"performed"`
@@ -76,7 +76,7 @@ type HITLStatus struct {
 	ModificationsHash string `json:"modifications_hash,omitempty"` // if reviewer changed anything
 }
 
-// RiskAssessment — caller-attested risk classification.
+// RiskAssessment, caller-attested risk classification.
 type RiskAssessment struct {
 	Score          float64 `json:"score"`                // 0..1
 	Class          string  `json:"class"`                // "low" | "medium" | "high" | "critical"
@@ -84,14 +84,14 @@ type RiskAssessment struct {
 	Factors        []string `json:"factors,omitempty"`   // ["high_amount", "new_counterparty", "off_hours"]
 }
 
-// SegregationStatus — was segregation-of-duties satisfied?
+// SegregationStatus, was segregation-of-duties satisfied?
 type SegregationStatus struct {
 	Required  bool   `json:"required"`
 	Satisfied bool   `json:"satisfied"`
 	Note      string `json:"note,omitempty"`
 }
 
-// DelegationRef — if the actor was acting on behalf of someone else.
+// DelegationRef, if the actor was acting on behalf of someone else.
 type DelegationRef struct {
 	OnBehalfOf       string `json:"on_behalf_of"`       // delegator actor id
 	DelegationGrant  string `json:"delegation_grant"`   // grant id / hash

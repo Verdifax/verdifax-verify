@@ -1,6 +1,6 @@
 package artifacts
 
-// Hash recomputation — the canonical source of truth for "given an
+// Hash recomputation, the canonical source of truth for "given an
 // artifact, what is its hash?"
 //
 // Both the builder (which fills in Hash fields when a bundle is first
@@ -15,7 +15,7 @@ package artifacts
 // Conventions:
 //
 //   - For pipeline artifacts whose canonical preimage is a flat list of
-//     string fields, we use canonicalHashOf(kind, kvList) — the same
+//     string fields, we use canonicalHashOf(kind, kvList), the same
 //     hand-crafted JSON-object writer the builder used originally.
 //   - For pipeline artifacts whose preimage includes structured
 //     sub-records (EFA's Steps, AER's Decision, EPA's AttestedContext),
@@ -221,13 +221,13 @@ func RecomputeSystemProvenanceHash(sp SystemProvenance) string {
 
 // RecomputeBundleHash reproduces the canonical bundle hash. The preimage
 // is the bundle's identity fields plus the 14 pipeline-artifact hashes
-// plus the 6 category hashes — explicitly NOT the bundle's own Hash field
+// plus the 6 category hashes, explicitly NOT the bundle's own Hash field
 // or its run_id (which is metadata) or generated_at (which varies between
 // bundle constructions on the same content).
 //
 // Category 6 (ReproducibilityContext) was added 2026-05-10. Bundles
 // produced before that date will have a zero ReproducibilityContext
-// with Hash = the canonical hash of the empty struct — verifiers
+// with Hash = the canonical hash of the empty struct, verifiers
 // running against pre-Phase-6 bundles still recompute deterministic
 // hashes because the empty-struct hash is itself stable.
 func RecomputeBundleHash(b *AuditBundle) string {

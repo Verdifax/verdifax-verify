@@ -21,7 +21,7 @@ func newTestGapReceipt() *AttestationGapReceipt {
 	}
 }
 
-// 1. Hash is deterministic — same input → same output.
+// 1. Hash is deterministic, same input → same output.
 func TestBuildAttestationGapReceiptHash_Deterministic(t *testing.T) {
 	r1 := newTestGapReceipt()
 	r2 := newTestGapReceipt()
@@ -84,7 +84,7 @@ func TestVerifyAttestationGapReceiptHash_TamperDetection(t *testing.T) {
 	}
 }
 
-// 4. Hash is stable across slice ordering — passing unsorted slices
+// 4. Hash is stable across slice ordering, passing unsorted slices
 // produces the same hash as passing pre-sorted ones (defensive sort
 // inside the builder).
 func TestBuildAttestationGapReceiptHash_StableAcrossSliceOrdering(t *testing.T) {

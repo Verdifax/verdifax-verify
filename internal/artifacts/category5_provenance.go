@@ -1,6 +1,6 @@
 package artifacts
 
-// Category 5 — System Provenance
+// Category 5, System Provenance
 //
 // Records exactly which version of Verdifax produced this run: orchestrator
 // version, git SHA, build provenance, kernel versions, runtime environment.
@@ -28,39 +28,39 @@ type SystemProvenance struct {
 	Seal SealReference `json:"seal,omitempty"`
 }
 
-// BuildProvenance — supply-chain provenance for the running orchestrator.
+// BuildProvenance, supply-chain provenance for the running orchestrator.
 type BuildProvenance struct {
-	// SLSALevel — Supply-chain Levels for Software Artifacts.
+	// SLSALevel, Supply-chain Levels for Software Artifacts.
 	// 0 = no provenance. 1 = build script exists. 2 = hosted build.
 	// 3 = builder hardened + non-falsifiable provenance. 4 = two-party review.
 	SLSALevel int `json:"slsa_level"`
 
-	// SigstoreCertificate — base64 cert from cosign / sigstore (or empty).
+	// SigstoreCertificate, base64 cert from cosign / sigstore (or empty).
 	SigstoreCertificate string `json:"sigstore_certificate,omitempty"`
 
-	// SBOMHash — sha256 of the Software Bill of Materials.
+	// SBOMHash, sha256 of the Software Bill of Materials.
 	SBOMHash string `json:"sbom_hash,omitempty"`
 	SBOMURL  string `json:"sbom_url,omitempty"`
 
-	// Builder — who built it.
+	// Builder, who built it.
 	BuilderID         string `json:"builder_id,omitempty"`         // "github_actions" | "local"
 	BuildInvocationID string `json:"build_invocation_id,omitempty"` // CI run id
 	BuildStartedAt    string `json:"build_started_at,omitempty"`
 	BuildFinishedAt   string `json:"build_finished_at,omitempty"`
 
-	// SourceRepo — where the code came from.
+	// SourceRepo, where the code came from.
 	SourceRepo      string `json:"source_repo,omitempty"`
 	SourceCommitSHA string `json:"source_commit_sha,omitempty"`
 }
 
-// KernelVersion — one row of the per-kernel version table.
+// KernelVersion, one row of the per-kernel version table.
 type KernelVersion struct {
 	Kernel  string `json:"kernel"`  // "DSE" | "TOK" | "DSC" | "NREP" | "AIVP" | "DCAE"
 	Version string `json:"version"` // semantic version
 	Hash    string `json:"hash,omitempty"` // canonical kernel-binary hash if known
 }
 
-// RuntimeEnvironment — where the orchestrator is running right now.
+// RuntimeEnvironment, where the orchestrator is running right now.
 type RuntimeEnvironment struct {
 	Cloud                string `json:"cloud"`                  // "fly" | "self_hosted" | "aws" | "gcp" | "azure"
 	Region               string `json:"region"`                 // e.g. "iad", "us-east-1"

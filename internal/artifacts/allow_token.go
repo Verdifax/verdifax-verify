@@ -8,7 +8,7 @@ package artifacts
 //
 // Both artifacts share the same canonical-bytes + SHA-256 sealing
 // machinery, the same independent-verifier API (Verify*Hash), and the
-// same chain-of-custody binding — same §0 guarantees, just with
+// same chain-of-custody binding, same §0 guarantees, just with
 // asymmetric outcomes. The pair completes the prevention/authorization
 // symmetry the patent claim depends on.
 //
@@ -41,7 +41,7 @@ type AllowToken struct {
 	EvaluatorVersion string `json:"evaluator_version"`
 
 	// FiredRuleID is the rule_id of the rule that fired with effect=allow.
-	// Always a real rule_id (not "default") for allow tokens — the v0
+	// Always a real rule_id (not "default") for allow tokens, the v0
 	// PSL grammar's only path to allow is an explicit allow rule. A
 	// future deny-by-default policy with no allow rules cannot produce
 	// an AllowToken.

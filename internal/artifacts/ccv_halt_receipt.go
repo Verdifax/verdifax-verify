@@ -4,11 +4,11 @@ package artifacts
 // runtime budget enforcement halts a pipeline mid-execution. It is the
 // continuous-constraint counterpart to DenyReceipt:
 //
-//   - DenyReceipt   — proves "this was correctly prevented at admission"
-//   - CCVHaltReceipt — proves "this was correctly halted mid-execution"
+//   - DenyReceipt: proves "this was correctly prevented at admission"
+//   - CCVHaltReceipt, proves "this was correctly halted mid-execution"
 //
 // Both share the same canonical-bytes + SHA-256 sealing machinery, the
-// same independent-verifier API, and the same chain-of-custody binding —
+// same independent-verifier API, and the same chain-of-custody binding , 
 // the trio (AllowToken, DenyReceipt, CCVHaltReceipt) plus MCDFinding
 // gives Phase 11 four artifact-typed outcomes for any orchestrated run:
 //
@@ -24,7 +24,7 @@ package artifacts
 type CCVHaltReceipt struct {
 	// AllowTokenHash is the §0-compliant hash of the AllowToken that
 	// initially authorized this run. The CCV halt happened DESPITE the
-	// allow because runtime budgets were breached — binding the original
+	// allow because runtime budgets were breached, binding the original
 	// allow into the halt receipt preserves the full causal chain.
 	AllowTokenHash string `json:"allow_token_hash"`
 

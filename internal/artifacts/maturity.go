@@ -11,17 +11,17 @@ import (
 type MaturityFlag string
 
 const (
-	// MaturityReal — the stage executed against the real, production-
+	// MaturityReal, the stage executed against the real, production-
 	// grade backend. Examples: AIVP-T4 ran against the live Anthropic
 	// Claude API; the ledger anchored to Sigstore Rekor.
 	MaturityReal MaturityFlag = "REAL"
 
-	// MaturityMock — the stage ran against a deterministic in-process
+	// MaturityMock, the stage ran against a deterministic in-process
 	// scaffold. Examples: AIVP-T4 in mock-claude mode; the ledger
 	// in mock mode (no public transparency-log entry).
 	MaturityMock MaturityFlag = "MOCK"
 
-	// MaturityPartial — the stage's artifact shape is sealed under
+	// MaturityPartial, the stage's artifact shape is sealed under
 	// the §0-canonical formula AND surfaces real metadata, but the
 	// underlying backend is still scaffolded and not fully cutover
 	// to the production-grade implementation. Examples: ZKSP L7-L10
@@ -30,13 +30,13 @@ const (
 	// shaped artifacts but the underlying quote isn't real today.
 	MaturityPartial MaturityFlag = "PARTIAL"
 
-	// MaturityUnknown — the run pre-dates the maturity-report era
+	// MaturityUnknown, the run pre-dates the maturity-report era
 	// (legacy runs) or the stage's signal isn't legible. Renders as
-	// "—" in the PDF rather than misclaiming.
+	// ", " in the PDF rather than misclaiming.
 	MaturityUnknown MaturityFlag = "UNKNOWN"
 )
 
-// MaturityRow is one row in the report — a stage name + its flag +
+// MaturityRow is one row in the report, a stage name + its flag +
 // a short human-readable note explaining the classification.
 type MaturityRow struct {
 	Stage string
@@ -48,7 +48,7 @@ type MaturityRow struct {
 // the audit PDF surfaces. Built from the sealed manifest fields by
 // BuildMaturityReport. Every row is derived from a canonical signal
 // in the manifest so the report itself is byte-stable for a given
-// run — recomputing it produces identical output.
+// run, recomputing it produces identical output.
 type MaturityReport struct {
 	Rows []MaturityRow
 }
@@ -82,30 +82,30 @@ type MaturityInputs struct {
 //
 // Classification rules:
 //
-//   - DOG / DTL / DKEC / AER — always REAL. These are pure §0
+//   - DOG / DTL / DKEC / AER, always REAL. These are pure §0
 //     orchestrator work; there's no "mock" version.
-//   - AIVP-T4 — REAL if the adapter ID is "live-claude-api";
+//   - AIVP-T4, REAL if the adapter ID is "live-claude-api";
 //     MOCK if it's "mock-claude" or any other identifier; UNKNOWN
 //     if empty (the run didn't carry AI output text).
-//   - ZKSP — PARTIAL by default. Artifact shapes are sealed but the
+//   - ZKSP, PARTIAL by default. Artifact shapes are sealed but the
 //     underlying ZK proof generation is scaffolded (real_zk Cargo
 //     feature flips this to REAL once a real prover lands).
-//   - Hardware Attestation — PARTIAL when HardwareAttestationHash
+//   - Hardware Attestation, PARTIAL when HardwareAttestationHash
 //     is set (artifact shape sealed, real TPM2/SEV-SNP attester
 //     pending). UNKNOWN when missing.
-//   - Ledger — REAL if LedgerBackend is "rekor"; MOCK if "mock";
+//   - Ledger, REAL if LedgerBackend is "rekor"; MOCK if "mock";
 //     UNKNOWN if empty.
-//   - DLA — always REAL (the final-VFA hash is computed from
+//   - DLA, always REAL (the final-VFA hash is computed from
 //     real sealed bytes).
 //
 // The notes column carries a short, accurate description that
-// names the specific signal driving the classification — buyers'
+// names the specific signal driving the classification, buyers'
 // diligence teams need to be able to chase the trail back to the
 // sealed manifest field.
 func BuildMaturityReport(in MaturityInputs) *MaturityReport {
 	report := &MaturityReport{}
 
-	// Phase-1-4 stages — pure orchestrator, always REAL.
+	// Phase-1-4 stages, pure orchestrator, always REAL.
 	report.Rows = append(report.Rows, []MaturityRow{
 		{Stage: "DOG (envelope construction)", Flag: MaturityReal, Note: "RFC 8785 canonical JSON + SHA-256, deterministic"},
 		{Stage: "DTL (transport sequencing)", Flag: MaturityReal, Note: "Deterministic in-process queue"},
@@ -113,14 +113,14 @@ func BuildMaturityReport(in MaturityInputs) *MaturityReport {
 		{Stage: "AER (attestation execution)", Flag: MaturityReal, Note: "§0-canonical aggregation of kernel outputs"},
 	}...)
 
-	// AIVP — based on adapter ID.
+	// AIVP, based on adapter ID.
 	report.Rows = append(report.Rows, MaturityRow{
 		Stage: "AIVP (AI Verification Protocol)",
 		Flag:  classifyAivp(in.AivpAdapterID),
 		Note:  noteAivp(in.AivpAdapterID),
 	})
 
-	// ZKSP — PARTIAL today. When real_zk lands the status string
+	// ZKSP, PARTIAL today. When real_zk lands the status string
 	// will differ; for now, keep the conservative classification.
 	report.Rows = append(report.Rows, MaturityRow{
 		Stage: "ZKSP (zero-knowledge state prover)",
@@ -142,7 +142,7 @@ func BuildMaturityReport(in MaturityInputs) *MaturityReport {
 		Note:  noteLedger(in.LedgerBackend),
 	})
 
-	// DLA — always REAL (final VFA hash is from sealed bytes).
+	// DLA, always REAL (final VFA hash is from sealed bytes).
 	report.Rows = append(report.Rows, MaturityRow{
 		Stage: "DLA (final artifact)",
 		Flag:  MaturityReal,
@@ -169,7 +169,7 @@ func classifyAivp(adapterID string) MaturityFlag {
 
 // DisplayAivpAdapter returns a buyer-facing label for an AIVP adapter
 // ID. The raw ID is sealed into the manifest (audit record) and stays
-// in backend logs, API responses, and verifier inputs unchanged — this
+// in backend logs, API responses, and verifier inputs unchanged, this
 // helper exists so user-visible surfaces (PDF maturity row, PDF AIVP
 // section, public verify page) don't expose internal identifiers such
 // as "aivp-t4-subprocess-empty" to a reader.
@@ -198,7 +198,7 @@ func DisplayAivpAdapter(adapterID string) string {
 // noteAivp renders the human-readable adapter description shown on the
 // PDF Production Maturity Report row. The raw AivpAdapterID is sealed
 // into the manifest (audit record) and stays in backend logs / API
-// responses unchanged — this helper translates it for buyer-facing
+// responses unchanged, this helper translates it for buyer-facing
 // surfaces so the PDF doesn't expose internal identifiers like
 // "aivp-t4-subprocess-empty" to a reader.
 func noteAivp(adapterID string) string {
@@ -207,19 +207,19 @@ func noteAivp(adapterID string) string {
 	case a == "":
 		return "Run did not carry AI output text; AIVP not invoked"
 	case a == "live-claude-api":
-		return "Live Anthropic Claude API — invoked the live model for governance"
+		return "Live Anthropic Claude API, invoked the live model for governance"
 	case a == "mock-claude":
-		return "Mock Claude — deterministic in-process scaffold (NOT real-model evaluation)"
+		return "Mock Claude, deterministic in-process scaffold (NOT real-model evaluation)"
 	case a == "aivp-t4-subprocess-empty":
-		return "AIVP subprocess (no AI output supplied) — governance ran with empty input; treat as mock"
+		return "AIVP subprocess (no AI output supplied), governance ran with empty input; treat as mock"
 	case a == "aivp-t4-subprocess":
-		return "AIVP subprocess (mock mode) — sealed adapter present without live model call; treat as mock"
+		return "AIVP subprocess (mock mode), sealed adapter present without live model call; treat as mock"
 	default:
-		return "Non-canonical adapter — treat as mock"
+		return "Non-canonical adapter, treat as mock"
 	}
 }
 
-// classifyZKSP — V0 returns PARTIAL universally. Future Cargo
+// classifyZKSP, V0 returns PARTIAL universally. Future Cargo
 // feature flag detection (real_zk + real_lean) will flip this.
 func classifyZKSP(status string) MaturityFlag {
 	if strings.TrimSpace(status) == "" {
@@ -227,7 +227,7 @@ func classifyZKSP(status string) MaturityFlag {
 	}
 	// FormalVerifierStatus is always "VERIFIED_SOUND_COMPLETE_ZK"
 	// today. Until real_zk + real_lean land, the status is a
-	// scaffold seal — artifact shape sealed, proof gen is mock.
+	// scaffold seal, artifact shape sealed, proof gen is mock.
 	return MaturityPartial
 }
 
@@ -239,7 +239,7 @@ func noteZKSP(status string) string {
 	return "Artifact shape sealed (status = \"" + s + "\"); real ZK proof generation pending real_zk feature"
 }
 
-// classifyHardware — V0 returns PARTIAL when a hash is present,
+// classifyHardware, V0 returns PARTIAL when a hash is present,
 // UNKNOWN otherwise. Will flip to REAL once real_hw + real Phase-5
 // hardware are detected at run time.
 func classifyHardware(hash string) MaturityFlag {
@@ -256,7 +256,7 @@ func noteHardware(hash string) string {
 	return "TPM2/SEV-SNP-shaped artifact sealed; real attester pending real_hw feature on Phase-5 hardware"
 }
 
-// classifyLedger — REAL on Sigstore Rekor, MOCK in development mode.
+// classifyLedger, REAL on Sigstore Rekor, MOCK in development mode.
 func classifyLedger(backend string) MaturityFlag {
 	switch strings.ToLower(strings.TrimSpace(backend)) {
 	case "":
@@ -273,10 +273,10 @@ func noteLedger(backend string) string {
 	case "":
 		return "Run did not anchor to a ledger (legacy or halt before Stage 7)"
 	case "rekor":
-		return "LedgerBackend = \"rekor\" — anchored on Sigstore's public Rekor transparency log"
+		return "LedgerBackend = \"rekor\", anchored on Sigstore's public Rekor transparency log"
 	case "mock":
-		return "LedgerBackend = \"mock\" — in-process ledger; no public transparency log entry"
+		return "LedgerBackend = \"mock\", in-process ledger; no public transparency log entry"
 	default:
-		return "LedgerBackend = \"" + backend + "\" — non-canonical backend"
+		return "LedgerBackend = \"" + backend + "\", non-canonical backend"
 	}
 }

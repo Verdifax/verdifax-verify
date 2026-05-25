@@ -1,6 +1,6 @@
 package artifacts
 
-// Category 3 — Regulatory Scaffolding
+// Category 3, Regulatory Scaffolding
 //
 // Records the regulatory framework that applied to this decision: which
 // data classifications, which sovereignty regimes, which retention rules,
@@ -26,17 +26,17 @@ type RegulatoryScaffolding struct {
 	DataResidency      DataResidency      `json:"data_residency,omitempty"`
 	RetentionPolicy    RetentionPolicy    `json:"retention_policy,omitempty"`
 
-	// Frameworks — every applicable compliance regime, with the
+	// Frameworks, every applicable compliance regime, with the
 	// caller's reference to the assessment ID for that regime.
 	Frameworks []FrameworkRef `json:"frameworks,omitempty"`
 
-	// BiasCheck — for AI systems where bias / fairness testing is
+	// BiasCheck, for AI systems where bias / fairness testing is
 	// required by regulation (e.g., EU AI Act high-risk, US ECOA, NYC
 	// AEDT Local Law 144). Caller-attested reference to their most
 	// recent test result.
 	BiasCheck *BiasCheckRef `json:"bias_check,omitempty"`
 
-	// RightToExplanation — auto-generated plain-English summary that
+	// RightToExplanation, auto-generated plain-English summary that
 	// can be served to an affected data subject under GDPR Art. 22 or
 	// equivalent right-to-explanation provisions. Caller-supplied.
 	RightToExplanation string `json:"right_to_explanation,omitempty"`
@@ -45,7 +45,7 @@ type RegulatoryScaffolding struct {
 	Seal SealReference `json:"seal,omitempty"`
 }
 
-// PolicySnapshot — the actual policy that applied at decision time, not
+// PolicySnapshot, the actual policy that applied at decision time, not
 // just its ID. Policies change; the audit must record which version
 // applied to *this* run.
 type PolicySnapshot struct {
@@ -61,24 +61,24 @@ type PolicySnapshot struct {
 // and NATO classifications simultaneously. Each subsystem is independent
 // and may be filled in or left empty.
 type DataClassification struct {
-	// Commercial / industry classifications. Multi-valued — a single
+	// Commercial / industry classifications. Multi-valued, a single
 	// payload may be both PII and PCI.
 	//
 	// Recognized values (non-exhaustive):
-	//   "PUBLIC"             — no restrictions
-	//   "INTERNAL"           — internal use only
-	//   "CONFIDENTIAL"       — business-confidential (commercial)
-	//   "BUSINESS_SENSITIVE" — competitive / strategic
-	//   "PII"                — personally identifiable information
-	//   "PHI"                — protected health information (HIPAA)
-	//   "PCI"                — payment card industry (PCI-DSS scope)
-	//   "FERPA"              — education records (US FERPA scope)
-	//   "GLBA_NPI"           — financial nonpublic personal info (US GLBA)
-	//   "TRADE_SECRET"       — trade-secret material
-	//   "ATTORNEY_CLIENT"    — privileged communication
-	//   "WORK_PRODUCT"       — attorney work product
-	//   "EU_PERSONAL_DATA"   — GDPR personal data
-	//   "EU_SPECIAL_CATEGORY" — GDPR Art. 9 special category (health, race, etc.)
+	//   "PUBLIC": no restrictions
+	//   "INTERNAL": internal use only
+	//   "CONFIDENTIAL": business-confidential (commercial)
+	//   "BUSINESS_SENSITIVE", competitive / strategic
+	//   "PII": personally identifiable information
+	//   "PHI": protected health information (HIPAA)
+	//   "PCI": payment card industry (PCI-DSS scope)
+	//   "FERPA": education records (US FERPA scope)
+	//   "GLBA_NPI": financial nonpublic personal info (US GLBA)
+	//   "TRADE_SECRET": trade-secret material
+	//   "ATTORNEY_CLIENT": privileged communication
+	//   "WORK_PRODUCT": attorney work product
+	//   "EU_PERSONAL_DATA": GDPR personal data
+	//   "EU_SPECIAL_CATEGORY", GDPR Art. 9 special category (health, race, etc.)
 	Commercial []string `json:"commercial,omitempty"`
 
 	// US government classification per Executive Order 13526 and
@@ -101,17 +101,17 @@ type DataClassification struct {
 	OtherMarkings []string `json:"other_markings,omitempty"`
 }
 
-// USGovClassification — Executive Order 13526 + related authorities.
+// USGovClassification, Executive Order 13526 + related authorities.
 //
 // Reference: https://www.archives.gov/cui/registry/category-detail
 //
 // Levels (from EO 13526 Sec. 1.2):
 //
-//   "UNCLASSIFIED"  — no classification; not for restricted handling
-//   "CUI"           — Controlled Unclassified Information (32 CFR 2002)
-//   "CONFIDENTIAL"  — unauthorized disclosure could cause damage to national security
-//   "SECRET"        — unauthorized disclosure could cause serious damage
-//   "TOP_SECRET"    — unauthorized disclosure could cause exceptionally grave damage
+//   "UNCLASSIFIED" , no classification; not for restricted handling
+//   "CUI": Controlled Unclassified Information (32 CFR 2002)
+//   "CONFIDENTIAL" , unauthorized disclosure could cause damage to national security
+//   "SECRET": unauthorized disclosure could cause serious damage
+//   "TOP_SECRET": unauthorized disclosure could cause exceptionally grave damage
 //
 // Compartments and SAP go beyond the level. SCI is access-controlled
 // information held to a higher need-to-know standard than ordinary
@@ -120,60 +120,60 @@ type USGovClassification struct {
 	// Level is one of the values above.
 	Level string `json:"level"`
 
-	// SCI flag — true when the information is in the Sensitive
+	// SCI flag, true when the information is in the Sensitive
 	// Compartmented Information (SCI) control system. Implies
 	// Level == "TOP_SECRET" in current US doctrine.
 	SCI bool `json:"sci,omitempty"`
 
-	// Compartments — recognized SCI compartments and sub-compartments.
+	// Compartments, recognized SCI compartments and sub-compartments.
 	// Multi-valued. The canonical full marking format is
-	// "TS//SI/TK//NOFORN" — Level//Compartments//Caveats.
+	// "TS//SI/TK//NOFORN", Level//Compartments//Caveats.
 	//
 	// Recognized SCI compartments (non-exhaustive):
-	//   "SI"      — Special Intelligence (signals intelligence / COMINT)
-	//   "TK"      — Talent Keyhole (overhead imagery, IMINT)
-	//   "G"       — Gamma (special-handling COMINT subset)
-	//   "HCS"     — Humint Control System (HUMINT)
-	//   "RSEN"    — Restricted Sensitive (overhead reconnaissance)
-	//   "ECI"     — Exceptionally Controlled Information
-	//   "KLONDIKE" — geospatial intelligence subset
-	//   "RESERVE" — RD (Restricted Data, atomic energy)
-	//   "FRD"     — Formerly Restricted Data
+	//   "SI": Special Intelligence (signals intelligence / COMINT)
+	//   "TK": Talent Keyhole (overhead imagery, IMINT)
+	//   "G": Gamma (special-handling COMINT subset)
+	//   "HCS": Humint Control System (HUMINT)
+	//   "RSEN": Restricted Sensitive (overhead reconnaissance)
+	//   "ECI": Exceptionally Controlled Information
+	//   "KLONDIKE", geospatial intelligence subset
+	//   "RESERVE", RD (Restricted Data, atomic energy)
+	//   "FRD": Formerly Restricted Data
 	Compartments []string `json:"compartments,omitempty"`
 
-	// SpecialAccessPrograms — code-named programs requiring SAP-tier
+	// SpecialAccessPrograms, code-named programs requiring SAP-tier
 	// access beyond TS or TS/SCI. Strings here are program nicknames
 	// or unclassified code words; classified codenames must not be
 	// recorded in audit bundles.
 	SpecialAccessPrograms []string `json:"special_access_programs,omitempty"`
 
-	// Caveats — dissemination markings that further restrict who may
+	// Caveats, dissemination markings that further restrict who may
 	// receive the information.
 	//
 	// Recognized values (non-exhaustive):
-	//   "NOFORN"        — Not Releasable to Foreign Nationals
-	//   "ORCON"         — Originator Controlled (dissemination)
-	//   "PROPIN"        — Proprietary Information Involved
-	//   "IMCON"         — Controlled Imagery
-	//   "RELIDO"        — Releasable by Information Disclosure Official
-	//   "FISA"          — FISA-derived
-	//   "WNINTEL"       — Warning Notice — Intelligence Sources & Methods
-	//   "DISPLAY ONLY"  — limited dissemination
-	//   "REL TO USA, FVEY"        — Releasable to Five Eyes
-	//   "REL TO USA, GBR"         — Releasable to UK only
-	//   "REL TO USA, AUS, GBR, CAN, NZL"  — Five Eyes (verbose)
-	//   "FOUO"          — For Official Use Only (legacy; now CUI)
-	//   "LES"           — Law Enforcement Sensitive
+	//   "NOFORN": Not Releasable to Foreign Nationals
+	//   "ORCON": Originator Controlled (dissemination)
+	//   "PROPIN": Proprietary Information Involved
+	//   "IMCON": Controlled Imagery
+	//   "RELIDO": Releasable by Information Disclosure Official
+	//   "FISA": FISA-derived
+	//   "WNINTEL": Warning Notice, Intelligence Sources & Methods
+	//   "DISPLAY ONLY" , limited dissemination
+	//   "REL TO USA, FVEY": Releasable to Five Eyes
+	//   "REL TO USA, GBR": Releasable to UK only
+	//   "REL TO USA, AUS, GBR, CAN, NZL" , Five Eyes (verbose)
+	//   "FOUO": For Official Use Only (legacy; now CUI)
+	//   "LES": Law Enforcement Sensitive
 	Caveats []string `json:"caveats,omitempty"`
 
-	// CUICategory — when Level == "CUI", which CUI category applies
+	// CUICategory, when Level == "CUI", which CUI category applies
 	// (NARA Registry). Examples: "PRIIM" (Privacy/PII), "PROCURE"
 	// (Procurement), "EXPT" (Export Controlled), "ISVI" (Investigation),
 	// "LEI" (Law Enforcement), "NUC" (Nuclear), "SP-PRIV" (Sensitive
 	// Personally Identifiable Information).
 	CUICategory string `json:"cui_category,omitempty"`
 
-	// CUIDecontrolDate — RFC3339 date when CUI controls expire.
+	// CUIDecontrolDate, RFC3339 date when CUI controls expire.
 	CUIDecontrolDate string `json:"cui_decontrol_date,omitempty"`
 
 	// Atomic Energy Act material flags.
@@ -187,22 +187,22 @@ type USGovClassification struct {
 	DeclassifyOn     string `json:"declassify_on,omitempty"`      // RFC3339 date OR exemption code "X1".."X8"
 	DeclassifyExemption string `json:"declassify_exemption,omitempty"` // "25X1-human" etc.
 
-	// Marking string — the human-readable banner line e.g.
+	// Marking string, the human-readable banner line e.g.
 	// "TOP SECRET//SI//NOFORN". Recorded for forensic purposes.
 	BannerMarking string `json:"banner_marking,omitempty"`
 
-	// PortionMarking — single-paragraph marking abbreviation, e.g. "(TS//SI//NF)".
+	// PortionMarking, single-paragraph marking abbreviation, e.g. "(TS//SI//NF)".
 	PortionMarking string `json:"portion_marking,omitempty"`
 }
 
-// ExportControlClassification — ITAR / EAR / sanctions regimes.
+// ExportControlClassification, ITAR / EAR / sanctions regimes.
 type ExportControlClassification struct {
-	// ITAR (22 CFR 120-130) — defense articles and services on the
+	// ITAR (22 CFR 120-130), defense articles and services on the
 	// United States Munitions List (USML).
 	ITARControlled  bool   `json:"itar_controlled,omitempty"`
 	USMLCategory    string `json:"usml_category,omitempty"`    // e.g. "Category VIII"
 
-	// EAR (15 CFR 730-774) — dual-use items on the Commerce Control List.
+	// EAR (15 CFR 730-774), dual-use items on the Commerce Control List.
 	EARControlled bool   `json:"ear_controlled,omitempty"`
 	ECCN          string `json:"eccn,omitempty"`             // e.g. "5A002"
 	EAR99         bool   `json:"ear99,omitempty"`            // catch-all for non-listed items
@@ -214,13 +214,13 @@ type ExportControlClassification struct {
 	// Embargoed destinations the data may not flow to.
 	EmbargoedCountries []string `json:"embargoed_countries,omitempty"` // ISO 3166-1 alpha-2
 
-	// Deemed export flag — non-US persons accessed the data on US soil.
+	// Deemed export flag, non-US persons accessed the data on US soil.
 	DeemedExport bool `json:"deemed_export,omitempty"`
 }
 
-// NATOClassification — NATO security classifications.
+// NATOClassification, NATO security classifications.
 type NATOClassification struct {
-	// Level — one of:
+	// Level, one of:
 	//   "NATO_UNCLASSIFIED"
 	//   "NATO_RESTRICTED"
 	//   "NATO_CONFIDENTIAL"
@@ -229,14 +229,14 @@ type NATOClassification struct {
 	//   "ATOMAL"                   // atomic-related NATO marking
 	Level string `json:"level"`
 
-	// Atomal flag — separately controlled atomic information.
+	// Atomal flag, separately controlled atomic information.
 	Atomal bool `json:"atomal,omitempty"`
 
-	// Caveats — NATO releasability and handling caveats.
+	// Caveats, NATO releasability and handling caveats.
 	Caveats []string `json:"caveats,omitempty"`
 }
 
-// AlliedClassification — multinational sharing markings beyond NATO.
+// AlliedClassification, multinational sharing markings beyond NATO.
 type AlliedClassification struct {
 	// Five Eyes (FVEY): USA, GBR, CAN, AUS, NZL.
 	FVEYReleasable bool `json:"fvey_releasable,omitempty"`
@@ -244,14 +244,14 @@ type AlliedClassification struct {
 	// AUKUS: AUS, GBR, USA.
 	AUKUSReleasable bool `json:"aukus_releasable,omitempty"`
 
-	// ABCA: USA, GBR, CAN, AUS, NZL — Armies Cooperation Program.
+	// ABCA: USA, GBR, CAN, AUS, NZL, Armies Cooperation Program.
 	ABCAReleasable bool `json:"abca_releasable,omitempty"`
 
 	// Specific country list, ISO 3166-1 alpha-3 codes (e.g. ["USA","GBR"]).
 	ReleasableTo []string `json:"releasable_to,omitempty"`
 }
 
-// DataResidency — where the data was processed, hosted, and stored.
+// DataResidency, where the data was processed, hosted, and stored.
 type DataResidency struct {
 	ProcessingRegion   string   `json:"processing_region"`             // e.g. "us-east-1", "fly:iad"
 	ModelHostingRegion string   `json:"model_hosting_region,omitempty"` // for caller-attested AI calls
@@ -261,7 +261,7 @@ type DataResidency struct {
 	Sovereignty        []string `json:"sovereignty,omitempty"`          // ["GDPR", "EU_AI_ACT", "FedRAMP_HIGH", "IL5", "PCIDSS"]
 }
 
-// RetentionPolicy — how long this audit record is kept.
+// RetentionPolicy, how long this audit record is kept.
 type RetentionPolicy struct {
 	RetentionDays      int    `json:"retention_days"`             // 0 means indefinite
 	LegalHold          bool   `json:"legal_hold"`                 // record is held for litigation
@@ -273,7 +273,7 @@ type RetentionPolicy struct {
 	SOXRetentionMin    bool   `json:"sox_retention_minimum,omitempty"`   // 7-year SOX minimum applies
 }
 
-// FrameworkRef — one applicable compliance framework.
+// FrameworkRef, one applicable compliance framework.
 type FrameworkRef struct {
 	Framework      string `json:"framework"`              // "EU_AI_ACT", "HIPAA", "SOX", "FedRAMP", "ISO27001", "SOC2", "GDPR", "CCPA", "NIS2"
 	AssessmentID   string `json:"assessment_id,omitempty"` // DPIA / AI conformity assessment / audit ID
@@ -283,7 +283,7 @@ type FrameworkRef struct {
 	AttestationID  string `json:"attestation_id,omitempty"` // FedRAMP Authorization, SOC2 report, etc.
 }
 
-// BiasCheckRef — caller-attested fairness / bias test reference.
+// BiasCheckRef, caller-attested fairness / bias test reference.
 type BiasCheckRef struct {
 	TestID         string  `json:"test_id"`
 	LastRunAt      string  `json:"last_run_at"`             // RFC3339

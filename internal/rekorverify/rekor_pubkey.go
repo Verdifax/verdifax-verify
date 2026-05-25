@@ -3,7 +3,7 @@ package rekorverify
 // RekorPublicKeyPEM is the production Sigstore Rekor public key used
 // to verify signed log checkpoints. This value MUST be populated
 // before the verifier can perform any offline Rekor proof
-// verification — leaving it empty causes loadRekorPublicKey to return
+// verification, leaving it empty causes loadRekorPublicKey to return
 // a clear "populate this file" error rather than silently accepting
 // any key.
 //
@@ -40,7 +40,7 @@ package rekorverify
 //
 // When rotation happens, rebuild the verifier with the new key. Old
 // audit bundles signed under the old key will no longer verify
-// against the new key — operators may want to keep both keys
+// against the new key, operators may want to keep both keys
 // available during a transition window. The simplest extension is to
 // turn this constant into a slice and have loadRekorPublicKey try
 // each key in turn until one verifies.
@@ -57,7 +57,7 @@ package rekorverify
 //
 // Compare against the LogID embedded in any recent Rekor entry
 // (visible at https://search.sigstore.dev/?logIndex=<any-recent-index>).
-// They must match. If they don't, the key is wrong — do not commit it.
+// They must match. If they don't, the key is wrong, do not commit it.
 //
 // SECURITY NOTE
 // ─────────────

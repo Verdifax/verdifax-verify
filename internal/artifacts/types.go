@@ -2,32 +2,32 @@ package artifacts
 
 // AttestedContext is the caller-supplied "what was happening when this
 // run was triggered" block. Verdifax does not call an AI or evaluate a
-// business policy — it produces a sealed manifest of what the caller
+// business policy, it produces a sealed manifest of what the caller
 // did. The caller passes this block in the /execute request; Verdifax
 // records it verbatim into the EPA artifact.
 //
 // Every field is optional. When the caller supplies nothing, the bundle
 // records `attested: false` and the EPA's actor / model fields read as
-// "self_attested_deterministic" — meaning "the caller did not declare a
+// "self_attested_deterministic", meaning "the caller did not declare a
 // human actor or AI model; the run is the deterministic pipeline alone."
 type AttestedContext struct {
 	// Attested is true when the caller supplied at least one field.
 	Attested bool `json:"attested"`
 
-	// Actor — who initiated the action.
+	// Actor, who initiated the action.
 	ActorID            string `json:"actor_id,omitempty"`
 	ActorRole          string `json:"actor_role,omitempty"`
 	AuthorizationPolicy string `json:"authorization_policy,omitempty"`
 	ActorSignature     string `json:"actor_signature,omitempty"` // base64
 
-	// Model — which AI (if any) the caller invoked before /execute.
+	// Model, which AI (if any) the caller invoked before /execute.
 	ModelProvider   string  `json:"model_provider,omitempty"`
 	ModelName       string  `json:"model_name,omitempty"`
 	ModelVersion    string  `json:"model_version,omitempty"`
 	ModelTemperature *float64 `json:"model_temperature,omitempty"`
 	PromptHash      string  `json:"prompt_hash,omitempty"` // sha256 of the prompt
 
-	// Decision — the caller's interpretation of the result.
+	// Decision, the caller's interpretation of the result.
 	DecisionKind   string `json:"decision_kind,omitempty"`   // e.g. "approve", "deny", "advise"
 	DecisionResult string `json:"decision_result,omitempty"` // e.g. "approved"
 	DecisionNote   string `json:"decision_note,omitempty"`   // free-form
@@ -89,7 +89,7 @@ type Transport struct {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. EPA — Execution Pre-Attestation
+// 4. EPA, Execution Pre-Attestation
 // ─────────────────────────────────────────────────────────────────────────────
 
 // EPA describes the state of the system at the moment of execution. This
@@ -113,11 +113,11 @@ type EnvSnapshot struct {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. EFA — Execution Flow Artifact
+// 5. EFA, Execution Flow Artifact
 // ─────────────────────────────────────────────────────────────────────────────
 
 // EFA describes the per-kernel execution chain (DSE, TOK, DSC, NREP,
-// AIVP, DCAE — six steps in canonical order).
+// AIVP, DCAE, six steps in canonical order).
 type EFA struct {
 	Kind            string         `json:"kind"` // "verdifax.artifact.efa.v1"
 	Steps           []ExecStep     `json:"steps"`
@@ -135,7 +135,7 @@ type ExecStep struct {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. AER — Attestation Execution Record
+// 6. AER, Attestation Execution Record
 // ─────────────────────────────────────────────────────────────────────────────
 
 // AER describes the post-execution result record.
@@ -286,7 +286,7 @@ type FinalVFA struct {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AuditBundle — the top-level artifact that wraps all 14 canonical artifacts.
+// AuditBundle, the top-level artifact that wraps all 14 canonical artifacts.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // AuditBundle is the complete Verdifax Audit Projection record for a
@@ -318,7 +318,7 @@ type AuditBundle struct {
 	FinalVFA            FinalVFA            `json:"final_vfa"`
 
 	// Five extension categories that turn the bundle into a complete
-	// auditor-ready record. Each is optional at the protocol level —
+	// auditor-ready record. Each is optional at the protocol level , 
 	// callers that don't supply one get an honest "not declared" record
 	// rather than fabricated data. SystemProvenance is server-detected.
 	RequestSubstance       RequestSubstance       `json:"request_substance"`
@@ -350,7 +350,7 @@ type AuditBundle struct {
 	// retrievable via /runs/{id}/aivp-t4-halt-receipt.
 	//
 	// Empty (zero-valued, Outcome == "skipped") for runs that didn't
-	// engage AIVP-T4 — either because the orchestrator wasn't wired
+	// engage AIVP-T4, either because the orchestrator wasn't wired
 	// for it (pre-Phase-13) or because the caller didn't declare an
 	// AI output to govern.
 	AivpT4 AivpT4Section `json:"aivp_t4"`
@@ -359,7 +359,7 @@ type AuditBundle struct {
 	// authenticated runs this section holds the API key holder's
 	// stable actor identity, base64-encoded Ed25519 public key, and
 	// signature over the canonical preimage (see internal/nrep). For
-	// anonymous (open-mode) runs all three fields are empty —
+	// anonymous (open-mode) runs all three fields are empty , 
 	// "skipped" as a legitimate state, mirroring the manifest. The
 	// signature itself is verifiable by anyone holding the public
 	// key plus the run's envelope_id and aer_hash; no Verdifax
@@ -378,7 +378,7 @@ type AuditBundle struct {
 // All three fields are empty for anonymous (open-mode) runs and for
 // runs that halted before AER was built (NREP signs after AER, so
 // pre-AER halts produce no signature). A truly empty NREP section
-// is a legitimate state — verifiers must NOT treat empty fields as
+// is a legitimate state, verifiers must NOT treat empty fields as
 // "skipped means valid"; they signal "no actor signature claimed"
 // and the run's authority must be established by surrounding-system
 // audit logs.
@@ -406,7 +406,7 @@ type NrepSection struct {
 //
 // The §0 invariants this section preserves:
 //
-//   - PiaHash is the canonical Tier-4 governance seal — anyone holding
+//   - PiaHash is the canonical Tier-4 governance seal, anyone holding
 //     the AI output text plus the AIVP-T4 binary can recompute this
 //     hash and confirm it matches.
 //   - AiOutputHash is the §0 SHA-256 of the input text the governance
@@ -415,7 +415,7 @@ type NrepSection struct {
 //     without storing the raw text.
 //   - AdapterID names which model adapter produced the decision
 //     ("mock-claude", "live-claude-api", or future identifiers) so
-//     verifiers can scope their trust evaluation appropriately —
+//     verifiers can scope their trust evaluation appropriately , 
 //     mock-mode runs should not be presented to third parties as
 //     evidence of real-model governance.
 type AivpT4Section struct {

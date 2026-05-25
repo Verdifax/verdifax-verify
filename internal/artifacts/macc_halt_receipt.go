@@ -4,11 +4,11 @@ package artifacts
 // cumulative cross-run budget enforcement halts a pipeline. It is the
 // multi-agent counterpart to CCVHaltReceipt:
 //
-//   - CCVHaltReceipt   — proves "this run exceeded its per-run budget"
-//   - MACCHaltReceipt — proves "this tenant exceeded its cumulative budget"
+//   - CCVHaltReceipt: proves "this run exceeded its per-run budget"
+//   - MACCHaltReceipt, proves "this tenant exceeded its cumulative budget"
 //
 // MACC is the only artifact-producing stage that depends on STATE
-// SHARED ACROSS RUNS — every prior CCVHaltReceipt and AllowToken in the
+// SHARED ACROSS RUNS, every prior CCVHaltReceipt and AllowToken in the
 // current window contributed to the cumulative counter that this halt
 // references. The receipt names the window + the cumulative consumption
 // at halt time so audits can reconstruct exactly which prior runs
@@ -62,7 +62,7 @@ type MACCHaltReceipt struct {
 
 	// PerRunConsumption is what THIS run contributed to the cumulative
 	// counter (i.e., the CCV-reported consumption for this envelope).
-	// Useful for forensics — combined with cumulative-at-halt the auditor
+	// Useful for forensics, combined with cumulative-at-halt the auditor
 	// can compute "the cumulative was N before this run; this run added M".
 	PerRunConsumption int64 `json:"per_run_consumption"`
 

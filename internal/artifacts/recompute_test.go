@@ -7,7 +7,7 @@ import "testing"
 // (the one and only construction path) and then runs each Recompute*
 // function over the resulting artifacts. Every recomputed hash must equal
 // the value the builder filled in. If any one drifts, the verifier will
-// reject every bundle in production — so this test guards the contract.
+// reject every bundle in production, so this test guards the contract.
 func TestBuilderAndRecomputeAreInLockstep(t *testing.T) {
 	in := sampleInput()
 	b := BuildAuditBundle(in)
@@ -40,7 +40,7 @@ func TestBuilderAndRecomputeAreInLockstep(t *testing.T) {
 	}
 	for _, c := range checks {
 		if c.got != c.want {
-			t.Errorf("%s: builder produced %s, recompute produced %s — drift between builder.go and recompute.go",
+			t.Errorf("%s: builder produced %s, recompute produced %s, drift between builder.go and recompute.go",
 				c.name, c.want, c.got)
 		}
 	}

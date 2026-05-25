@@ -12,7 +12,7 @@ access, no Verdifax credentials, no trust in the Verdifax API server.
 
 ## License
 
-MIT — see [`LICENSE`](./LICENSE). The verifier is intentionally
+MIT, see [`LICENSE`](./LICENSE). The verifier is intentionally
 open-source so auditors can read the code that adjudicates evidence.
 The verifier produces no attestations of its own; it only checks that
 a received bundle is internally consistent.
@@ -53,7 +53,7 @@ verdifax-verify --version
 ### `--strict` mode
 
 By default, the verifier reports scaffold-flagged values (L6 ZK proof,
-L8 hardware attestation, L10 formal verifier — see
+L8 hardware attestation, L10 formal verifier, see
 [Verdifax scaffold-gaps documentation](https://docs.verdifax.com/concepts/scaffold-gaps/))
 without failing the run. Pass `--strict` to fail verification when any
 scaffold flag is set. High-trust environments should always use
@@ -61,7 +61,7 @@ scaffold flag is set. High-trust environments should always use
 
 ## What this verifier proves and doesn't prove
 
-**Proves:** the bundle is internally consistent — every recorded hash
+**Proves:** the bundle is internally consistent, every recorded hash
 matches its canonical preimage, and any post-hoc modification to a
 field invalidates the hash.
 
@@ -70,10 +70,10 @@ on Verdifax-operated hardware. A malicious orchestrator could fabricate
 a bundle with consistent internal hashes. For protection against
 fabrication, look for:
 
-- **Public-log anchoring** — every successful run is committed to
+- **Public-log anchoring**, every successful run is committed to
   Sigstore Rekor at `rekor.sigstore.dev`. The `log_entry_id` field of
   the bundle is searchable on `search.sigstore.dev`.
-- **Hardware-rooted attestation** — currently a scaffold value; see
+- **Hardware-rooted attestation**, currently a scaffold value; see
   [scaffold-gaps](https://docs.verdifax.com/concepts/scaffold-gaps/).
 
 ## Source provenance

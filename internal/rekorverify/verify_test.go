@@ -1,11 +1,11 @@
-// Package rekorverify tests — the cryptographic correctness of the
+// Package rekorverify tests, the cryptographic correctness of the
 // RFC 6962 Merkle inclusion proof recomputation.
 //
 // These tests use deterministic synthetic trees built directly in Go so
 // the expected roots are computable from first principles. The whole
 // point is that a buggy `recomputeRootRFC6962` would silently let bad
 // proofs verify (or reject good ones), which would invalidate every
-// "anchored on Rekor" claim downstream — so we want this code path
+// "anchored on Rekor" claim downstream, so we want this code path
 // drilled with tests before anything else uses it.
 package rekorverify
 
@@ -44,10 +44,10 @@ func buildRFC6962Tree(leaves [][]byte) (leafHashes [][]byte, root []byte) {
 }
 
 // computeMerkleRootRecursive is the textbook RFC 6962 root computation
-// — used by the tests as the ground truth.
+//, used by the tests as the ground truth.
 func computeMerkleRootRecursive(hashes [][]byte) []byte {
 	if len(hashes) == 0 {
-		// Empty tree — RFC 6962 §2.1 defines this as SHA-256("").
+		// Empty tree, RFC 6962 §2.1 defines this as SHA-256("").
 		empty := sha256.Sum256(nil)
 		return empty[:]
 	}
@@ -65,7 +65,7 @@ func computeMerkleRootRecursive(hashes [][]byte) []byte {
 }
 
 // inclusionProof returns the sibling path for leaf at index i in a
-// tree of n leaves — the same shape Rekor returns and that
+// tree of n leaves, the same shape Rekor returns and that
 // recomputeRootRFC6962 consumes.
 func inclusionProof(hashes [][]byte, i int) [][]byte {
 	if len(hashes) <= 1 {
@@ -76,11 +76,11 @@ func inclusionProof(hashes [][]byte, i int) [][]byte {
 		k *= 2
 	}
 	if i < k {
-		// Leaf is in the left half — sibling is the right subtree root.
+		// Leaf is in the left half, sibling is the right subtree root.
 		sub := inclusionProof(hashes[:k], i)
 		return append(sub, computeMerkleRootRecursive(hashes[k:]))
 	}
-	// Leaf is in the right half — sibling is the left subtree root.
+	// Leaf is in the right half, sibling is the left subtree root.
 	sub := inclusionProof(hashes[k:], i-k)
 	return append(sub, computeMerkleRootRecursive(hashes[:k]))
 }
@@ -90,7 +90,7 @@ func inclusionProof(hashes [][]byte, i int) [][]byte {
 // ─────────────────────────────────────────────────────────────────────────────
 
 func TestRecomputeRootRFC6962_SingleLeafTree(t *testing.T) {
-	// A tree with one leaf has no siblings — root == leaf hash.
+	// A tree with one leaf has no siblings, root == leaf hash.
 	leaves := [][]byte{[]byte("alpha")}
 	leafHashes, expectedRoot := buildRFC6962Tree(leaves)
 
@@ -164,7 +164,7 @@ func TestRecomputeRootRFC6962_LopsidedTree(t *testing.T) {
 
 // TestRecomputeRootRFC6962_LargeTree exercises a randomly-sized tree
 // (47 leaves) to stress the index/sibling-path bookkeeping over
-// multiple deep paths. 47 is intentionally chosen — neither a power
+// multiple deep paths. 47 is intentionally chosen, neither a power
 // of 2 nor a power-of-2-minus-1, so the lopsidedness varies along
 // every path.
 func TestRecomputeRootRFC6962_LargeTree(t *testing.T) {
@@ -190,7 +190,7 @@ func TestRecomputeRootRFC6962_LargeTree(t *testing.T) {
 
 // TestRecomputeRootRFC6962_TamperedSiblingFails confirms that flipping
 // a single bit in a sibling hash makes the recomputed root differ
-// from the expected root — i.e. we don't silently accept invalid
+// from the expected root, i.e. we don't silently accept invalid
 // proofs. This is the safety property the entire Verdifax-on-Rekor
 // claim depends on.
 func TestRecomputeRootRFC6962_TamperedSiblingFails(t *testing.T) {
@@ -214,7 +214,7 @@ func TestRecomputeRootRFC6962_TamperedSiblingFails(t *testing.T) {
 	got, err := recomputeRootRFC6962(leafHashes[3], 3, int64(len(leaves)), tampered)
 	if err != nil {
 		// Some tamper patterns might not produce a length-mismatch
-		// error — the path length is preserved, only the bytes change.
+		// error, the path length is preserved, only the bytes change.
 		t.Fatalf("recomputeRootRFC6962 returned unexpected error: %v", err)
 	}
 	if bytesEqual(got, expectedRoot) {
@@ -223,7 +223,7 @@ func TestRecomputeRootRFC6962_TamperedSiblingFails(t *testing.T) {
 }
 
 // TestRecomputeRootRFC6962_OutOfRangeIndex confirms that a log_index
-// >= tree_size is rejected up front — guarding against an attacker
+// >= tree_size is rejected up front, guarding against an attacker
 // who crafts a proof for "leaf 1000 in a tree of 100 leaves".
 func TestRecomputeRootRFC6962_OutOfRangeIndex(t *testing.T) {
 	leaves := [][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d")}
@@ -256,7 +256,7 @@ func TestVerifyAnchor_RejectsEmptyPubkey(t *testing.T) {
 		TreeSize:     2,
 		RootHashHex:  hex.EncodeToString(root),
 		InclusionPath: hexEncode(path),
-		Checkpoint:   "rekor.sigstore.dev\n2\n" + base64Encode(root) + "\n\n— rekor SBYx//==\n",
+		Checkpoint:   "rekor.sigstore.dev\n2\n" + base64Encode(root) + "\n\n,  rekor SBYx//==\n",
 		LogID:        "deadbeef" + repeatHex("0", 56),
 	}
 

@@ -8,14 +8,14 @@ import (
 
 // CanonicalBytes returns the canonical-JSON serialization of v. v must be
 // a struct (or pointer to one) whose fields are in their stable canonical
-// order — that is, the order in which they should appear in the canonical
+// order, that is, the order in which they should appear in the canonical
 // bytes. encoding/json preserves struct field order, so a careful struct
 // definition gives us deterministic byte output without writing a custom
 // canonicalizer.
 //
 // Maps and slices: maps are NOT permitted in canonical structs (they have
 // unstable iteration order in Go). Use a fixed-order slice or a struct
-// instead. Slices of structs are fine — their canonical order is the
+// instead. Slices of structs are fine, their canonical order is the
 // caller-controlled element order.
 func CanonicalBytes(v any) ([]byte, error) {
 	b, err := json.Marshal(v)
@@ -73,7 +73,7 @@ type SealReference struct {
 
 	// SealedHash is the hash of this artifact as it appears in the
 	// sealed manifest. It must equal CanonicalHash of the artifact's
-	// payload — VerifyAgainstManifest checks this.
+	// payload, VerifyAgainstManifest checks this.
 	SealedHash string `json:"sealed_hash"`
 }
 

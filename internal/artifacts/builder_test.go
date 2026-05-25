@@ -8,7 +8,7 @@ import (
 
 // TestBuildAuditBundleDeterministic verifies that the same input produces
 // byte-identical canonical bytes across two builds. This is the load-bearing
-// property — without it the audit projection cannot be re-verified.
+// property, without it the audit projection cannot be re-verified.
 func TestBuildAuditBundleDeterministic(t *testing.T) {
 	in := sampleInput()
 	b1 := BuildAuditBundle(in)

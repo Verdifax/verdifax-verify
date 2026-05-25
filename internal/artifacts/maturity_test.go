@@ -83,9 +83,9 @@ func TestMaturity_Hardware(t *testing.T) {
 	}
 }
 
-// 7. Phase-1-4 stages always REAL — these are pure orchestrator.
+// 7. Phase-1-4 stages always REAL, these are pure orchestrator.
 func TestMaturity_AlwaysRealStages(t *testing.T) {
-	r := BuildMaturityReport(MaturityInputs{}) // empty — worst case
+	r := BuildMaturityReport(MaturityInputs{}) // empty, worst case
 	for _, stage := range []string{"DOG", "DTL", "DKEC", "AER", "DLA"} {
 		row := findRow(r, stage)
 		if row == nil {
@@ -100,7 +100,7 @@ func TestMaturity_AlwaysRealStages(t *testing.T) {
 
 // 8. Notes always carry a buyer-readable description that explains
 // what drove the classification. The note must NOT expose internal
-// adapter identifiers like "aivp-t4-subprocess-empty" — those stay
+// adapter identifiers like "aivp-t4-subprocess-empty", those stay
 // in backend logs and the sealed manifest. The user-facing note shows
 // a friendly label; verifiers re-derive the raw value from the bundle.
 func TestMaturity_NotesCarrySignal(t *testing.T) {
