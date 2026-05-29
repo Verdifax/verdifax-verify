@@ -504,7 +504,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 		fmt.Println("VERDICT: ✓ VERIFIED, every hash recomputes correctly, no scaffold values flagged.")
 	case r.AllPassed && r.HasScaffold:
 		fmt.Println("VERDICT: ✓ VERIFIED (with scaffold flags)")
-		fmt.Println("  Scaffold artifacts (will be activated in Phase 6/7):")
+		fmt.Println("  Scaffold artifacts (closing paths at docs.verdifax.com/concepts/scaffold-gaps/):")
 		for _, s := range r.ScaffoldList {
 			fmt.Println("    ·", s)
 		}
