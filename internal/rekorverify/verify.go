@@ -357,12 +357,18 @@ func splitCheckpoint(checkpoint string) (body string, signatures []string, err e
 	body = checkpoint[:idx+1]
 	tail := checkpoint[idx+2:]
 
-	// Each signature line starts with U+2014 EM DASH then a space.
+	// Each signature line starts with U+2014 EM DASH then a space, per
+	// c2sp.org/signed-note. Use the explicit unicode escape so the
+	// em-dash sanitizer we run on user-facing surfaces cannot ever
+	// "scrub" this load-bearing character (an earlier pass did exactly
+	// that and replaced "— " with ",  ", which broke every Rekor
+	// checkpoint verification until corrected).
+	const sigLinePrefix = "— "
 	for _, line := range strings.Split(strings.TrimRight(tail, "\n"), "\n") {
 		if line == "" {
 			continue
 		}
-		if !strings.HasPrefix(line, ",  ") {
+		if !strings.HasPrefix(line, sigLinePrefix) {
 			return "", nil, fmt.Errorf("unexpected signature line: %q", line)
 		}
 		signatures = append(signatures, line)
@@ -416,8 +422,10 @@ func validateCheckpointBody(body, expectedRootHashHex string, expectedTreeSize i
 // key hint matches keyHint (returns nil error and signature bytes), or
 // returns an error when the line doesn't match the expected key.
 func decodeCheckpointSignatureLine(line string, keyHint []byte) ([]byte, error) {
-	// Strip ",  " (em-dash + space).
-	const prefix = ",  "
+	// Strip the U+2014 EM DASH + space prefix. The em-dash literal
+	// here is load-bearing for c2sp.org/signed-note parsing and must
+	// NOT be replaced by any em-dash sanitizer pass.
+	const prefix = "— "
 	if !strings.HasPrefix(line, prefix) {
 		return nil, errors.New("missing em-dash prefix")
 	}
