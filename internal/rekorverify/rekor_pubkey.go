@@ -65,8 +65,12 @@ package rekorverify
 // This is a TRUSTED ROOT. Any compromise of this constant means an
 // attacker can forge anchored entries. Treat changes to this file
 // with the same scrutiny as changes to /etc/ssl/certs.
-const RekorPublicKeyPEM = ``
-
-// Above intentionally empty. Operators MUST populate before building.
-// See loadRekorPublicKey in verify.go for the runtime-error message
-// that surfaces when this is missed.
+// Populated 2026-05-29 from https://rekor.sigstore.dev/api/v1/log/publicKey
+// (production Sigstore Rekor instance). ECDSA P-256 public key used by
+// Rekor to sign log checkpoints. Re-verifying any Rekor inclusion proof
+// against the public log requires this key.
+const RekorPublicKeyPEM = `-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2G2Y+2tabdTV5BcGiBIx0a9fAFwr
+kBbmLSGtks4L3qX6yYY0zufBnhC8Ur/iy55GhWP/9A/bY2LhC30M9+RYtw==
+-----END PUBLIC KEY-----
+`
