@@ -1,0 +1,80 @@
+name: Release
+
+# Builds the verdifax-verify CLI for all supported platforms and uploads
+# each binary to the GitHub release that triggered this workflow.
+#
+# Trigger: pushing a tag matching v*. Example to cut a release:
+#
+#   git tag v0.1.0
+#   git push origin v0.1.0
+#
+# The release page must already exist (or be created here) so the
+# upload step has a target. The "softprops/action-gh-release" action
+# auto-creates the release if it does not exist.
+#
+# Naming convention (matches the audit PDF's install commands):
+#   verdifax-verify-darwin-amd64
+#   verdifax-verify-darwin-arm64
+#   verdifax-verify-linux-amd64
+#   verdifax-verify-linux-arm64
+#
+# The names are literal (no $(uname) shell substitution) because the
+# audit PDF embeds them as static clickable URLs.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write  # required to create / update the release
+
+jobs:
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache: true
+
+      - name: Build verdifax-verify
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags "-s -w" \
+            -o dist/verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }} \
+            .
+
+      - name: Generate SHA-256 checksum
+        run: |
+          cd dist
+          sha256sum verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }} \
+            > verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}
+            dist/verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
