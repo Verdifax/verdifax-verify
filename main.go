@@ -232,11 +232,34 @@ func printEvidenceSummary(s EvidenceSummary) {
 		fmt.Printf("  Rekor anchor:     not anchored (mock-ledger run)\n")
 	}
 	fmt.Printf("  PoTE hash:        %s\n", s.PoteHashVersion)
+	// Verdict line carries an explicit reason so a reader who is not
+	// familiar with the verifier's gating semantics does not mistake a
+	// scaffold-driven strict failure for a cryptographic failure.
+	//
+	// Three outcomes:
+	//   1. pass: every hash recomputed and matched, and either no
+	//      scaffolds were present or --strict was not requested.
+	//   2. fail (strict + scaffold): every hash matched, but --strict
+	//      was set and the bundle carries at least one scaffold flag.
+	//      This is by-design CI-gating behavior, not a cryptographic
+	//      failure. The bundle is still cryptographically valid.
+	//   3. fail (hash mismatch): a recomputed hash did not match the
+	//      stored value. This IS a cryptographic failure.
 	gate := s.StrictModeGate
-	if s.StrictModeWanted {
-		gate = gate + " (--strict requested)"
-	} else {
-		gate = gate + " (--strict not requested; scaffolds tolerated)"
+	switch {
+	case s.StrictModeGate == "pass":
+		gate = gate + " (all cryptographic checks verified)"
+	case s.StrictModeWanted && s.HashesAllMatch:
+		gate = gate + " (--strict requested; cryptography passed, scaffold flags trip the strict gate by design)"
+	case !s.HashesAllMatch:
+		gate = gate + " (cryptographic mismatch detected; bundle did not verify)"
+	default:
+		// Fallback: should not normally land here, but cover it.
+		if s.StrictModeWanted {
+			gate = gate + " (--strict requested)"
+		} else {
+			gate = gate + " (--strict not requested; scaffolds tolerated)"
+		}
 	}
 	fmt.Printf("  Verdict:          %s\n", gate)
 }
