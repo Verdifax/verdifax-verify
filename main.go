@@ -34,8 +34,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/Verdifax/verdifax-verify/internal/artifacts"
 	"github.com/Verdifax/verdifax-verify/internal/rekorverify"
@@ -263,9 +266,17 @@ func readBundle() (*artifacts.AuditBundle, error) {
 	var data []byte
 	var err error
 	if flag.NArg() > 0 {
-		data, err = os.ReadFile(flag.Arg(0))
-		if err != nil {
-			return nil, fmt.Errorf("read failed: %w", err)
+		arg := flag.Arg(0)
+		if isHTTPURL(arg) {
+			data, err = fetchBundleHTTP(arg)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			data, err = os.ReadFile(arg)
+			if err != nil {
+				return nil, fmt.Errorf("read failed: %w", err)
+			}
 		}
 	} else {
 		data, err = io.ReadAll(os.Stdin)
@@ -273,7 +284,7 @@ func readBundle() (*artifacts.AuditBundle, error) {
 			return nil, fmt.Errorf("stdin read failed: %w", err)
 		}
 		if len(data) == 0 {
-			return nil, fmt.Errorf("no bundle provided (pass a file path or pipe to stdin; --help for usage)")
+			return nil, fmt.Errorf("no bundle provided (pass a file path, an https:// URL, or pipe to stdin; --help for usage)")
 		}
 	}
 	var b artifacts.AuditBundle
@@ -562,4 +573,53 @@ func printRekorAnchor(a RekorAnchorCheck, logEntryID string) {
 	fmt.Println("     anchor was tampered with, the embedded Rekor public key is")
 	fmt.Println("     stale (rotation announced via the Sigstore TUF root), or the")
 	fmt.Println("     bundle was produced by a non-canonical orchestrator.")
+}
+
+// isHTTPURL reports whether s parses as an absolute http or https URL.
+// The verifier accepts URL arguments so an auditor can run
+//
+//	verdifax-verify --strict https://api.verdifax.com/runs/N/bundle.json
+//
+// directly, without first piping curl into stdin. The corollary is
+// that an argument starting with "http://" or "https://" is never
+// interpreted as a local file path.
+func isHTTPURL(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil {
+		return false
+	}
+	return u.IsAbs() && (u.Scheme == "http" || u.Scheme == "https")
+}
+
+// fetchBundleHTTP retrieves the bundle JSON from the given URL with a
+// modest timeout and a size cap. The timeout prevents the verifier
+// from hanging on a slow endpoint; the size cap (32 MiB) prevents a
+// pathological response from consuming all memory. The returned
+// bytes are passed unchanged into the existing JSON parser.
+func fetchBundleHTTP(rawURL string) ([]byte, error) {
+	const maxBundleBytes = 32 * 1024 * 1024 // 32 MiB
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequest("GET", rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("http request build failed: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "verdifax-verify/"+Version)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http fetch failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("http fetch returned %s (expected 2xx) for %s",
+			resp.Status, rawURL)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBundleBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("http body read failed: %w", err)
+	}
+	if int64(len(body)) > maxBundleBytes {
+		return nil, fmt.Errorf("bundle exceeds %d byte size limit", maxBundleBytes)
+	}
+	return body, nil
 }
