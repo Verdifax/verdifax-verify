@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/Verdifax/verdifax-verify/internal/rekorverify"
 )
 
 // BuildInput is the data the orchestrator passes to BuildAuditBundle to
@@ -698,10 +700,19 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 	if backend == "" {
 		backend = "mock"
 	}
+	// When anchored to the real Rekor but the input did not carry a
+	// LogID, derive it from the embedded Rekor public key so the
+	// bundle is self-contained for offline verification.
+	logID := in.LedgerLogID
+	if logID == "" && backend == "rekor" {
+		if computed, err := rekorverify.EmbeddedLogID(); err == nil {
+			logID = computed
+		}
+	}
 	bundle.RekorAnchor = RekorAnchor{
 		Backend:              backend,
 		LogEntryID:           in.LogEntryID,
-		LogID:                in.LedgerLogID,
+		LogID:                logID,
 		LeafHashHex:          in.LedgerLeafHash,
 		LogIndex:             in.LedgerLogIndex,
 		TreeSize:             in.LedgerTreeSize,

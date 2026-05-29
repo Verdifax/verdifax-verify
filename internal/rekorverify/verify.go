@@ -440,6 +440,19 @@ func computeRekorLogID(pubKey *ecdsa.PublicKey) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
+// EmbeddedLogID returns the Rekor LogID computed from the embedded
+// production Rekor public key. Used by the orchestrator's bundle
+// builder to populate the bundle's LogID field so the verifier can
+// confirm the bundle was anchored under the same log the verifier
+// trusts.
+func EmbeddedLogID() (string, error) {
+	pubKey, err := loadRekorPublicKey()
+	if err != nil {
+		return "", err
+	}
+	return computeRekorLogID(pubKey)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Public-key loading
 // ─────────────────────────────────────────────────────────────────────────────
