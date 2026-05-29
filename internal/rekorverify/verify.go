@@ -77,9 +77,19 @@ import (
 // values are 32-byte SHA-256 digests in hex form.
 type AnchorInput struct {
 	// LeafHashHex is the hex SHA-256 of the canonical leaf bytes that
-	// were submitted to Rekor. The verifier recomputes the Merkle root
-	// from this leaf hash up through the inclusion path.
+	// were submitted to Rekor (the data.hash.value of the hashedrekord
+	// entry). NOT the RFC 6962 Merkle tree leaf hash, which is
+	// computed inside VerifyAnchor from EntryBody.
 	LeafHashHex string
+
+	// EntryBody is the base64-encoded canonical JSON of the Rekor
+	// hashedrekord entry. The RFC 6962 Merkle leaf hash used to walk
+	// the inclusion proof is SHA-256(0x00 || base64decode(EntryBody)),
+	// per c2sp.org/static-ct §3.1 and RFC 6962 §2.1. When set, the
+	// verifier uses this to recompute the root; when empty, the
+	// verifier falls back to LeafHashHex (which only works for legacy
+	// bundles whose orchestrator pre-prefixed the leaf hash).
+	EntryBody string
 
 	// LogIndex is the 0-based position of the leaf in the Rekor tree.
 	LogIndex int64
@@ -124,14 +134,29 @@ func VerifyAnchor(in AnchorInput) error {
 		return fmt.Errorf("rekorverify: invalid input: %w", err)
 	}
 
-	// 2. Decode hex strings to raw bytes. Leaf hash can be SHA-256
-	// (32 bytes) or SHA-512 (64 bytes); SHA-512 is what Rekor requires
-	// for Ed25519-signed hashedrekord entries (the orchestrator
-	// produces these). The Merkle proof recomputation operates on the
-	// raw leaf hash bytes either way.
-	leafHash, err := hex.DecodeString(in.LeafHashHex)
-	if err != nil || (len(leafHash) != sha256.Size && len(leafHash) != 64) {
-		return fmt.Errorf("rekorverify: leaf hash must be 64-char hex SHA-256 or 128-char hex SHA-512")
+	// 2. Compute the RFC 6962 Merkle leaf hash. Rekor's tree-leaf hash
+	// is SHA-256(0x00 || canonical_body), NOT the data.hash.value the
+	// hashedrekord entry references. When EntryBody is present (the
+	// canonical-body bytes Rekor returned at submit time, base64-
+	// encoded), use it directly. Fall back to LeafHashHex only for
+	// legacy bundles produced before EntryBody plumbing landed.
+	var leafHash []byte
+	if in.EntryBody != "" {
+		bodyBytes, err := base64.StdEncoding.DecodeString(in.EntryBody)
+		if err != nil {
+			return fmt.Errorf("rekorverify: entry_body base64 decode: %w", err)
+		}
+		// RFC 6962 §2.1 leaf hash: SHA-256(0x00 || body).
+		h := sha256.New()
+		h.Write([]byte{0x00})
+		h.Write(bodyBytes)
+		leafHash = h.Sum(nil)
+	} else {
+		var err error
+		leafHash, err = hex.DecodeString(in.LeafHashHex)
+		if err != nil || (len(leafHash) != sha256.Size && len(leafHash) != 64) {
+			return fmt.Errorf("rekorverify: leaf hash must be 64-char hex SHA-256 or 128-char hex SHA-512")
+		}
 	}
 	claimedRoot, err := hex.DecodeString(in.RootHashHex)
 	if err != nil || len(claimedRoot) != sha256.Size {

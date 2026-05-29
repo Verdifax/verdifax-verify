@@ -423,6 +423,7 @@ func verifyRekorAnchor(a artifacts.RekorAnchor) RekorAnchorCheck {
 	}
 	err := rekorverify.VerifyAnchor(rekorverify.AnchorInput{
 		LeafHashHex:   a.LeafHashHex,
+		EntryBody:     a.EntryBody,
 		LogIndex:      a.LogIndex,
 		TreeSize:      a.TreeSize,
 		RootHashHex:   a.RootHashHex,

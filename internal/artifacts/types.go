@@ -506,6 +506,13 @@ type RekorAnchor struct {
 	// zksp_binding_hash and confirm they hash to this value.
 	LeafHashHex string `json:"leaf_hash"`
 
+	// EntryBody is the base64-encoded canonical JSON of the
+	// hashedrekord entry exactly as Rekor stored it. Required for
+	// RFC 6962 Merkle inclusion-proof recomputation; the tree leaf
+	// hash is SHA-256(0x00 || base64decode(body)). Empty for
+	// backend == "mock".
+	EntryBody string `json:"entry_body,omitempty"`
+
 	// LogIndex is the leaf's 0-based position in the Rekor Merkle
 	// tree (numeric form of LogEntryID).
 	LogIndex int64 `json:"log_index"`
