@@ -35,6 +35,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/Verdifax/verdifax-verify/internal/artifacts"
 	"github.com/Verdifax/verdifax-verify/internal/rekorverify"
@@ -95,9 +96,10 @@ type Report struct {
 
 func main() {
 	var (
-		jsonOutput  = flag.Bool("json", false, "emit machine-readable JSON instead of human report")
-		strictMode  = flag.Bool("strict", false, "fail (exit 1) on any scaffold-flagged value")
-		showVersion = flag.Bool("version", false, "print version and exit")
+		jsonOutput      = flag.Bool("json", false, "emit machine-readable JSON instead of human report")
+		strictMode      = flag.Bool("strict", false, "fail (exit 1) on any scaffold-flagged value")
+		showVersion     = flag.Bool("version", false, "print version and exit")
+		showEvidence    = flag.Bool("show-evidence-summary", false, "print a one-glance maturity summary (real vs scaffold counts, Rekor anchor status, PoTE preimage version, strict-mode gate disposition) and exit; combine with --json for machine-readable form")
 	)
 	flag.Usage = printUsage
 	flag.Parse()
@@ -115,6 +117,25 @@ func main() {
 
 	report := verify(bundle)
 
+	// --show-evidence-summary short-circuits the normal output paths so
+	// CPTOs / reviewers / CI scripts can get a one-glance read on the
+	// bundle's maturity posture without parsing the full hash-by-hash
+	// report. Exit code semantics still apply (non-zero on failed
+	// verification, or on --strict + scaffold) so the flag composes
+	// naturally with CI pipelines that already gate on verdifax-verify.
+	if *showEvidence {
+		summary := buildEvidenceSummary(bundle, report, *strictMode)
+		if *jsonOutput {
+			_ = json.NewEncoder(os.Stdout).Encode(summary)
+		} else {
+			printEvidenceSummary(summary)
+		}
+		if !report.AllPassed || (*strictMode && report.HasScaffold) {
+			os.Exit(1)
+		}
+		return
+	}
+
 	if *jsonOutput {
 		_ = json.NewEncoder(os.Stdout).Encode(report)
 	} else {
@@ -126,6 +147,97 @@ func main() {
 	}
 }
 
+// EvidenceSummary is the structured one-glance view emitted by
+// --show-evidence-summary. Designed to read well as both a 10-line
+// human report and as a tiny JSON blob for CI scripts.
+type EvidenceSummary struct {
+	BundleSchema     string   `json:"bundle_schema"`
+	ManifestHash     string   `json:"manifest_hash"`
+	RunStatus        string   `json:"run_status"`
+	TotalArtifacts   int      `json:"total_artifacts"`
+	RealArtifacts    int      `json:"real_artifacts"`
+	ScaffoldCount    int      `json:"scaffold_count"`
+	ScaffoldList     []string `json:"scaffold_list,omitempty"`
+	RekorAnchored    bool     `json:"rekor_anchored"`
+	RekorLogIndex    int64    `json:"rekor_log_index,omitempty"`
+	RekorVerified    string   `json:"rekor_verified"` // "verified" | "failed" | "not_anchored"
+	PoteHashVersion  string   `json:"pote_hash_version"`
+	HashesAllMatch   bool     `json:"hashes_all_match"`
+	StrictModeWanted bool     `json:"strict_mode_wanted"`
+	StrictModeGate   string   `json:"strict_mode_gate"` // "pass" | "fail"
+}
+
+func buildEvidenceSummary(b *artifacts.AuditBundle, r *Report, strictWanted bool) EvidenceSummary {
+	s := EvidenceSummary{
+		BundleSchema:     b.Kind,
+		ManifestHash:     b.ManifestHash,
+		TotalArtifacts:   len(r.Artifacts),
+		ScaffoldCount:    len(r.ScaffoldList),
+		ScaffoldList:     append([]string(nil), r.ScaffoldList...),
+		RekorAnchored:    r.RekorAnchor.Performed,
+		HashesAllMatch:   r.AllPassed,
+		StrictModeWanted: strictWanted,
+	}
+	s.RealArtifacts = s.TotalArtifacts - s.ScaffoldCount
+	if b.Status != "" {
+		s.RunStatus = b.Status
+	}
+	switch {
+	case r.RekorAnchor.Performed && r.RekorAnchor.Match:
+		s.RekorVerified = "verified"
+		s.RekorLogIndex = b.RekorAnchor.LogIndex
+	case r.RekorAnchor.Performed && !r.RekorAnchor.Match:
+		s.RekorVerified = "failed"
+		s.RekorLogIndex = b.RekorAnchor.LogIndex
+	default:
+		s.RekorVerified = "not_anchored"
+	}
+	switch b.PoteProof.Kind {
+	case "verdifax.artifact.pote.v2":
+		s.PoteHashVersion = "v2 (binds Rekor temporal claim)"
+	case "verdifax.artifact.pote.v1", "":
+		s.PoteHashVersion = "v1 (legacy / mock)"
+	default:
+		s.PoteHashVersion = b.PoteProof.Kind
+	}
+	if !r.AllPassed || (strictWanted && r.HasScaffold) {
+		s.StrictModeGate = "fail"
+	} else {
+		s.StrictModeGate = "pass"
+	}
+	return s
+}
+
+func printEvidenceSummary(s EvidenceSummary) {
+	fmt.Println("EVIDENCE MATURITY SUMMARY")
+	fmt.Printf("  Bundle schema:    %s\n", s.BundleSchema)
+	fmt.Printf("  Manifest hash:    %s\n", s.ManifestHash)
+	if s.RunStatus != "" {
+		fmt.Printf("  Run status:       %s\n", s.RunStatus)
+	}
+	fmt.Printf("  Artifacts:        %d total · %d real · %d scaffold\n",
+		s.TotalArtifacts, s.RealArtifacts, s.ScaffoldCount)
+	if s.ScaffoldCount > 0 {
+		fmt.Printf("  Scaffolded:       %s\n", strings.Join(s.ScaffoldList, ", "))
+	}
+	switch s.RekorVerified {
+	case "verified":
+		fmt.Printf("  Rekor anchor:     verified · log index %d\n", s.RekorLogIndex)
+	case "failed":
+		fmt.Printf("  Rekor anchor:     FAILED · log index %d\n", s.RekorLogIndex)
+	default:
+		fmt.Printf("  Rekor anchor:     not anchored (mock-ledger run)\n")
+	}
+	fmt.Printf("  PoTE hash:        %s\n", s.PoteHashVersion)
+	gate := s.StrictModeGate
+	if s.StrictModeWanted {
+		gate = gate + " (--strict requested)"
+	} else {
+		gate = gate + " (--strict not requested; scaffolds tolerated)"
+	}
+	fmt.Printf("  Verdict:          %s\n", gate)
+}
+
 func printUsage() {
 	fmt.Fprintln(os.Stderr, `verdifax-verify, independent verifier for Verdifax audit bundles
 
@@ -134,9 +246,12 @@ USAGE
   cat bundle.json | verdifax-verify [flags]
 
 FLAGS
-  -json     emit machine-readable JSON output
-  -strict   fail on any scaffold-flagged value
-  -version  print version and exit
+  -json                   emit machine-readable JSON output
+  -strict                 fail on any scaffold-flagged value
+  -show-evidence-summary  print a one-glance maturity summary (real vs
+                          scaffold counts, Rekor anchor status, PoTE
+                          preimage version, strict-mode gate) and exit
+  -version                print version and exit
 
 EXIT
   0  all hashes verified

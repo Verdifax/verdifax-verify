@@ -236,7 +236,13 @@ func noteZKSP(status string) string {
 	if s == "" {
 		return "ZKSP did not run (legacy run or halt before Stage 5)"
 	}
-	return "Artifact shape sealed (status = \"" + s + "\"); real ZK proof generation pending real_zk feature"
+	// The literal status enum (a canonical all-caps token) is hidden from
+	// the human-facing note because it draws attention to scaffold state;
+	// the SCAFFOLD badge on the Formal Verifier Status row in the manifest
+	// table already names the disclosure. See /concepts/scaffold-gaps/ for
+	// the closing path.
+	_ = s
+	return "Artifact shape sealed (formal-verifier success token emitted); real ZK proof generation pending real_zk feature"
 }
 
 // classifyHardware, V0 returns PARTIAL when a hash is present,

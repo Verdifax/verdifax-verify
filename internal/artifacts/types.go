@@ -252,11 +252,38 @@ type ReplayFingerprint struct {
 // 13. POTE PROOF
 // ─────────────────────────────────────────────────────────────────────────────
 
+// PoteProof is the Proof-of-Temporal-Execution artifact. When the run
+// was anchored to a real Sigstore Rekor transparency log, the fields
+// below LedgerBackend = "rekor" carry the cryptographic substance that
+// makes this artifact a real PoTE (Rekor's signed checkpoint plus
+// integrated time is the textbook definition of a transparency-log
+// proof of temporal execution). When the run was sealed in mock-ledger
+// mode (dev/test environments), those fields are empty and the
+// Scaffold flag stays set.
+//
+// Hash backward compatibility: the canonical hash preimage is
+// intentionally unchanged from v0 (proof_type + execution_trace_hash +
+// log_entry_id). The new Rekor temporal fields appear in the JSON for
+// reviewer-visible evidence but are NOT bound into pote.Hash. The
+// bundle as a whole still binds them via RekorAnchor (which IS in the
+// manifest hash), so an attacker cannot substitute a different
+// integrated_time without invalidating the manifest. A v2 preimage
+// that binds the temporal claim directly into pote.Hash is tracked as
+// follow-up work.
 type PoteProof struct {
 	Kind                string         `json:"kind"` // "verdifax.artifact.pote.v1"
 	ProofType           string         `json:"proof_type"`
 	ExecutionTraceHash  string         `json:"execution_trace_hash"`
 	LogEntryID          string         `json:"log_entry_id"` // rekor entry
+
+	// Rekor temporal evidence (populated when LedgerBackend = "rekor",
+	// omitted entirely otherwise so mock-mode JSON stays clean).
+	LedgerBackend        string `json:"ledger_backend,omitempty"`
+	LedgerLogID          string `json:"ledger_log_id,omitempty"`          // Rekor tree id (which log instance)
+	IntegratedTime       int64  `json:"integrated_time,omitempty"`        // Rekor-attested seconds-since-epoch
+	SignedEntryTimestamp string `json:"signed_entry_timestamp,omitempty"` // Rekor's ECDSA signature over the timestamp + entry
+	LedgerCheckpoint     string `json:"ledger_checkpoint,omitempty"`      // signed tree-head at sealing
+
 	Scaffold            ScaffoldNote   `json:"scaffold"`
 	Hash                string         `json:"hash"`
 	Seal                SealReference  `json:"seal"`

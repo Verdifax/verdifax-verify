@@ -396,23 +396,70 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 	}{replay.Kind, replay.DeterministicInputs, replay.ExpectedOutputHash})
 	replay.Seal = seal("replay_fingerprint", in.ReplayFingerprint)
 
-	// 13. PoTE proof (scaffold for transparency log)
+	// 13. PoTE proof
+	//
+	// Task #214: the original scaffold note ("future ledger integration
+	// with Sigstore/Rekor") referenced the activation condition that has
+	// SILENTLY ALREADY been met in production. The orchestrator's
+	// RekorLedgerAdapter is wired and producing real log indices,
+	// signed checkpoints, integrated times, and Merkle inclusion
+	// proofs for every run sealed under VERDIFAX_LEDGER_MODE=rekor.
+	// That set of materials IS the textbook definition of a
+	// transparency-log proof of temporal execution. Flip the scaffold
+	// flag accordingly when the run was anchored on the real public
+	// log, and surface the Rekor temporal evidence directly on the
+	// PoteProof so reviewers don't have to cross-reference the
+	// RekorAnchor section. Mock-mode runs (dev/test) keep the scaffold
+	// flag with an updated note that's accurate about what's actually
+	// missing for them.
 	pote := PoteProof{
 		Kind:               "verdifax.artifact.pote.v1",
 		ProofType:          "proof_of_transparent_execution",
 		ExecutionTraceHash: in.AerHash,
 		LogEntryID:         in.LogEntryID,
-		Scaffold: ScaffoldNote{
-			IsScaffold:  true,
-			ActivatedBy: "future ledger integration (Sigstore/Rekor)",
-			Note:        "Log entry ID is currently locally generated. Real Sigstore Rekor anchoring is a future ledger integration.",
-		},
 	}
-	pote.Hash = canonicalHashOf("verdifax.artifact.pote.v1", []kv{
-		{"proof_type", pote.ProofType},
-		{"execution_trace_hash", pote.ExecutionTraceHash},
-		{"log_entry_id", pote.LogEntryID},
-	})
+	if in.LedgerBackend == "rekor" && in.LogEntryID != "" {
+		// Real Sigstore Rekor anchor. Populate the temporal-evidence
+		// fields and clear the scaffold flag. The cryptographic
+		// substance (signed checkpoint + integrated time + inclusion
+		// proof) is the same material a third party recomputes via
+		// `verdifax-verify rekor` or by fetching the entry from the
+		// Rekor REST API.
+		//
+		// Task #215: bump Kind to v2 so the temporal claim binds into
+		// pote.Hash itself (defense in depth: with v1 preimage the
+		// hash binds only proof_type + execution_trace_hash +
+		// log_entry_id, leaving integrated_time and the signed
+		// checkpoint covered only via RekorAnchor in the manifest).
+		// v1 stays for mock-mode bundles where the new fields are
+		// empty, so every previously sealed v1 bundle still recomputes
+		// to the same hash.
+		pote.Kind = "verdifax.artifact.pote.v2"
+		pote.LedgerBackend = in.LedgerBackend
+		pote.LedgerLogID = in.LedgerLogID
+		pote.IntegratedTime = in.LedgerIntegratedTime
+		pote.SignedEntryTimestamp = in.LedgerSignedEntryTimestamp
+		pote.LedgerCheckpoint = in.LedgerCheckpoint
+		pote.Scaffold = ScaffoldNote{IsScaffold: false}
+	} else {
+		// Mock-ledger mode (dev/test) or pre-Rekor runs. Keep the
+		// scaffold flag and reword the note to be accurate about the
+		// remaining gap, which is no longer "needs Rekor integration"
+		// (that's shipped) but rather "this specific run was sealed in
+		// mock mode and therefore carries no public-log evidence".
+		pote.Scaffold = ScaffoldNote{
+			IsScaffold:  true,
+			ActivatedBy: "production runs anchored to Sigstore Rekor (VERDIFAX_LEDGER_MODE=rekor)",
+			Note:        "This run was sealed in mock-ledger mode. Production runs anchored to the live Sigstore Rekor transparency log carry a real signed checkpoint, integrated time, and Merkle inclusion proof, and the PoteProof scaffold flag is cleared accordingly.",
+		}
+	}
+	// Task #215: hash preimage dispatches on Kind. v1 is the legacy
+	// shape (proof_type + execution_trace_hash + log_entry_id) so
+	// every previously sealed v1 bundle still recomputes identically.
+	// v2 widens the preimage with the Rekor temporal evidence so the
+	// hash itself binds the temporal claim. RecomputePoteProofHash in
+	// recompute.go performs the same dispatch on the verifier side.
+	pote.Hash = poteCanonicalHash(pote)
 	pote.Seal = seal("pote_proof_hash", in.PoteProofHash)
 
 	// 14. Final VFA

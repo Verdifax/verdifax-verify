@@ -27,6 +27,7 @@ package artifacts
 //     SealReference{} on the received artifact and recomputing.
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -149,12 +150,57 @@ func RecomputeReplayFingerprintHash(r ReplayFingerprint) string {
 	}{r.Kind, r.DeterministicInputs, r.ExpectedOutputHash})
 }
 
+// RecomputePoteProofHash dispatches on PoteProof.Kind so the verifier
+// matches whatever preimage shape the builder used:
+//
+//   - v1 (legacy / mock-mode): proof_type + execution_trace_hash +
+//     log_entry_id. Every previously sealed bundle uses this shape.
+//   - v2 (Task #215, rekor-backed): the v1 fields plus ledger_log_id,
+//     integrated_time, signed_entry_timestamp, ledger_checkpoint, so
+//     the hash binds the Rekor temporal claim directly. Mock-mode runs
+//     do NOT use v2 because those fields are empty for them.
+//
+// An unknown Kind falls through to v1 to preserve forward-progress on
+// any pre-v2 bundle whose Kind field was accidentally left empty. The
+// builder always sets Kind explicitly, so this fallback is only a
+// belt-and-suspenders measure for hand-constructed test inputs.
 func RecomputePoteProofHash(p PoteProof) string {
-	return canonicalHashOf("verdifax.artifact.pote.v1", []kv{
-		{"proof_type", p.ProofType},
-		{"execution_trace_hash", p.ExecutionTraceHash},
-		{"log_entry_id", p.LogEntryID},
-	})
+	return poteCanonicalHash(p)
+}
+
+// poteCanonicalHash is the shared preimage-dispatch helper. The builder
+// (builder.go) and the verifier (RecomputePoteProofHash above) both
+// route through it so the two sides cannot drift.
+func poteCanonicalHash(p PoteProof) string {
+	switch p.Kind {
+	case "verdifax.artifact.pote.v2":
+		return canonicalHashOf("verdifax.artifact.pote.v2", []kv{
+			{"proof_type", p.ProofType},
+			{"execution_trace_hash", p.ExecutionTraceHash},
+			{"log_entry_id", p.LogEntryID},
+			{"ledger_log_id", p.LedgerLogID},
+			{"integrated_time", int64ToDecimalString(p.IntegratedTime)},
+			{"signed_entry_timestamp", p.SignedEntryTimestamp},
+			{"ledger_checkpoint", p.LedgerCheckpoint},
+		})
+	default:
+		// v1 / legacy / empty Kind. Preimage MUST stay byte-identical
+		// to the pre-Task-#215 shape so historical bundles still
+		// recompute to the same hash.
+		return canonicalHashOf("verdifax.artifact.pote.v1", []kv{
+			{"proof_type", p.ProofType},
+			{"execution_trace_hash", p.ExecutionTraceHash},
+			{"log_entry_id", p.LogEntryID},
+		})
+	}
+}
+
+// int64ToDecimalString is a tiny helper kept local to the pote dispatch
+// so the canonical-hash kv list keeps using string values. Integer
+// formatting is base-10 with no thousands separator, matching how the
+// existing JSON serialization treats integers across the codebase.
+func int64ToDecimalString(n int64) string {
+	return fmt.Sprintf("%d", n)
 }
 
 func RecomputeFinalVFAHash(v FinalVFA) string {
