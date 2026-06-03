@@ -10,7 +10,7 @@ package artifacts
 // machinery, the same independent-verifier API (Verify*Hash), and the
 // same chain-of-custody binding, same §0 guarantees, just with
 // asymmetric outcomes. The pair completes the prevention/authorization
-// symmetry the patent claim depends on.
+// symmetry the artifact contract guarantees.
 //
 // Field order is intentionally lexicographic so encoding/json's stable
 // serialization produces canonical bytes that match the spec's RFC-8785

@@ -1,11 +1,11 @@
 // Command verdifax-verify is the standalone independent verifier for
 // Verdifax audit bundles.
 //
-// It is the operationalization of the patent's "no access to execution
-// system required" claim: given just a bundle JSON file, this binary
-// recomputes every canonical hash from the bundle's content and reports
-// whether the recorded values match. No network access, no Verdifax
-// credentials, no trust in the API server.
+// It is the offline-verification path for Verdifax bundles: given just
+// a bundle JSON file, this binary recomputes every canonical hash from
+// the bundle's content and reports whether the recorded values match.
+// No network access, no Verdifax credentials, no trust in the API
+// server.
 //
 // USAGE
 //

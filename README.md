@@ -5,10 +5,10 @@ audit bundles. It reads a bundle JSON file (or stdin) and recomputes
 every canonical hash from the bundle's content, comparing against the
 recorded values to detect tampering.
 
-It is the operational counterpart to the patent's *no access to
-execution system required* claim: given just a bundle file, this binary
-decides whether the evidence is internally consistent. No network
-access, no Verdifax credentials, no trust in the Verdifax API server.
+It is the offline-verification path for Verdifax bundles: given just a
+bundle file, this binary decides whether the evidence is internally
+consistent. No network access, no Verdifax credentials, no trust in the
+Verdifax API server.
 
 ## License
 
