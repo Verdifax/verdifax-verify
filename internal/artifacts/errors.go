@@ -2,12 +2,6 @@ package artifacts
 
 import "errors"
 
-// ErrNotImplemented is returned by stub functions during the Phase 10-12
-// scaffolding period. Real implementations will replace these with
-// concrete logic; until then, callers should treat this as "this feature
-// is on the roadmap but not yet built."
-var ErrNotImplemented = errors.New("artifacts: not implemented in v0 scaffolding")
-
 // ErrDenyReceiptHashMismatch is returned by VerifyDenyReceiptHash when
 // the recomputed canonical hash does not match the stored Hash field.
 // This indicates either tampering or implementation divergence.

@@ -61,8 +61,9 @@ type DenyReceipt struct {
 // preimage and populates the Hash field. The receipt argument is mutated
 // in place; the resulting Hash is also returned for convenience.
 //
-// Stub: returns ErrNotImplemented in v0 scaffolding. Real implementation
-// will use CanonicalHash() over the preimage subset of fields.
+// The hash is CanonicalHash() over the nine preimage fields (every
+// field except Hash itself), in canonical struct order. Covered by
+// deny_receipt_test.go with a frozen known-answer golden hash.
 func BuildDenyReceiptHash(receipt *DenyReceipt) (string, error) {
 	preimage := struct {
 		DecisionReasonCode string `json:"decision_reason_code"`
