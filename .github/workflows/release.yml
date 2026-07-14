@@ -99,21 +99,22 @@ jobs:
       # Keyless signing: the signature is bound to this workflow's
       # GitHub OIDC identity and recorded on the public Sigstore
       # transparency log. No private key exists to manage or leak.
-      # A third party verifies with:
+      # Emits a single Sigstore bundle (.bundle) — the modern format
+      # containing the signature, certificate, and transparency-log
+      # entry together. A third party verifies with:
       #
       #   cosign verify-blob \
-      #     --certificate <binary>.pem --signature <binary>.sig \
+      #     --bundle <binary>.bundle \
       #     --certificate-identity-regexp '^https://github.com/Verdifax/verdifax-verify/' \
       #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
       #     <binary>
-      - name: Sign binary (Cosign keyless, Sigstore)
+      - name: Sign binary (Cosign keyless, Sigstore bundle)
         env:
           COSIGN_YES: "true"
         run: |
           cd dist
           cosign sign-blob \
-            --output-signature verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.sig \
-            --output-certificate verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.pem \
+            --bundle verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.bundle \
             verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - name: Upload to release
@@ -123,5 +124,4 @@ jobs:
           files: |
             dist/verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}
             dist/verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
-            dist/verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.sig
-            dist/verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.pem
+            dist/verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.bundle
