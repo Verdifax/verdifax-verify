@@ -33,6 +33,7 @@ on:
 
 permissions:
   contents: write  # required to create / update the release
+  id-token: write  # Cosign keyless signing (Sigstore OIDC identity)
 
 jobs:
   create-release:
@@ -92,6 +93,29 @@ jobs:
           sha256sum verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }} \
             > verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
 
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      # Keyless signing: the signature is bound to this workflow's
+      # GitHub OIDC identity and recorded on the public Sigstore
+      # transparency log. No private key exists to manage or leak.
+      # A third party verifies with:
+      #
+      #   cosign verify-blob \
+      #     --certificate <binary>.pem --signature <binary>.sig \
+      #     --certificate-identity-regexp '^https://github.com/Verdifax/verdifax-verify/' \
+      #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      #     <binary>
+      - name: Sign binary (Cosign keyless, Sigstore)
+        env:
+          COSIGN_YES: "true"
+        run: |
+          cd dist
+          cosign sign-blob \
+            --output-signature verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.sig \
+            --output-certificate verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.pem \
+            verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}
+
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
@@ -99,3 +123,5 @@ jobs:
           files: |
             dist/verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}
             dist/verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+            dist/verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.sig
+            dist/verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.pem
