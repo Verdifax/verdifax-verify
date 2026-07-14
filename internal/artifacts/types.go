@@ -393,9 +393,36 @@ type AuditBundle struct {
 	// cooperation required.
 	Nrep NrepSection `json:"nrep"`
 
+	// FormalVerification binds the bundle to a pinned Lean 4 proof
+	// development (repo, commit, toolchain, theorem list, audited
+	// axiom footprint, honest scope statement). Extension section:
+	// absent (zero-valued, Kind == "") in bundles produced before the
+	// section shipped; absence means "no formal-verification claim
+	// made for this run", not a failure. When present, the verifier
+	// recomputes Hash from the section's contents and checks
+	// ManifestHash matches the bundle's manifest hash.
+	FormalVerification FormalVerification `json:"formal_verification,omitempty"`
+
 	// BundleHash seals the audit bundle itself (independent of the
 	// manifest hash).
 	BundleHash string `json:"bundle_hash"`
+}
+
+// FormalVerification is the audit-bundle record of the machine-checked
+// Lean 4 proof development pinned by the orchestrator at build time.
+// The Scope field carries the producer's honest-boundary statement
+// (model-level verification; no zero-knowledge claim) verbatim.
+type FormalVerification struct {
+	Kind           string   `json:"kind"` // "verdifax.formal_verification.v1"
+	Repo           string   `json:"repo"`
+	CommitSHA      string   `json:"commit_sha"`
+	Toolchain      string   `json:"toolchain"`
+	Modules        []string `json:"modules"`
+	Theorems       []string `json:"theorems"`
+	AxiomFootprint string   `json:"axiom_footprint"`
+	Scope          string   `json:"scope"`
+	ManifestHash   string   `json:"manifest_hash"`
+	Hash           string   `json:"hash"`
 }
 
 // NrepSection is the audit-bundle representation of one Phase-15

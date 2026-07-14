@@ -165,6 +165,12 @@ type EvidenceSummary struct {
 	RekorLogIndex    int64    `json:"rekor_log_index,omitempty"`
 	RekorVerified    string   `json:"rekor_verified"` // "verified" | "failed" | "not_anchored"
 	PoteHashVersion  string   `json:"pote_hash_version"`
+	// FormalVerification summarizes the bundle's formal-verification
+	// binding: "bound" with repo and commit when the record is present
+	// and belongs to this run, or "absent (no claim)" for bundles
+	// produced before the section shipped. Model-level scope is
+	// carried verbatim in the bundle's formal_verification.scope.
+	FormalVerification string `json:"formal_verification"`
 	HashesAllMatch   bool     `json:"hashes_all_match"`
 	StrictModeWanted bool     `json:"strict_mode_wanted"`
 	StrictModeGate   string   `json:"strict_mode_gate"` // "pass" | "fail"
@@ -203,6 +209,16 @@ func buildEvidenceSummary(b *artifacts.AuditBundle, r *Report, strictWanted bool
 	default:
 		s.PoteHashVersion = b.PoteProof.Kind
 	}
+	if b.FormalVerification.Kind != "" {
+		commit := b.FormalVerification.CommitSHA
+		if len(commit) > 12 {
+			commit = commit[:12]
+		}
+		s.FormalVerification = fmt.Sprintf("bound · %s @ %s · model-level (see formal_verification.scope)",
+			b.FormalVerification.Repo, commit)
+	} else {
+		s.FormalVerification = "absent (no claim)"
+	}
 	if !r.AllPassed || (strictWanted && r.HasScaffold) {
 		s.StrictModeGate = "fail"
 	} else {
@@ -232,6 +248,7 @@ func printEvidenceSummary(s EvidenceSummary) {
 		fmt.Printf("  Rekor anchor:     not anchored (mock-ledger run)\n")
 	}
 	fmt.Printf("  PoTE hash:        %s\n", s.PoteHashVersion)
+	fmt.Printf("  Formal verify:    %s\n", s.FormalVerification)
 	// Verdict line carries an explicit reason so a reader who is not
 	// familiar with the verifier's gating semantics does not mistake a
 	// scaffold-driven strict failure for a cryptographic failure.
@@ -391,6 +408,24 @@ func verify(b *artifacts.AuditBundle) *Report {
 			ExpectedManifest: b.ManifestHash,
 			SealManifest:     s.seal.ManifestHash,
 			Match:            s.seal.ManifestHash == b.ManifestHash,
+		})
+	}
+
+	// Formal-verification binding (extension section). Bundles
+	// produced before the section shipped carry no record: absence
+	// means "no formal-verification claim made for this run", not a
+	// failure. When present, the record's hash must recompute from
+	// its contents and its manifest_hash must match this bundle's,
+	// proving the record is intact and belongs to this run.
+	if b.FormalVerification.Kind != "" {
+		r.Categories = append(r.Categories,
+			mk("formal_verification", b.FormalVerification.Hash,
+				artifacts.RecomputeFormalVerificationHash(b.FormalVerification), false))
+		r.Seals = append(r.Seals, SealCheck{
+			Field:            "formal_verification",
+			ExpectedManifest: b.ManifestHash,
+			SealManifest:     b.FormalVerification.ManifestHash,
+			Match:            b.FormalVerification.ManifestHash == b.ManifestHash,
 		})
 	}
 
