@@ -30,6 +30,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -42,13 +43,14 @@ import (
 
 	"github.com/Verdifax/verdifax-verify/internal/artifacts"
 	"github.com/Verdifax/verdifax-verify/internal/rekorverify"
+	"github.com/Verdifax/verdifax-verify/internal/sevsnp"
 )
 
 // Version of the verifier binary. Independent of the orchestrator
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.3.0"
+const Version = "0.4.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -171,6 +173,12 @@ type EvidenceSummary struct {
 	// produced before the section shipped. Model-level scope is
 	// carried verbatim in the bundle's formal_verification.scope.
 	FormalVerification string `json:"formal_verification"`
+	// HardwareAttest summarizes the L8 hardware-attestation state:
+	// "sev_snp re-verified · <measurement12> · pinned AMD Milan root"
+	// when this tool independently re-checked the embedded quote,
+	// "sev_snp claimed but FAILED re-verification" when the claim did
+	// not hold, or "policy scaffold (honest disclosure)" otherwise.
+	HardwareAttest string `json:"hardware_attestation"`
 	HashesAllMatch   bool     `json:"hashes_all_match"`
 	StrictModeWanted bool     `json:"strict_mode_wanted"`
 	StrictModeGate   string   `json:"strict_mode_gate"` // "pass" | "fail"
@@ -219,6 +227,23 @@ func buildEvidenceSummary(b *artifacts.AuditBundle, r *Report, strictWanted bool
 	} else {
 		s.FormalVerification = "absent (no claim)"
 	}
+	switch {
+	case b.HardwareAttestation.AttestationMode == "sev_snp":
+		s.HardwareAttest = "sev_snp claimed but FAILED re-verification"
+		for _, c := range r.Categories {
+			if c.Name == "hardware_attestation_sevsnp_quote" && c.Match {
+				meas := b.HardwareAttestation.EnclaveMeasurement
+				if len(meas) > 12 {
+					meas = meas[:12]
+				}
+				s.HardwareAttest = "sev_snp re-verified · measurement " + meas + "… · pinned AMD Milan root"
+			}
+		}
+	case b.HardwareAttestation.Kind != "":
+		s.HardwareAttest = "policy scaffold (honest disclosure)"
+	default:
+		s.HardwareAttest = "absent (no claim)"
+	}
 	if !r.AllPassed || (strictWanted && r.HasScaffold) {
 		s.StrictModeGate = "fail"
 	} else {
@@ -249,6 +274,7 @@ func printEvidenceSummary(s EvidenceSummary) {
 	}
 	fmt.Printf("  PoTE hash:        %s\n", s.PoteHashVersion)
 	fmt.Printf("  Formal verify:    %s\n", s.FormalVerification)
+	fmt.Printf("  Hardware attest:  %s\n", s.HardwareAttest)
 	// Verdict line carries an explicit reason so a reader who is not
 	// familiar with the verifier's gating semantics does not mistake a
 	// scaffold-driven strict failure for a cryptographic failure.
@@ -429,6 +455,20 @@ func verify(b *artifacts.AuditBundle) *Report {
 		})
 	}
 
+	// SEV-SNP hardware attestation, INDEPENDENT re-verification.
+	// When the bundle claims a real "sev_snp" quote, this tool never
+	// takes the orchestrator's word for it: the raw report, VLEK leaf,
+	// and AMD chain embedded in the bundle are re-verified here against
+	// this binary's OWN pinned ARK-Milan root, and the report_data
+	// binding is recomputed from the bundle's envelope + AER hashes.
+	// A bundle claiming "sev_snp" whose quote fails any check is a
+	// verification FAILURE (surfaced as a mismatching category row),
+	// not a soft note: the claim was checkable and false. Bundles in
+	// policy_scaffold mode skip this entirely (absent = no claim).
+	if b.HardwareAttestation.AttestationMode == "sev_snp" {
+		r.Categories = append(r.Categories, verifySevSnpQuote(b))
+	}
+
 	// Day-3+ Rekor anchor verification, runs only when the bundle was
 	// sealed under VERDIFAX_LEDGER_MODE=rekor (Backend == "rekor").
 	// Mock-ledger bundles skip this check; the report surfaces
@@ -504,6 +544,36 @@ func verifyRekorAnchor(a artifacts.RekorAnchor) RekorAnchorCheck {
 		LogIndex:  a.LogIndex,
 		Match:     true,
 	}
+}
+
+// verifySevSnpQuote re-verifies a claimed sev_snp hardware quote from
+// the raw evidence in the bundle. Returns a HashCheck whose
+// recorded/computed pair encodes the outcome: both "verified" on
+// success (Match=true), or "verified" vs "FAILED: <reason>" on any
+// failure (Match=false, which fails the whole verification).
+func verifySevSnpQuote(b *artifacts.AuditBundle) HashCheck {
+	const name = "hardware_attestation_sevsnp_quote"
+	fail := func(reason string) HashCheck {
+		return HashCheck{Name: name, Recorded: "verified", Computed: "FAILED: " + reason, Match: false}
+	}
+	hwa := b.HardwareAttestation
+	if hwa.QuoteB64 == "" || hwa.VLEKCertPEM == "" || hwa.CertChainPEM == "" {
+		return fail("sev_snp mode claimed but quote evidence missing from bundle")
+	}
+	raw, err := base64.StdEncoding.DecodeString(hwa.QuoteB64)
+	if err != nil {
+		return fail("quote_b64 undecodable: " + err.Error())
+	}
+	envHash := b.FinalVFA.EnvelopeHash
+	aerHash := b.FinalVFA.AerHash
+	if envHash == "" || aerHash == "" {
+		return fail("bundle missing envelope/aer hashes for binding recompute")
+	}
+	binding := sevsnp.BindingReportData(envHash, aerHash)
+	if _, err := sevsnp.Verify(raw, []byte(hwa.VLEKCertPEM), []byte(hwa.CertChainPEM), binding[:]); err != nil {
+		return fail(err.Error())
+	}
+	return HashCheck{Name: name, Recorded: "verified", Computed: "verified", Match: true}
 }
 
 func mk(name, recorded, computed string, scaffold bool) HashCheck {

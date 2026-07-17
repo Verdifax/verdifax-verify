@@ -191,9 +191,42 @@ type HardwareAttestation struct {
 	ExecutionEnvironment  string         `json:"execution_environment"`
 	PCRSelection          string         `json:"pcr_selection"`
 	Tier4Blockers         []string       `json:"tier4_blockers"`
+
+	// SEV-SNP evidence, present only in "sev_snp" mode (shipped
+	// 2026-07-17). These fields are NOT part of the artifact's hash
+	// preimage; their integrity is far stronger: the quote is signed
+	// by AMD silicon and this verifier re-checks that signature, the
+	// pinned chain, and the run binding from these raw bytes.
+	Platform         string                `json:"platform,omitempty"`
+	QuoteB64         string                `json:"quote_b64,omitempty"`
+	VLEKCertPEM      string                `json:"vlek_cert_pem,omitempty"`
+	CertChainPEM     string                `json:"cert_chain_pem,omitempty"`
+	ReportDataHex    string                `json:"report_data_hex,omitempty"`
+	ReportDataRecipe string                `json:"report_data_recipe,omitempty"`
+	Verification     *SevSnpVerifyClaim    `json:"verification,omitempty"`
+
 	Scaffold              ScaffoldNote   `json:"scaffold"`
 	Hash                  string         `json:"hash"`
 	Seal                  SealReference  `json:"seal"`
+}
+
+// SevSnpVerifyClaim mirrors the orchestrator's recorded verification
+// result. This tool treats it as a CLAIM only, and re-verifies the
+// quote itself from the raw evidence above.
+type SevSnpVerifyClaim struct {
+	Platform              string `json:"platform"`
+	RootFingerprintSHA256 string `json:"root_fingerprint_sha256"`
+	ChainVerified         bool   `json:"chain_verified"`
+	SignatureVerified     bool   `json:"signature_verified"`
+	ReportDataBound       bool   `json:"report_data_bound"`
+	SigningKeyType        string `json:"signing_key_type"`
+	ReportVersion         uint32 `json:"report_version"`
+	MeasurementHex        string `json:"measurement_hex"`
+	ReportIDHex           string `json:"report_id_hex"`
+	CurrentTCBHex         string `json:"current_tcb_hex"`
+	ReportedTCBHex        string `json:"reported_tcb_hex"`
+	ReportDataHex         string `json:"report_data_hex"`
+	VLEKLeafSHA256        string `json:"vlek_leaf_sha256"`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
