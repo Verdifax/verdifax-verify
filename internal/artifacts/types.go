@@ -588,8 +588,18 @@ type RekorAnchor struct {
 	// backend == "mock".
 	EntryBody string `json:"entry_body,omitempty"`
 
-	// LogIndex is the leaf's 0-based position in the Rekor Merkle
-	// tree (numeric form of LogEntryID).
+	// LogIndex is the leaf's 0-based position inside the CURRENT
+	// SHARD's Merkle tree, the value the inclusion proof is verified
+	// against.
+	//
+	// It is NOT the numeric form of LogEntryID, which this comment
+	// claimed until 2026-09-08. rekor.sigstore.dev is sharded:
+	// LogEntryID is the global index across all shards (what
+	// search.sigstore.dev resolves) and LogIndex is the in-shard
+	// position, smaller by exactly the size of the prior shards. The
+	// wrong sentence here led a reader to conclude the two fields
+	// disagreed and to "fix" a working link, so the distinction is now
+	// spelled out where the confusion started.
 	LogIndex int64 `json:"log_index"`
 
 	// TreeSize is the total number of leaves in the Rekor tree at

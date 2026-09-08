@@ -741,22 +741,27 @@ func printRekorAnchor(a RekorAnchorCheck, logEntryID string) {
 	if a.Match {
 		fmt.Printf("  ✓  rekor anchor verified offline, log index %d\n", a.LogIndex)
 		fmt.Printf("     Inclusion proof and signed checkpoint both verify under the\n")
-		// Link the index that was actually VERIFIED, not log_entry_id.
+		// The two index fields are BOTH correct and mean different
+		// things, because rekor.sigstore.dev is sharded. log_entry_id is
+		// the global index across all shards, which is what
+		// search.sigstore.dev resolves. log_index is the position inside
+		// the current shard's tree, which is what the inclusion proof is
+		// verified against. For run 208 they are 1703229140 and
+		// 1581324878; the difference is the size of the prior shards.
 		//
-		// types.go documents log_index as the numeric form of
-		// log_entry_id, and production run 208 violates that: log_index
-		// 1581324878, log_entry_id 1703229140, tree_size 1581325253. The
-		// entry id exceeds the tree size, so it cannot be a position in
-		// the tree this proof was issued against, while log_index is
-		// exactly what the inclusion proof was checked against.
-		//
-		// Sending a reader to an entry other than the one verified is
-		// worse than sending them nowhere, so the disagreement is
-		// surfaced rather than resolved silently.
-		fmt.Printf("     embedded Rekor public key. View on https://search.sigstore.dev/?logIndex=%d\n", a.LogIndex)
+		// This comment exists because a change on 2026-09-08 "fixed" the
+		// link to use log_index, on the reasoning that the entry id
+		// exceeded the shard's tree size and so could not be a position
+		// in it. True, and irrelevant: it was never a shard position.
+		// The mistaken fix was published for under an hour and caught by
+		// fetching the entry from the live log, whose hashedrekord at
+		// the global index carries this bundle's exact leaf hash. Verify
+		// semantics against the system, not only arithmetic against the
+		// data in hand.
+		fmt.Printf("     embedded Rekor public key. View on https://search.sigstore.dev/?logIndex=%s\n", logEntryID)
 		if logEntryID != "" && logEntryID != strconv.FormatInt(a.LogIndex, 10) {
-			fmt.Printf("     NOTE: this bundle's log_entry_id (%s) disagrees with the\n", logEntryID)
-			fmt.Printf("     verified log_index (%d). The link above is the verified one.\n", a.LogIndex)
+			fmt.Printf("     (%s is the global index across shards; %d is this entry's\n", logEntryID, a.LogIndex)
+			fmt.Printf("     position inside the current shard's tree, used by the proof.)\n")
 		}
 		return
 	}

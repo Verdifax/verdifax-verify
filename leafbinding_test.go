@@ -304,41 +304,47 @@ func TestTheEvidenceSummaryReportsLeafBinding(t *testing.T) {
 	}
 }
 
-// TestTheDocumentedLogIndexInvariantIsViolatedInProduction pins a real
-// inconsistency rather than pretending it away.
+// TestTheTwoIndicesAreGlobalAndShardPosition pins what the two index
+// fields actually mean, because getting this wrong has now happened
+// twice in one day, in opposite directions.
 //
-// types.go documents log_index as "the numeric form of log_entry_id".
-// Production run 208 disagrees: log_index 1581324878, log_entry_id
-// 1703229140, tree_size 1581325253. The entry id EXCEEDS the tree size,
-// so it cannot be a position in the tree the inclusion proof was issued
-// against, while log_index is exactly what that proof was checked
-// against.
+// rekor.sigstore.dev is sharded. log_entry_id is the GLOBAL index
+// across all shards, the value search.sigstore.dev resolves. log_index
+// is the position inside the current shard's tree, the value the
+// inclusion proof verifies against. For run 208: global 1703229140,
+// shard position 1581324878, difference 121,904,262, the size of the
+// prior shards. Confirmed against the live log on 2026-09-08: the
+// hashedrekord at the global index carries this bundle's exact leaf
+// hash, and its embedded inclusion proof carries the shard position.
 //
-// The human report previously verified one and linked the other, sending
-// an auditor to an entry that was never verified. If this invariant is
-// ever genuinely established, this test fails and the report's NOTE
-// branch can be removed. Until then it records that the two fields are
-// not interchangeable.
-func TestTheDocumentedLogIndexInvariantIsViolatedInProduction(t *testing.T) {
+// The predecessor of this test asserted the opposite: it read the
+// (then wrong) doc comment claiming the two fields were the same
+// number, observed production data where they differ, concluded the
+// data was inconsistent, and backed a change that pointed the report's
+// link at the shard position, which search.sigstore.dev would resolve
+// to a different entry entirely. The test was internally coherent and
+// wrong, because it validated arithmetic against the bundle instead of
+// semantics against the log.
+func TestTheTwoIndicesAreGlobalAndShardPosition(t *testing.T) {
 	b := goldenBundle(t)
-	idx := b.RekorAnchor.LogIndex
-	entryID := b.RekorAnchor.LogEntryID
+	shardPos := b.RekorAnchor.LogIndex
+	global, err := strconv.ParseInt(b.RekorAnchor.LogEntryID, 10, 64)
+	if err != nil {
+		t.Fatalf("log_entry_id %q is not numeric", b.RekorAnchor.LogEntryID)
+	}
 
-	if entryID == strconv.FormatInt(idx, 10) {
-		t.Skip("the two now agree in this fixture; the report's NOTE branch " +
-			"and this test can both be reconsidered")
+	// The global index can never be smaller than the in-shard position:
+	// it equals the position plus everything in earlier shards.
+	if global < shardPos {
+		t.Errorf("global index %d is smaller than shard position %d, which is "+
+			"impossible under the sharding model; whichever produced this "+
+			"bundle has the two fields swapped", global, shardPos)
 	}
-	if b.RekorAnchor.TreeSize > 0 {
-		n, err := strconv.ParseInt(entryID, 10, 64)
-		if err == nil && n < b.RekorAnchor.TreeSize {
-			t.Errorf("log_entry_id %d is within tree_size %d, so the claim that "+
-				"it cannot be a position in this tree no longer holds; recheck "+
-				"which field the report should link", n, b.RekorAnchor.TreeSize)
-		}
-	}
-	if idx <= 0 || idx >= b.RekorAnchor.TreeSize {
-		t.Errorf("log_index %d is not a sane position in a tree of size %d; "+
-			"the report links this value", idx, b.RekorAnchor.TreeSize)
+	// And the shard position must be a sane index in the shard tree the
+	// proof was issued against.
+	if b.RekorAnchor.TreeSize > 0 && shardPos >= b.RekorAnchor.TreeSize {
+		t.Errorf("shard position %d is not inside a tree of size %d",
+			shardPos, b.RekorAnchor.TreeSize)
 	}
 }
 
