@@ -65,16 +65,30 @@ scaffold flag is set. High-trust environments should always use
 matches its canonical preimage, and any post-hoc modification to a
 field invalidates the hash.
 
-**Does not prove:** that the underlying execution actually happened
-on Verdifax-operated hardware. A malicious orchestrator could fabricate
-a bundle with consistent internal hashes. For protection against
-fabrication, look for:
+**Also proves, since 2026-09-08:** that the Sigstore Rekor entry the
+bundle names is *this run's* entry and not someone else's. The verifier
+rebuilds the leaf preimage from the bundle's own `envelope_id`,
+`aer_hash` and `zksp_binding_hash` (plus `input_nonce` where present)
+and confirms it hashes to the anchored leaf.
 
-- **Public-log anchoring**, every successful run is committed to
-  Sigstore Rekor at `rekor.sigstore.dev`. The `log_entry_id` field of
-  the bundle is searchable on `search.sigstore.dev`.
-- **Hardware-rooted attestation**, currently a scaffold value; see
-  [scaffold-gaps](https://docs.verdifax.com/concepts/scaffold-gaps/).
+That check did not exist before. Until then this tool proved two things
+separately and never joined them: that the manifest was internally
+consistent, and that some leaf was genuinely inside Rekor's tree. A
+bundle citing a real Rekor entry belonging to a different run satisfied
+both and verified cleanly. It now fails, and the failure is a failure,
+not an advisory line.
+
+**Does not prove:** that the underlying execution actually happened on
+Verdifax-operated hardware. Anchoring establishes that a bundle existed
+and was publicly committed at a point in time; it does not establish
+that the computation behind it was honest. An orchestrator that
+controlled the whole pipeline could still anchor a fabricated but
+internally consistent run. Closing that gap needs hardware-rooted
+attestation, which is currently a scaffold value; see
+[scaffold-gaps](https://docs.verdifax.com/concepts/scaffold-gaps/).
+
+The `log_entry_id` field remains searchable on `search.sigstore.dev` if
+you would rather confirm the entry by hand than trust this binary.
 
 ## Source provenance
 

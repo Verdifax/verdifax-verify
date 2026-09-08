@@ -564,7 +564,22 @@ type RekorAnchor struct {
 	// committed to Rekor. Anyone reading the bundle can recompute the
 	// leaf bytes from the manifest's envelope_id + aer_hash +
 	// zksp_binding_hash and confirm they hash to this value.
+	//
+	// That sentence described an intention for months rather than a
+	// behaviour. This verifier proved the leaf was in Rekor's tree and
+	// never asked whether it was THIS run's leaf, so a bundle naming a
+	// genuine but unrelated Rekor entry verified cleanly. leafbinding.go
+	// now performs the recomputation the sentence promises.
 	LeafHashHex string `json:"leaf_hash"`
+
+	// InputNonce is the per-run nonce mixed into the leaf preimage,
+	// distinguishing the v2 leaf form from v1.
+	//
+	// Zero means the bundle predates the nonce and used the v1 preimage.
+	// The verifier selects the form from this value rather than assuming
+	// v2, because assuming v2 would report every legacy bundle as forged,
+	// which is a worse error than the one being corrected.
+	InputNonce int64 `json:"input_nonce,omitempty"`
 
 	// EntryBody is the base64-encoded canonical JSON of the
 	// hashedrekord entry exactly as Rekor stored it. Required for

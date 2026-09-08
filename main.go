@@ -94,6 +94,7 @@ type Report struct {
 	BundleHash    HashCheck        `json:"bundle_hash"`
 	Seals         []SealCheck      `json:"seal_references"`
 	RekorAnchor   RekorAnchorCheck `json:"rekor_anchor"`
+	LeafBinding   LeafBindingCheck `json:"leaf_binding"`
 	AllPassed     bool             `json:"all_passed"`
 	HasScaffold   bool             `json:"has_scaffold"`
 	ScaffoldList  []string         `json:"scaffold_list,omitempty"`
@@ -476,6 +477,12 @@ func verify(b *artifacts.AuditBundle) *Report {
 	// a public log.
 	r.RekorAnchor = verifyRekorAnchor(b.RekorAnchor)
 
+	// The anchor check above proves a leaf sits under a Rekor-signed
+	// root. It does not prove the leaf is THIS run's. Without the next
+	// line a bundle naming a genuine but unrelated Rekor entry passes
+	// every check in this tool.
+	r.LeafBinding = verifyLeafBinding(b)
+
 	// Roll-up.
 	allPassed := r.BundleHashOK
 	for _, c := range r.Artifacts {
@@ -498,6 +505,14 @@ func verify(b *artifacts.AuditBundle) *Report {
 		}
 	}
 	if r.RekorAnchor.Performed && !r.RekorAnchor.Match {
+		allPassed = false
+	}
+	// A failed binding is a FAILURE, not an advisory note. An anchored
+	// bundle whose leaf belongs to some other run is precisely the
+	// forgery this tool exists to catch, and reporting it as a warning
+	// beside a passing verdict would be the same defect as filing a
+	// finding under "what this report does not show".
+	if r.LeafBinding.Performed && !r.LeafBinding.Match {
 		allPassed = false
 	}
 	r.AllPassed = allPassed
