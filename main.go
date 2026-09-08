@@ -38,6 +38,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -167,6 +168,19 @@ type EvidenceSummary struct {
 	RekorAnchored    bool     `json:"rekor_anchored"`
 	RekorLogIndex    int64    `json:"rekor_log_index,omitempty"`
 	RekorVerified    string   `json:"rekor_verified"` // "verified" | "failed" | "not_anchored"
+
+	// LeafBound answers the question rekor_verified does NOT answer:
+	// whether the anchored entry belongs to this run. "bound" | "foreign"
+	// | "not_checked".
+	//
+	// Both are needed and neither substitutes for the other. An entry can
+	// be genuinely in Rekor's tree and belong to somebody else, so a
+	// consumer reading only rekor_verified=verified would conclude more
+	// than the evidence supports. This field was absent from the summary
+	// in both the public and the private verifier, which meant the
+	// strongest check either tool performs was invisible to any tooling
+	// reading the machine output.
+	LeafBound string `json:"leaf_bound"`
 	PoteHashVersion  string   `json:"pote_hash_version"`
 	// FormalVerification summarizes the bundle's formal-verification
 	// binding: "bound" with repo and commit when the record is present
@@ -209,6 +223,14 @@ func buildEvidenceSummary(b *artifacts.AuditBundle, r *Report, strictWanted bool
 		s.RekorLogIndex = b.RekorAnchor.LogIndex
 	default:
 		s.RekorVerified = "not_anchored"
+	}
+	switch {
+	case r.LeafBinding.Performed && r.LeafBinding.Match:
+		s.LeafBound = "bound"
+	case r.LeafBinding.Performed && !r.LeafBinding.Match:
+		s.LeafBound = "foreign"
+	default:
+		s.LeafBound = "not_checked"
 	}
 	switch b.PoteProof.Kind {
 	case "verdifax.artifact.pote.v2":
@@ -272,6 +294,17 @@ func printEvidenceSummary(s EvidenceSummary) {
 		fmt.Printf("  Rekor anchor:     FAILED · log index %d\n", s.RekorLogIndex)
 	default:
 		fmt.Printf("  Rekor anchor:     not anchored (mock-ledger run)\n")
+	}
+	// Printed on its own line rather than folded into the anchor line,
+	// because a reader skimming for one tick must not be able to take
+	// "anchor verified" as also meaning "anchor is mine".
+	switch s.LeafBound {
+	case "bound":
+		fmt.Printf("  Anchored leaf:    is this run's\n")
+	case "foreign":
+		fmt.Printf("  Anchored leaf:    NOT this run's\n")
+	default:
+		fmt.Printf("  Anchored leaf:    not checked (no public-log claim)\n")
 	}
 	fmt.Printf("  PoTE hash:        %s\n", s.PoteHashVersion)
 	fmt.Printf("  Formal verify:    %s\n", s.FormalVerification)
@@ -640,6 +673,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 
 	fmt.Println("SIGSTORE REKOR ANCHOR")
 	printRekorAnchor(r.RekorAnchor, b.RekorAnchor.LogEntryID)
+	printLeafBinding(r.LeafBinding)
 	fmt.Println()
 
 	switch {
@@ -707,7 +741,23 @@ func printRekorAnchor(a RekorAnchorCheck, logEntryID string) {
 	if a.Match {
 		fmt.Printf("  ✓  rekor anchor verified offline, log index %d\n", a.LogIndex)
 		fmt.Printf("     Inclusion proof and signed checkpoint both verify under the\n")
-		fmt.Printf("     embedded Rekor public key. View on https://search.sigstore.dev/?logIndex=%s\n", logEntryID)
+		// Link the index that was actually VERIFIED, not log_entry_id.
+		//
+		// types.go documents log_index as the numeric form of
+		// log_entry_id, and production run 208 violates that: log_index
+		// 1581324878, log_entry_id 1703229140, tree_size 1581325253. The
+		// entry id exceeds the tree size, so it cannot be a position in
+		// the tree this proof was issued against, while log_index is
+		// exactly what the inclusion proof was checked against.
+		//
+		// Sending a reader to an entry other than the one verified is
+		// worse than sending them nowhere, so the disagreement is
+		// surfaced rather than resolved silently.
+		fmt.Printf("     embedded Rekor public key. View on https://search.sigstore.dev/?logIndex=%d\n", a.LogIndex)
+		if logEntryID != "" && logEntryID != strconv.FormatInt(a.LogIndex, 10) {
+			fmt.Printf("     NOTE: this bundle's log_entry_id (%s) disagrees with the\n", logEntryID)
+			fmt.Printf("     verified log_index (%d). The link above is the verified one.\n", a.LogIndex)
+		}
 		return
 	}
 
@@ -717,6 +767,44 @@ func printRekorAnchor(a RekorAnchorCheck, logEntryID string) {
 	fmt.Println("     anchor was tampered with, the embedded Rekor public key is")
 	fmt.Println("     stale (rotation announced via the Sigstore TUF root), or the")
 	fmt.Println("     bundle was produced by a non-canonical orchestrator.")
+}
+
+// printLeafBinding renders whether the anchored leaf belongs to THIS
+// run. Printed directly beneath the anchor result because the two are
+// only meaningful together: the anchor says a leaf is in the log, this
+// says the leaf is yours. A reader who sees one tick and assumes the
+// other has been misled, so neither is shown alone.
+//
+// Omitting this printer was the first thing found when the public and
+// private verifiers were diffed. The check ran, and correctly failed the
+// verdict, while saying nothing in the human report. A result the reader
+// cannot see is the same defect as filing a finding under "what this
+// report does not show".
+func printLeafBinding(c LeafBindingCheck) {
+	if !c.Performed {
+		return
+	}
+	if c.Match {
+		// The v1 preimage has no nonce. Naming one anyway, as the
+		// orchestrator's copy of this printer does, tells an auditor the
+		// tool checked an input that does not exist in that form. Small,
+		// and exactly the kind of inaccuracy that costs a reader's trust
+		// in the lines they cannot check themselves.
+		inputs := "envelope_id, aer_hash and binding_hash"
+		if c.Form == leafDomainV2 {
+			inputs = "envelope_id, aer_hash, binding_hash and input_nonce"
+		}
+		fmt.Println("  ✓  the anchored leaf is this run's")
+		fmt.Printf("     Recomputed from this bundle's %s\n", inputs)
+		fmt.Printf("     under %s; matches the anchored leaf hash.\n", c.Form)
+		return
+	}
+	fmt.Println("  ✗  the anchored leaf is NOT this run's")
+	fmt.Printf("     Reason: %s\n", c.Reason)
+	if c.Computed != "" {
+		fmt.Printf("     This run's inputs produce %s\n", truncate(c.Computed, 24))
+		fmt.Printf("     The bundle claims the anchor is %s\n", truncate(c.Recorded, 24))
+	}
 }
 
 // isHTTPURL reports whether s parses as an absolute http or https URL.

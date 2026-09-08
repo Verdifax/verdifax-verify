@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -264,4 +265,99 @@ func TestAFailedBindingFailsTheWholeVerdict(t *testing.T) {
 		t.Fatal("the bundle names a foreign anchor and the overall verdict " +
 			"still passed; the binding result is not wired into the roll-up")
 	}
+}
+
+// ── the result must be visible, not merely correct ───────────────────
+
+// Found by diffing this verifier against the orchestrator's private
+// copy: the check ran and failed the verdict while saying nothing in
+// either the human report or the machine summary. A reader would have
+// seen "Rekor anchor: verified" and no indication that the anchor might
+// belong to someone else. Correct and invisible is the same defect as
+// filing a finding under "what this report does not show".
+
+func TestTheEvidenceSummaryReportsLeafBinding(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*artifacts.AuditBundle)
+		want   string
+	}{
+		{"genuine bundle", func(*artifacts.AuditBundle) {}, "bound"},
+		{"foreign anchor", func(b *artifacts.AuditBundle) {
+			b.RekorAnchor.LeafHashHex = strings.Repeat("0", 64)
+		}, "foreign"},
+		{"no anchor claimed", func(b *artifacts.AuditBundle) {
+			b.RekorAnchor.Backend = "mock"
+		}, "not_checked"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			b := goldenBundle(t)
+			c.mutate(b)
+			got := buildEvidenceSummary(b, verify(b), false)
+			if got.LeafBound != c.want {
+				t.Errorf("leaf_bound = %q, want %q. Tooling reading the machine "+
+					"summary must be able to tell an anchored leaf that is this "+
+					"run's from one that is not.", got.LeafBound, c.want)
+			}
+		})
+	}
+}
+
+// TestTheDocumentedLogIndexInvariantIsViolatedInProduction pins a real
+// inconsistency rather than pretending it away.
+//
+// types.go documents log_index as "the numeric form of log_entry_id".
+// Production run 208 disagrees: log_index 1581324878, log_entry_id
+// 1703229140, tree_size 1581325253. The entry id EXCEEDS the tree size,
+// so it cannot be a position in the tree the inclusion proof was issued
+// against, while log_index is exactly what that proof was checked
+// against.
+//
+// The human report previously verified one and linked the other, sending
+// an auditor to an entry that was never verified. If this invariant is
+// ever genuinely established, this test fails and the report's NOTE
+// branch can be removed. Until then it records that the two fields are
+// not interchangeable.
+func TestTheDocumentedLogIndexInvariantIsViolatedInProduction(t *testing.T) {
+	b := goldenBundle(t)
+	idx := b.RekorAnchor.LogIndex
+	entryID := b.RekorAnchor.LogEntryID
+
+	if entryID == strconv.FormatInt(idx, 10) {
+		t.Skip("the two now agree in this fixture; the report's NOTE branch " +
+			"and this test can both be reconsidered")
+	}
+	if b.RekorAnchor.TreeSize > 0 {
+		n, err := strconv.ParseInt(entryID, 10, 64)
+		if err == nil && n < b.RekorAnchor.TreeSize {
+			t.Errorf("log_entry_id %d is within tree_size %d, so the claim that "+
+				"it cannot be a position in this tree no longer holds; recheck "+
+				"which field the report should link", n, b.RekorAnchor.TreeSize)
+		}
+	}
+	if idx <= 0 || idx >= b.RekorAnchor.TreeSize {
+		t.Errorf("log_index %d is not a sane position in a tree of size %d; "+
+			"the report links this value", idx, b.RekorAnchor.TreeSize)
+	}
+}
+
+func TestRekorVerifiedDoesNotImplyLeafBound(t *testing.T) {
+	// The two fields answer different questions and neither substitutes
+	// for the other. A bundle citing a genuine Rekor entry from another
+	// run is the case that separates them, and it is the exact forgery
+	// this tool exists to catch.
+	b := goldenBundle(t)
+	b.RekorAnchor.LeafHashHex = strings.Repeat("0", 64)
+
+	s := buildEvidenceSummary(b, verify(b), false)
+	if s.LeafBound != "foreign" {
+		t.Fatalf("leaf_bound = %q, want foreign", s.LeafBound)
+	}
+	if s.RekorVerified == "failed" {
+		t.Skip("this fixture's inclusion proof also fails, so the two fields " +
+			"cannot be shown to move independently here")
+	}
+	t.Logf("rekor_verified=%q while leaf_bound=%q, which is the pair a "+
+		"consumer must read together", s.RekorVerified, s.LeafBound)
 }
