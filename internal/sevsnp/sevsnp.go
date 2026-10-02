@@ -32,6 +32,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 )
 
 const (
@@ -62,6 +63,15 @@ type Result struct {
 // bundle's own envelope and AER hashes.
 func BindingReportData(envelopeHash, aerHash string) [64]byte {
 	return sha512.Sum512([]byte(bindingDomain + ":" + envelopeHash + ":" + aerHash))
+}
+
+// PreRecordReportData recomputes the binding for a quote taken before
+// the run's attestation execution record was built: every other field
+// of the record's preimage, in formula order. Mirrors the
+// orchestrator's attestation.PreRecordReportData byte for byte.
+func PreRecordReportData(inputHash, transportHash, executionControlHash, programHash string, kernelOutputIDs []string) [64]byte {
+	parts := append([]string{"verdifax.sevsnp.report_data.prerecord.v1", inputHash, transportHash, executionControlHash, programHash}, kernelOutputIDs...)
+	return sha512.Sum512([]byte(strings.Join(parts, ":")))
 }
 
 // Verify re-runs the full verification against raw bundle evidence.

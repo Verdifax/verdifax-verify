@@ -52,7 +52,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.5.0"
+const Version = "0.6.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -620,12 +620,22 @@ func verifySevSnpQuote(b *artifacts.AuditBundle) HashCheck {
 	if err != nil {
 		return fail("quote_b64 undecodable: " + err.Error())
 	}
-	envHash := b.FinalVFA.EnvelopeHash
-	aerHash := b.FinalVFA.AerHash
-	if envHash == "" || aerHash == "" {
-		return fail("bundle missing envelope/aer hashes for binding recompute")
+	// A record that carries the hardware measurement had its quote taken
+	// before the record existed, so the quote binds the record's other
+	// preimage fields. Older bundles bound the quote after the run, to
+	// the envelope and record hashes.
+	var binding [64]byte
+	if rec := b.ExecutionRecord; rec != nil && rec.HardwareAttested {
+		binding = sevsnp.PreRecordReportData(rec.InputHash, rec.TransportHash,
+			rec.ExecutionControlHash, rec.ProgramHash, rec.KernelOutputIDs)
+	} else {
+		envHash := b.FinalVFA.EnvelopeHash
+		aerHash := b.FinalVFA.AerHash
+		if envHash == "" || aerHash == "" {
+			return fail("bundle missing envelope/aer hashes for binding recompute")
+		}
+		binding = sevsnp.BindingReportData(envHash, aerHash)
 	}
-	binding := sevsnp.BindingReportData(envHash, aerHash)
 	if _, err := sevsnp.Verify(raw, []byte(hwa.VLEKCertPEM), []byte(hwa.CertChainPEM), binding[:]); err != nil {
 		return fail(err.Error())
 	}
@@ -636,10 +646,11 @@ func verifySevSnpQuote(b *artifacts.AuditBundle) HashCheck {
 // record (aer.v1) and its proof (proof.v1) from the bundle's disclosed
 // preimage fields, then confirms the section belongs to this bundle:
 // its record hash must equal the one the final VFA seals, and its
-// kernel ids must equal the AER artifact's. The hardware row reports
-// whether the record binds a hardware measurement at all; a record
-// built without one is honest about it, so that row is a scaffold
-// note, never a failure, unless the section's own claim is false.
+// kernel ids must equal the AER artifact's. The hardware row: a record
+// that claims hardware must hold exactly the hash of the bundle's
+// SEV-SNP quote; a record built without hardware is honest about it,
+// so that row is a scaffold note, never a failure, unless the
+// section's own claim is false.
 func verifyExecutionRecord(b *artifacts.AuditBundle) []HashCheck {
 	rec := *b.ExecutionRecord
 	aer, proof, err := artifacts.RecomputeExecutionRecord(rec)
@@ -648,15 +659,23 @@ func verifyExecutionRecord(b *artifacts.AuditBundle) []HashCheck {
 		proof = aer
 	}
 	noHardware := rec.HardwareAttestationHash == artifacts.NoHardwareAttestationHash
+	hardware := mk("execution_record_hardware",
+		fmt.Sprintf("hardware_attested=%t", rec.HardwareAttested),
+		fmt.Sprintf("hardware_attested=%t", !noHardware), noHardware)
+	if rec.HardwareAttested {
+		quoteHash, err := artifacts.ExecutionRecordHardwareHash(b)
+		if err != nil {
+			quoteHash = "error: " + err.Error()
+		}
+		hardware = mk("execution_record_hardware", rec.HardwareAttestationHash, quoteHash, false)
+	}
 	return []HashCheck{
 		mk("execution_record", rec.AerHash, aer, false),
 		mk("execution_record_proof", rec.ProofHash, proof, false),
 		mk("execution_record_binding", b.FinalVFA.AerHash, rec.AerHash, false),
 		mk("execution_record_kernel_ids",
 			strings.Join(b.AER.ExecutionIDs, ","), strings.Join(rec.KernelOutputIDs, ","), false),
-		mk("execution_record_hardware",
-			fmt.Sprintf("hardware_attested=%t", rec.HardwareAttested),
-			fmt.Sprintf("hardware_attested=%t", !noHardware), noHardware),
+		hardware,
 	}
 }
 
