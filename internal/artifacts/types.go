@@ -436,6 +436,14 @@ type AuditBundle struct {
 	// ManifestHash matches the bundle's manifest hash.
 	FormalVerification FormalVerification `json:"formal_verification,omitempty"`
 
+	// ExecutionRecord discloses the preimage of the run's attestation
+	// execution record (aer.v1) and its proof (proof.v1), so a verifier
+	// recomputes both from this bundle alone; see execution_record.go.
+	// Absent (nil) in bundles sealed before v1.9. Its AerHash must equal
+	// FinalVFA.AerHash, which the bundle hash covers, so editing any
+	// disclosed field breaks either the recomputation or that equality.
+	ExecutionRecord *ExecutionRecord `json:"execution_record,omitempty"`
+
 	// BundleHash seals the audit bundle itself (independent of the
 	// manifest hash).
 	BundleHash string `json:"bundle_hash"`

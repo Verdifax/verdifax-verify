@@ -23,7 +23,8 @@
 //
 // LICENSE
 //
-// MIT (see cmd/verdifax-verify/LICENSE). The verifier is intentionally
+// The Clear BSD License (BSD-3-Clause-Clear, see LICENSE) from v0.5.0;
+// releases through v0.4.0 were MIT. The verifier is intentionally
 // open-source so auditors can read the code that adjudicates evidence.
 // The verifier produces no attestations of its own; it only checks that
 // a received bundle is internally consistent.
@@ -51,7 +52,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.4.0"
+const Version = "0.5.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -489,6 +490,13 @@ func verify(b *artifacts.AuditBundle) *Report {
 		})
 	}
 
+	// Execution record (extension section). Bundles sealed before the
+	// record shipped carry none: absence means no record claim is made,
+	// not a failure. When present, every row must match.
+	if b.ExecutionRecord != nil {
+		r.Categories = append(r.Categories, verifyExecutionRecord(b)...)
+	}
+
 	// SEV-SNP hardware attestation, INDEPENDENT re-verification.
 	// When the bundle claims a real "sev_snp" quote, this tool never
 	// takes the orchestrator's word for it: the raw report, VLEK leaf,
@@ -622,6 +630,34 @@ func verifySevSnpQuote(b *artifacts.AuditBundle) HashCheck {
 		return fail(err.Error())
 	}
 	return HashCheck{Name: name, Recorded: "verified", Computed: "verified", Match: true}
+}
+
+// verifyExecutionRecord recomputes the run's attestation execution
+// record (aer.v1) and its proof (proof.v1) from the bundle's disclosed
+// preimage fields, then confirms the section belongs to this bundle:
+// its record hash must equal the one the final VFA seals, and its
+// kernel ids must equal the AER artifact's. The hardware row reports
+// whether the record binds a hardware measurement at all; a record
+// built without one is honest about it, so that row is a scaffold
+// note, never a failure, unless the section's own claim is false.
+func verifyExecutionRecord(b *artifacts.AuditBundle) []HashCheck {
+	rec := *b.ExecutionRecord
+	aer, proof, err := artifacts.RecomputeExecutionRecord(rec)
+	if err != nil {
+		aer = "error: " + err.Error()
+		proof = aer
+	}
+	noHardware := rec.HardwareAttestationHash == artifacts.NoHardwareAttestationHash
+	return []HashCheck{
+		mk("execution_record", rec.AerHash, aer, false),
+		mk("execution_record_proof", rec.ProofHash, proof, false),
+		mk("execution_record_binding", b.FinalVFA.AerHash, rec.AerHash, false),
+		mk("execution_record_kernel_ids",
+			strings.Join(b.AER.ExecutionIDs, ","), strings.Join(rec.KernelOutputIDs, ","), false),
+		mk("execution_record_hardware",
+			fmt.Sprintf("hardware_attested=%t", rec.HardwareAttested),
+			fmt.Sprintf("hardware_attested=%t", !noHardware), noHardware),
+	}
 }
 
 func mk(name, recorded, computed string, scaffold bool) HashCheck {

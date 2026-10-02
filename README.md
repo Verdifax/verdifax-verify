@@ -12,8 +12,13 @@ Verdifax API server.
 
 ## License
 
-MIT, see [`LICENSE`](./LICENSE). The verifier is intentionally
-open-source so auditors can read the code that adjudicates evidence.
+The Clear BSD License (SPDX `BSD-3-Clause-Clear`), see
+[`LICENSE`](./LICENSE), from v0.5.0. Releases through v0.4.0 were
+published under MIT and remain available under it. The Clear BSD
+License is as permissive as MIT for using, copying and modifying the
+code, and states explicitly that it grants no patent rights. The
+verifier is intentionally open-source so auditors can read the code
+that adjudicates evidence.
 The verifier produces no attestations of its own; it only checks that
 a received bundle is internally consistent.
 
