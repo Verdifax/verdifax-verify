@@ -1,7 +1,7 @@
 package artifacts
 
 // The attestation execution record (AER) and its proof, computed with
-// the formulas published in US patent application 19/669,907
+// the formulas of Verdifax's allowed US patent application
 // (specification sections 7 and 8):
 //
 //	aer_hash   = SHA256("aer.v1." || input_hash || transport_hash ||
