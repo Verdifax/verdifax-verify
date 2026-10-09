@@ -30,7 +30,7 @@ a received bundle is internally consistent.
 go install github.com/Verdifax/verdifax-verify@latest
 ```
 
-Requires Go 1.21 or later. The binary lands at `$(go env GOPATH)/bin/verdifax-verify`.
+Requires Go 1.27 or later. The binary lands at `$(go env GOPATH)/bin/verdifax-verify`.
 
 ### Pre-built binaries
 
