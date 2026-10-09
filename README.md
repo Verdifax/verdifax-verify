@@ -1,5 +1,7 @@
 # verdifax-verify
 
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15320/badge)](https://www.bestpractices.dev/projects/15320)
+
 `verdifax-verify` is the standalone, independent verifier for Verdifax
 audit bundles. It reads a bundle JSON file (or stdin) and recomputes
 every canonical hash from the bundle's content, comparing against the
