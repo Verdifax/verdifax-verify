@@ -25,6 +25,19 @@ name: Release
 #
 # The names are literal (no $(uname) shell substitution) because the
 # audit PDF embeds them as static clickable URLs.
+#
+# SLSA Build Level 3 provenance: after the matrix uploads, the
+# hashes job computes a checksum manifest of the four binaries and
+# hands it to the official slsa-github-generator reusable workflow,
+# which builds and signs the provenance in ITS trusted environment,
+# not this workflow's. That isolation is what makes the provenance
+# non-forgeable even by a compromised copy of this file, and it is
+# the requirement that separates Level 3 from Level 2. Verify with:
+#
+#   slsa-verifier verify-artifact <binary> \
+#     --provenance-path verdifax-verify-<tag>.intoto.jsonl \
+#     --source-uri github.com/Verdifax/verdifax-verify \
+#     --source-tag <tag>
 
 on:
   push:
@@ -126,3 +139,45 @@ jobs:
             dist/verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}
             dist/verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
             dist/verdifax-verify-${{ matrix.goos }}-${{ matrix.goarch }}.bundle
+
+  # Collect the four published binaries and emit the base64 checksum
+  # manifest the SLSA generator takes as its subjects.
+  hashes:
+    name: Compute provenance subjects
+    runs-on: ubuntu-latest
+    needs: build
+    outputs:
+      hashes: ${{ steps.subjects.outputs.hashes }}
+    steps:
+      - name: Download release binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ github.ref_name }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'verdifax-verify-*'
+          rm -f ./*.sha256 ./*.bundle
+
+      - name: Emit base64 subjects
+        id: subjects
+        run: |
+          sha256sum verdifax-verify-* > checksums.txt
+          cat checksums.txt
+          echo "hashes=$(base64 -w0 checksums.txt)" >> "$GITHUB_OUTPUT"
+
+  # SLSA Build Level 3 provenance, generated and signed by the SLSA
+  # project's trusted reusable workflow (pinned by release tag, as
+  # the generator requires) and uploaded to the same release.
+  provenance:
+    name: Generate SLSA3 provenance
+    needs: hashes
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: ${{ needs.hashes.outputs.hashes }}
+      provenance-name: verdifax-verify-${{ github.ref_name }}.intoto.jsonl
+      upload-assets: true
+      upload-tag-name: ${{ github.ref_name }}
