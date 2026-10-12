@@ -69,8 +69,11 @@ verification against the pinned ARK root).
 Build output is at `/usr/local/bin/verdifax-verify`. The test suite
 (`go test ./...`) includes known-answer hash tests and a production
 golden bundle at `internal/artifacts/testdata/`, which is the
-easiest seed corpus for mutation: flip any byte of a golden bundle
-and the verdict must be nonzero. Reports are most useful as a
+easiest seed corpus for mutation: alter any sealed field of a
+golden bundle and the verdict must be nonzero (bytes outside the
+sealed fields, such as JSON whitespace, are legitimately inert). A
+native Go fuzz harness for the parse-and-verify path lives in
+`fuzz_test.go` and runs weekly in CI. Reports are most useful as a
 reproducer bundle plus expected-versus-actual exit code; patches
 are welcome in the style of CONTRIBUTING.md (tests required for
 verification-logic changes).

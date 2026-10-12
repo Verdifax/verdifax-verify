@@ -1,0 +1,39 @@
+name: fuzz
+
+# Weekly coverage-guided fuzzing of the verifier's untrusted-input
+# path (see fuzz_test.go for the property under test). The verifier
+# parses attacker-controlled bundles by design, so this runs long
+# where the per-push test job runs fast. A found crasher is written
+# to testdata/fuzz/ and uploaded as a workflow artifact; reproduce
+# locally with `go test -run=FuzzVerify/<name> .` after downloading
+# it into testdata/fuzz/FuzzVerify/.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.2"
+          check-latest: true
+          cache: true
+
+      - name: Fuzz the verify path
+        run: go test -run FuzzVerify -fuzz=FuzzVerify -fuzztime=20m .
+
+      - name: Upload crashers
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashers
+          path: testdata/fuzz/
+          if-no-files-found: ignore
