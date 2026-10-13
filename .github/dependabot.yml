@@ -12,3 +12,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # One combined PR per week instead of one per action; prevents
+    # partial bumps of multi-part actions like codeql-action, whose
+    # init, autobuild, and analyze steps must move together.
+    groups:
+      actions:
+        patterns:
+          - "*"
