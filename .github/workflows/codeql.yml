@@ -1,0 +1,48 @@
+name: CodeQL
+
+# Static analysis (SAST) over the Go codebase with GitHub's CodeQL,
+# on every push and pull request to main plus a weekly sweep so new
+# query packs run against unchanged code too. Complements go vet and
+# govulncheck in the test workflow: vet catches mistakes, govulncheck
+# catches known-vulnerable calls, CodeQL hunts for vulnerability
+# patterns in our own logic.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "30 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.27.2"
+          check-latest: true
+          cache: true
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@9f759ee644a3e7c15c1390abf49868036c00067b # v3
+        with:
+          languages: go
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@9f759ee644a3e7c15c1390abf49868036c00067b # v3
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@9f759ee644a3e7c15c1390abf49868036c00067b # v3

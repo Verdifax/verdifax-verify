@@ -1,0 +1,14 @@
+# Keeps the two dependency surfaces current: the Go module (today
+# stdlib-only, so this guards the future) and the pinned GitHub
+# Actions SHAs, which Dependabot bumps with the matching version
+# comment kept in sync.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
