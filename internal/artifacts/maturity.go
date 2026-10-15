@@ -26,7 +26,7 @@ const (
 	// underlying backend is still scaffolded and not fully cutover
 	// to the production-grade implementation. Examples: ZKSP L7-L10
 	// emit canonical artifacts but the formal verifier is a fixed
-	// "VERIFIED_SOUND_COMPLETE_ZK" status; HRE emits TPM2/SEV-SNP
+	// "SCAFFOLD_R1CS_HASH_FACADE" status; HRE emits TPM2/SEV-SNP
 	// shaped artifacts but the underlying quote isn't real today.
 	MaturityPartial MaturityFlag = "PARTIAL"
 
@@ -64,9 +64,10 @@ type MaturityInputs struct {
 	// Ledger backend signal.
 	LedgerBackend string
 
-	// ZKSP L10 formal-verifier status. Today this is always
-	// "VERIFIED_SOUND_COMPLETE_ZK" (the §0-canonical scaffold
-	// status). Real Lean 4 verification flips it to a different
+	// ZKSP L10 formal-verifier status. "SCAFFOLD_R1CS_HASH_FACADE"
+	// since the 2026-10-15 rename; bundles sealed earlier carry the
+	// legacy "VERIFIED_SOUND_COMPLETE_ZK" forever, and both classify
+	// identically. Real Lean 4 verification flips it to a different
 	// status string under --features real_lean.
 	FormalVerifierStatus string
 
@@ -225,9 +226,10 @@ func classifyZKSP(status string) MaturityFlag {
 	if strings.TrimSpace(status) == "" {
 		return MaturityUnknown
 	}
-	// FormalVerifierStatus is always "VERIFIED_SOUND_COMPLETE_ZK"
-	// today. Until real_zk + real_lean land, the status is a
-	// scaffold seal, artifact shape sealed, proof gen is mock.
+	// FormalVerifierStatus is "SCAFFOLD_R1CS_HASH_FACADE" today
+	// (legacy bundles: "VERIFIED_SOUND_COMPLETE_ZK"). Until real_zk
+	// + real_lean land, the status is a scaffold seal, artifact
+	// shape sealed, proof gen is mock.
 	return MaturityPartial
 }
 

@@ -255,7 +255,7 @@ type LeakageBundle struct {
 type ZkspBinding struct {
 	Kind                 string         `json:"kind"` // "verdifax.artifact.zksp_binding.v1"
 	ProvingSystem        string         `json:"proving_system"`
-	VerificationStatus   string         `json:"verification_status"` // "VERIFIED_SOUND_COMPLETE_ZK" | ...
+	VerificationStatus   string         `json:"verification_status"` // "SCAFFOLD_R1CS_HASH_FACADE" | legacy "VERIFIED_SOUND_COMPLETE_ZK" | ...
 	BindsTo              []string       `json:"binds_to"` // ["envelope_id", "aer_hash", "program_id", "registry_record_hash"]
 	Scaffold             ScaffoldNote   `json:"scaffold"`
 	Hash                 string         `json:"hash"`
