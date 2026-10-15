@@ -44,9 +44,9 @@ const (
 	// SEVVLEKMilanIntermediateSHA256 pins the SEV-VLEK-Milan signing cert.
 	SEVVLEKMilanIntermediateSHA256 = "c5e081f59b7efab1fe2f8b505e159704e72f29cab7ef7cf628a05a42439082f5"
 
-	reportBodyLen  = 0x2A0
-	reportLen      = 1184
-	bindingDomain  = "verdifax.sevsnp.report_data.v1"
+	reportBodyLen = 0x2A0
+	reportLen     = 1184
+	bindingDomain = "verdifax.sevsnp.report_data.v1"
 )
 
 // Result reports what was checked.

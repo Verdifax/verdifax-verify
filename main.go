@@ -21,7 +21,7 @@
 //	1   One or more verification checks failed (or --strict + scaffold).
 //	2   Could not parse the bundle.
 //
-// LICENSE
+// # LICENSE
 //
 // The Clear BSD License (BSD-3-Clause-Clear, see LICENSE) from v0.5.0;
 // releases through v0.4.0 were MIT. The verifier is intentionally
@@ -52,7 +52,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.8.1"
+const Version = "0.9.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -99,6 +99,8 @@ type Report struct {
 	LeafBinding   LeafBindingCheck `json:"leaf_binding"`
 	NrepSignature NrepCheck        `json:"nrep_signature"`
 	RuntimeTiming TimingCheck      `json:"runtime_timing"`
+	PreAnchor     PreAnchorCheck   `json:"pre_anchor"`
+	CrossChecks   []string         `json:"cross_check_failures,omitempty"`
 	AllPassed     bool             `json:"all_passed"`
 	Anchored      bool             `json:"anchored"`
 	VerdictTier   string           `json:"verdict_tier"`
@@ -181,16 +183,16 @@ func exitShouldFail(r *Report, strict, allowUnanchored bool) bool {
 // --show-evidence-summary. Designed to read well as both a 10-line
 // human report and as a tiny JSON blob for CI scripts.
 type EvidenceSummary struct {
-	BundleSchema     string   `json:"bundle_schema"`
-	ManifestHash     string   `json:"manifest_hash"`
-	RunStatus        string   `json:"run_status"`
-	TotalArtifacts   int      `json:"total_artifacts"`
-	RealArtifacts    int      `json:"real_artifacts"`
-	ScaffoldCount    int      `json:"scaffold_count"`
-	ScaffoldList     []string `json:"scaffold_list,omitempty"`
-	RekorAnchored    bool     `json:"rekor_anchored"`
-	RekorLogIndex    int64    `json:"rekor_log_index,omitempty"`
-	RekorVerified    string   `json:"rekor_verified"` // "verified" | "failed" | "not_anchored"
+	BundleSchema   string   `json:"bundle_schema"`
+	ManifestHash   string   `json:"manifest_hash"`
+	RunStatus      string   `json:"run_status"`
+	TotalArtifacts int      `json:"total_artifacts"`
+	RealArtifacts  int      `json:"real_artifacts"`
+	ScaffoldCount  int      `json:"scaffold_count"`
+	ScaffoldList   []string `json:"scaffold_list,omitempty"`
+	RekorAnchored  bool     `json:"rekor_anchored"`
+	RekorLogIndex  int64    `json:"rekor_log_index,omitempty"`
+	RekorVerified  string   `json:"rekor_verified"` // "verified" | "failed" | "not_anchored"
 
 	// LeafBound answers the question rekor_verified does NOT answer:
 	// whether the anchored entry belongs to this run. "bound" | "foreign"
@@ -203,8 +205,8 @@ type EvidenceSummary struct {
 	// in both the public and the private verifier, which meant the
 	// strongest check either tool performs was invisible to any tooling
 	// reading the machine output.
-	LeafBound string `json:"leaf_bound"`
-	PoteHashVersion  string   `json:"pote_hash_version"`
+	LeafBound       string `json:"leaf_bound"`
+	PoteHashVersion string `json:"pote_hash_version"`
 	// FormalVerification summarizes the bundle's formal-verification
 	// binding: "bound" with repo and commit when the record is present
 	// and belongs to this run, or "absent (no claim)" for bundles
@@ -216,10 +218,10 @@ type EvidenceSummary struct {
 	// when this tool independently re-checked the embedded quote,
 	// "sev_snp claimed but FAILED re-verification" when the claim did
 	// not hold, or "policy scaffold (honest disclosure)" otherwise.
-	HardwareAttest string `json:"hardware_attestation"`
-	HashesAllMatch   bool     `json:"hashes_all_match"`
-	StrictModeWanted bool     `json:"strict_mode_wanted"`
-	StrictModeGate   string   `json:"strict_mode_gate"` // "pass" | "fail"
+	HardwareAttest   string `json:"hardware_attestation"`
+	HashesAllMatch   bool   `json:"hashes_all_match"`
+	StrictModeWanted bool   `json:"strict_mode_wanted"`
+	StrictModeGate   string `json:"strict_mode_gate"` // "pass" | "fail"
 }
 
 func buildEvidenceSummary(b *artifacts.AuditBundle, r *Report, strictWanted bool) EvidenceSummary {
@@ -547,6 +549,8 @@ func verify(b *artifacts.AuditBundle) *Report {
 	r.LeafBinding = verifyLeafBinding(b)
 	r.NrepSignature = verifyNrepSignature(b, r.LeafBinding)
 	r.RuntimeTiming = verifyRuntimeTiming(b)
+	r.PreAnchor = verifyPreAnchor(b)
+	r.CrossChecks = verifyCrossGeneration(b)
 
 	// Roll-up.
 	allPassed := r.BundleHashOK
@@ -589,6 +593,14 @@ func verify(b *artifacts.AuditBundle) *Report {
 	// A timing digest that does not match the durations it claims to
 	// seal is tampering or corruption, a failure either way.
 	if r.RuntimeTiming.Performed && !r.RuntimeTiming.Match {
+		allPassed = false
+	}
+	// A table that disagrees with the record, or a cross-generation
+	// consistency failure, is tampering: a failure, never a note.
+	if r.PreAnchor.Performed && !r.PreAnchor.Match {
+		allPassed = false
+	}
+	if len(r.CrossChecks) > 0 {
 		allPassed = false
 	}
 	r.AllPassed = allPassed
@@ -789,6 +801,10 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	printLeafBinding(r.LeafBinding)
 	printNrepCheck(r.NrepSignature)
 	printTimingCheck(r.RuntimeTiming)
+	printPreAnchor(r.PreAnchor)
+	for _, f := range r.CrossChecks {
+		fmt.Printf("  Cross-check:      ✗ FAILED · %s\n", f)
+	}
 	fmt.Println()
 
 	switch {
@@ -800,10 +816,14 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 		fmt.Println("  Production seals are always anchored: treat an unanchored bundle as")
 		fmt.Println("  a dev artifact or a stripped anchor. Exit code fails without")
 		fmt.Println("  --allow-unanchored.")
+	case r.AllPassed && !r.HasScaffold && r.PreAnchor.Performed:
+		fmt.Println("VERDICT: ✓ VERIFIED AND ANCHORED, FULL PRE-ANCHOR COVERAGE, no scaffold values flagged.")
+	case r.AllPassed && r.HasScaffold && r.PreAnchor.Performed:
+		fmt.Println("VERDICT: ✓ VERIFIED AND ANCHORED, FULL PRE-ANCHOR COVERAGE (with scaffold flags)")
 	case r.AllPassed && !r.HasScaffold:
-		fmt.Println("VERDICT: ✓ VERIFIED AND ANCHORED, every hash recomputes correctly, no scaffold values flagged.")
+		fmt.Println("VERDICT: ✓ VERIFIED AND ANCHORED (PARTIAL COVERAGE: pre-v5 record; the anchor binds the run identity, not every field)")
 	case r.AllPassed && r.HasScaffold:
-		fmt.Println("VERDICT: ✓ VERIFIED AND ANCHORED (with scaffold flags)")
+		fmt.Println("VERDICT: ✓ VERIFIED AND ANCHORED (PARTIAL COVERAGE: pre-v5 record; the anchor binds the run identity, not every field; with scaffold flags)")
 		fmt.Println("  Scaffold artifacts (closing paths at docs.verdifax.com/concepts/scaffold-gaps/):")
 		for _, s := range r.ScaffoldList {
 			fmt.Println("    ·", s)

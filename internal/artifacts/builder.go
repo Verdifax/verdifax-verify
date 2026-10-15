@@ -325,23 +325,23 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 		},
 	}
 	hwa.Hash = MustCanonicalHash(struct {
-		Kind                  string   `json:"kind"`
-		AttestationMode       string   `json:"attestation_mode"`
-		EnclaveMeasurement    string   `json:"enclave_measurement"`
-		FirmwareClass         string   `json:"firmware_class"`
-		SecureBootState       string   `json:"secure_boot_state"`
-		ExecutionEnvironment  string   `json:"execution_environment"`
-		PCRSelection          string   `json:"pcr_selection"`
-		Tier4Blockers         []string `json:"tier4_blockers"`
+		Kind                 string   `json:"kind"`
+		AttestationMode      string   `json:"attestation_mode"`
+		EnclaveMeasurement   string   `json:"enclave_measurement"`
+		FirmwareClass        string   `json:"firmware_class"`
+		SecureBootState      string   `json:"secure_boot_state"`
+		ExecutionEnvironment string   `json:"execution_environment"`
+		PCRSelection         string   `json:"pcr_selection"`
+		Tier4Blockers        []string `json:"tier4_blockers"`
 	}{hwa.Kind, hwa.AttestationMode, hwa.EnclaveMeasurement, hwa.FirmwareClass, hwa.SecureBootState, hwa.ExecutionEnvironment, hwa.PCRSelection, hwa.Tier4Blockers})
 	hwa.Seal = seal("hardware_attestation_hash", in.HardwareAttestationHash)
 
 	// 9. Leakage bundle
 	leakage := LeakageBundle{
-		Kind:                  "verdifax.artifact.leakage.v1",
-		ConstantTimeCompliant: true,
+		Kind:                   "verdifax.artifact.leakage.v1",
+		ConstantTimeCompliant:  true,
 		TimingVarianceObserved: false,
-		Mitigations:           []string{"constant_time_execution", "deterministic_kernel_scheduling"},
+		Mitigations:            []string{"constant_time_execution", "deterministic_kernel_scheduling"},
 	}
 	leakage.Hash = MustCanonicalHash(struct {
 		Kind                   string   `json:"kind"`
@@ -657,29 +657,29 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 	// excluded so the bundle hash is purely a function of the canonical
 	// content.
 	bundle.BundleHash = MustCanonicalHash(struct {
-		Kind                        string `json:"kind"`
-		SchemaVersion               string `json:"schema_version"`
-		ManifestHash                string `json:"manifest_hash"`
-		PayloadHash                 string `json:"payload_hash"`
-		EnvelopeHash                string `json:"envelope_hash"`
-		TransportHash               string `json:"transport_hash"`
-		EpaHash                     string `json:"epa_hash"`
-		EfaHash                     string `json:"efa_hash"`
-		AerHash                     string `json:"aer_hash"`
-		TranscriptHash              string `json:"transcript_hash"`
-		HwaHash                     string `json:"hwa_hash"`
-		LeakageHash                 string `json:"leakage_hash"`
-		ZkspHash                    string `json:"zksp_hash"`
-		MigrationHash               string `json:"migration_hash"`
-		ReplayHash                  string `json:"replay_hash"`
-		PoteHash                    string `json:"pote_hash"`
-		VfaHash                     string `json:"vfa_hash"`
-		RequestSubstanceHash        string `json:"request_substance_hash"`
-		AuthorizationChainHash      string `json:"authorization_chain_hash"`
-		RegulatoryScaffoldingHash   string `json:"regulatory_scaffolding_hash"`
-		CausalGraphHash             string `json:"causal_graph_hash"`
-		SystemProvenanceHash        string `json:"system_provenance_hash"`
-		ReproducibilityContextHash  string `json:"reproducibility_context_hash"`
+		Kind                       string `json:"kind"`
+		SchemaVersion              string `json:"schema_version"`
+		ManifestHash               string `json:"manifest_hash"`
+		PayloadHash                string `json:"payload_hash"`
+		EnvelopeHash               string `json:"envelope_hash"`
+		TransportHash              string `json:"transport_hash"`
+		EpaHash                    string `json:"epa_hash"`
+		EfaHash                    string `json:"efa_hash"`
+		AerHash                    string `json:"aer_hash"`
+		TranscriptHash             string `json:"transcript_hash"`
+		HwaHash                    string `json:"hwa_hash"`
+		LeakageHash                string `json:"leakage_hash"`
+		ZkspHash                   string `json:"zksp_hash"`
+		MigrationHash              string `json:"migration_hash"`
+		ReplayHash                 string `json:"replay_hash"`
+		PoteHash                   string `json:"pote_hash"`
+		VfaHash                    string `json:"vfa_hash"`
+		RequestSubstanceHash       string `json:"request_substance_hash"`
+		AuthorizationChainHash     string `json:"authorization_chain_hash"`
+		RegulatoryScaffoldingHash  string `json:"regulatory_scaffolding_hash"`
+		CausalGraphHash            string `json:"causal_graph_hash"`
+		SystemProvenanceHash       string `json:"system_provenance_hash"`
+		ReproducibilityContextHash string `json:"reproducibility_context_hash"`
 	}{
 		bundle.Kind, bundle.SchemaVersion, bundle.ManifestHash,
 		bundle.Payload.Hash, bundle.Envelope.Hash, bundle.Transport.Hash,

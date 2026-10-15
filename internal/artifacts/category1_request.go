@@ -49,24 +49,24 @@ type RequestSubstance struct {
 // PromptRecord captures the model input. Either inline or hashed. The
 // caller chooses based on confidentiality requirements.
 type PromptRecord struct {
-	Hash             string `json:"hash,omitempty"`              // sha256 of the full prompt
-	TemplateID       string `json:"template_id,omitempty"`       // e.g. "approve_transaction_v3"
-	TemplateVersion  string `json:"template_version,omitempty"`  // e.g. "2026.05.01"
-	SystemHash       string `json:"system_hash,omitempty"`       // sha256 of system instructions
-	UserHash         string `json:"user_hash,omitempty"`         // sha256 of user-supplied portion
-	ContentInline    string `json:"content_inline,omitempty"`    // opt-in raw bytes
-	TokenCount       int    `json:"token_count,omitempty"`
-	ContentEncoding  string `json:"content_encoding,omitempty"`  // "utf-8" by default
+	Hash            string `json:"hash,omitempty"`             // sha256 of the full prompt
+	TemplateID      string `json:"template_id,omitempty"`      // e.g. "approve_transaction_v3"
+	TemplateVersion string `json:"template_version,omitempty"` // e.g. "2026.05.01"
+	SystemHash      string `json:"system_hash,omitempty"`      // sha256 of system instructions
+	UserHash        string `json:"user_hash,omitempty"`        // sha256 of user-supplied portion
+	ContentInline   string `json:"content_inline,omitempty"`   // opt-in raw bytes
+	TokenCount      int    `json:"token_count,omitempty"`
+	ContentEncoding string `json:"content_encoding,omitempty"` // "utf-8" by default
 }
 
 // OutputRecord captures the model output before any post-processing.
 type OutputRecord struct {
-	Hash            string `json:"hash,omitempty"`             // sha256 of model output
-	ContentInline   string `json:"content_inline,omitempty"`   // opt-in raw bytes
-	TokenCount      int    `json:"token_count,omitempty"`
-	FinishReason    string `json:"finish_reason,omitempty"`    // "stop", "length", "content_filter", "tool_use"
+	Hash            string   `json:"hash,omitempty"`           // sha256 of model output
+	ContentInline   string   `json:"content_inline,omitempty"` // opt-in raw bytes
+	TokenCount      int      `json:"token_count,omitempty"`
+	FinishReason    string   `json:"finish_reason,omitempty"` // "stop", "length", "content_filter", "tool_use"
 	StopSequences   []string `json:"stop_sequences,omitempty"`
-	StreamingClosed bool   `json:"streaming_closed,omitempty"` // true if streaming completed cleanly
+	StreamingClosed bool     `json:"streaming_closed,omitempty"` // true if streaming completed cleanly
 }
 
 // PostProcessingStep records one transformation applied to the model
@@ -75,11 +75,11 @@ type OutputRecord struct {
 // reconstructable.
 type PostProcessingStep struct {
 	StepIndex   int    `json:"step_index"`
-	StepType    string `json:"step_type"`              // "filter" | "rephrase" | "augment" | "redact" | "block" | "format"
+	StepType    string `json:"step_type"` // "filter" | "rephrase" | "augment" | "redact" | "block" | "format"
 	Description string `json:"description,omitempty"`
-	InputHash   string `json:"input_hash"`             // hash going in
-	OutputHash  string `json:"output_hash"`            // hash coming out
-	ToolID      string `json:"tool_id,omitempty"`      // e.g. "regex_filter_v1"
+	InputHash   string `json:"input_hash"`        // hash going in
+	OutputHash  string `json:"output_hash"`       // hash coming out
+	ToolID      string `json:"tool_id,omitempty"` // e.g. "regex_filter_v1"
 }
 
 // CostBreakdown, caller-attested cost, unit-of-account in USD. The
@@ -96,27 +96,27 @@ type CostBreakdown struct {
 // LatencyBreakdown, per-stage timing in milliseconds, observed by the
 // orchestrator. Used for SLA evidence and anomaly detection.
 type LatencyBreakdown struct {
-	TotalMs       int64            `json:"total_ms"`
-	PerStageMs    []StageLatency   `json:"per_stage_ms,omitempty"`
-	NetworkInMs   int64            `json:"network_in_ms,omitempty"`
-	NetworkOutMs  int64            `json:"network_out_ms,omitempty"`
-	ModelLatencyMs int64           `json:"model_latency_ms,omitempty"` // caller-attested (model call time)
+	TotalMs        int64          `json:"total_ms"`
+	PerStageMs     []StageLatency `json:"per_stage_ms,omitempty"`
+	NetworkInMs    int64          `json:"network_in_ms,omitempty"`
+	NetworkOutMs   int64          `json:"network_out_ms,omitempty"`
+	ModelLatencyMs int64          `json:"model_latency_ms,omitempty"` // caller-attested (model call time)
 }
 
 // StageLatency is one row of the per-stage timing record.
 type StageLatency struct {
-	Stage       string `json:"stage"` // "DOG", "DTL", "DKEC", ...
-	DurationMs  int64  `json:"duration_ms"`
+	Stage      string `json:"stage"` // "DOG", "DTL", "DKEC", ...
+	DurationMs int64  `json:"duration_ms"`
 }
 
 // RequestOrigin describes where the request came from. Hashed by default
 // for privacy; opt-in inline available.
 type RequestOrigin struct {
-	SourceIPHash          string `json:"source_ip_hash,omitempty"`
-	UserAgentHash         string `json:"user_agent_hash,omitempty"`
-	DeviceFingerprintHash string `json:"device_fingerprint_hash,omitempty"`
-	GeoCountry            string `json:"geo_country,omitempty"`            // e.g. "US"
-	GeoRegion             string `json:"geo_region,omitempty"`             // e.g. "VA"
+	SourceIPHash          string               `json:"source_ip_hash,omitempty"`
+	UserAgentHash         string               `json:"user_agent_hash,omitempty"`
+	DeviceFingerprintHash string               `json:"device_fingerprint_hash,omitempty"`
+	GeoCountry            string               `json:"geo_country,omitempty"`   // e.g. "US"
+	GeoRegion             string               `json:"geo_region,omitempty"`    // e.g. "VA"
 	OriginInline          *RequestOriginInline `json:"origin_inline,omitempty"` // opt-in unredacted
 }
 
@@ -124,20 +124,20 @@ type RequestOrigin struct {
 // who need raw values for forensic investigation can opt in by setting
 // VERDIFAX_AUDIT_INCLUDE_RAW_ORIGIN=true; default is hashed-only.
 type RequestOriginInline struct {
-	SourceIP   string `json:"source_ip,omitempty"`
-	UserAgent  string `json:"user_agent,omitempty"`
+	SourceIP  string `json:"source_ip,omitempty"`
+	UserAgent string `json:"user_agent,omitempty"`
 }
 
 // AuthenticationRecord describes how the caller authenticated. Note that
 // API keys themselves are never recorded (only their ID); raw secrets do
 // not appear in audit bundles under any circumstance.
 type AuthenticationRecord struct {
-	Method            string `json:"method"`                       // "api_key" | "oauth" | "sso" | "passwordless" | "anonymous"
-	Provider          string `json:"provider,omitempty"`           // e.g. "github", "okta", "azure_ad", "google"
-	APIKeyID          int64  `json:"api_key_id,omitempty"`         // numeric id; raw key never recorded
-	APIKeyName        string `json:"api_key_name,omitempty"`       // human-readable key name (caller-supplied label)
+	Method            string `json:"method"`                 // "api_key" | "oauth" | "sso" | "passwordless" | "anonymous"
+	Provider          string `json:"provider,omitempty"`     // e.g. "github", "okta", "azure_ad", "google"
+	APIKeyID          int64  `json:"api_key_id,omitempty"`   // numeric id; raw key never recorded
+	APIKeyName        string `json:"api_key_name,omitempty"` // human-readable key name (caller-supplied label)
 	KeyLastRotatedAt  string `json:"key_last_rotated_at,omitempty"`
 	SessionAgeSeconds int64  `json:"session_age_seconds,omitempty"`
-	MFASatisfied      *bool  `json:"mfa_satisfied,omitempty"`      // pointer so absent is distinct from false
-	MFAMethod         string `json:"mfa_method,omitempty"`         // "totp" | "u2f" | "webauthn" | "sms" | "push"
+	MFASatisfied      *bool  `json:"mfa_satisfied,omitempty"` // pointer so absent is distinct from false
+	MFAMethod         string `json:"mfa_method,omitempty"`    // "totp" | "u2f" | "webauthn" | "sms" | "push"
 }

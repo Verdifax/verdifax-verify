@@ -65,6 +65,7 @@ const (
 	leafDomainV1 = "verdifax.ledger.input.v1"
 	leafDomainV2 = "verdifax.ledger.input.v2"
 	leafDomainV3 = "verdifax.ledger.input.v3"
+	leafDomainV5 = "verdifax.ledger.input.v5"
 )
 
 // LeafBindingCheck records whether the anchored leaf is this run's.
@@ -166,6 +167,16 @@ func verifyLeafBinding(b *artifacts.AuditBundle) LeafBindingCheck {
 		form     string
 	)
 	switch {
+	case len(b.PreAnchor) > 0 || b.PreAnchorDigest != "":
+		// v5: the leaf embeds the digest of the pre-anchor table,
+		// RECOMPUTED here from the table itself; preanchor.go
+		// separately enforces that the table matches the record's
+		// contents, completing the chain from every covered value
+		// to the public-log entry.
+		form = leafDomainV5
+		digest := artifacts.ComputePreAnchorDigestFromTable(b.PreAnchor)
+		preimage = joinLeafParts(leafDomainV5, envelopeID, aerHash, bindingHash,
+			strconv.FormatInt(int64(b.RekorAnchor.InputNonce), 10), digest)
 	case b.NrepSectionHash != "" || b.ScaffoldFlagsHash != "":
 		form = leafDomainV3
 		nrepRecomputed := artifacts.ComputeNrepSectionHash(
@@ -176,11 +187,11 @@ func verifyLeafBinding(b *artifacts.AuditBundle) LeafBindingCheck {
 			b.ZkspBinding.Scaffold.IsScaffold,
 			b.LeakageBundle.Scaffold.IsScaffold)
 		preimage = joinLeafParts(leafDomainV3, envelopeID, aerHash, bindingHash,
-			strconv.FormatInt(a.InputNonce, 10), nrepRecomputed, scaffoldRecomputed)
+			strconv.FormatInt(int64(a.InputNonce), 10), nrepRecomputed, scaffoldRecomputed)
 	case a.InputNonce != 0:
 		form = leafDomainV2
 		preimage = joinLeafParts(leafDomainV2, envelopeID, aerHash, bindingHash,
-			strconv.FormatInt(a.InputNonce, 10))
+			strconv.FormatInt(int64(a.InputNonce), 10))
 	default:
 		form = leafDomainV1
 		preimage = joinLeafParts(leafDomainV1, envelopeID, aerHash, bindingHash)

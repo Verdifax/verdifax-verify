@@ -69,20 +69,20 @@ type CausalGraph struct {
 
 // EntityRef, one entity affected by this decision.
 type EntityRef struct {
-	Kind        string `json:"kind"` // "customer" | "transaction" | "claim" | "patient" | "case" | "account" | "policy"
-	IDHash      string `json:"id_hash"`         // sha256 of the entity's natural ID
-	IDInline    string `json:"id_inline,omitempty"` // opt-in raw ID; off by default
-	Description string `json:"description,omitempty"`
+	Kind                string `json:"kind"`                // "customer" | "transaction" | "claim" | "patient" | "case" | "account" | "policy"
+	IDHash              string `json:"id_hash"`             // sha256 of the entity's natural ID
+	IDInline            string `json:"id_inline,omitempty"` // opt-in raw ID; off by default
+	Description         string `json:"description,omitempty"`
 	JurisdictionCountry string `json:"jurisdiction_country,omitempty"` // for cross-border decisions
 }
 
 // EffectEntry, one downstream action triggered by this decision.
 type EffectEntry struct {
-	EffectKind     string `json:"effect_kind"` // "webhook" | "ledger_entry" | "payment_instruction" | "message" | "ticket" | "case_creation" | "data_write"
-	Target         string `json:"target,omitempty"`         // e.g. "https://bank.example/webhook" or "ledger:txn_3334"
-	Status         string `json:"status"`                  // "queued" | "sent" | "confirmed" | "failed" | "retrying"
-	IssuedAt       string `json:"issued_at,omitempty"`     // RFC3339
+	EffectKind     string `json:"effect_kind"`         // "webhook" | "ledger_entry" | "payment_instruction" | "message" | "ticket" | "case_creation" | "data_write"
+	Target         string `json:"target,omitempty"`    // e.g. "https://bank.example/webhook" or "ledger:txn_3334"
+	Status         string `json:"status"`              // "queued" | "sent" | "confirmed" | "failed" | "retrying"
+	IssuedAt       string `json:"issued_at,omitempty"` // RFC3339
 	AcknowledgedAt string `json:"acknowledged_at,omitempty"`
-	AckHash        string `json:"ack_hash,omitempty"`      // hash of the acknowledgement / receipt
-	ErrorReason    string `json:"error_reason,omitempty"`  // when status == "failed"
+	AckHash        string `json:"ack_hash,omitempty"`     // hash of the acknowledgement / receipt
+	ErrorReason    string `json:"error_reason,omitempty"` // when status == "failed"
 }

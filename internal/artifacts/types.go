@@ -1,5 +1,11 @@
 package artifacts
 
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
 // AttestedContext is the caller-supplied "what was happening when this
 // run was triggered" block. Verdifax does not call an AI or evaluate a
 // business policy, it produces a sealed manifest of what the caller
@@ -15,17 +21,17 @@ type AttestedContext struct {
 	Attested bool `json:"attested"`
 
 	// Actor, who initiated the action.
-	ActorID            string `json:"actor_id,omitempty"`
-	ActorRole          string `json:"actor_role,omitempty"`
+	ActorID             string `json:"actor_id,omitempty"`
+	ActorRole           string `json:"actor_role,omitempty"`
 	AuthorizationPolicy string `json:"authorization_policy,omitempty"`
-	ActorSignature     string `json:"actor_signature,omitempty"` // base64
+	ActorSignature      string `json:"actor_signature,omitempty"` // base64
 
 	// Model, which AI (if any) the caller invoked before /execute.
-	ModelProvider   string  `json:"model_provider,omitempty"`
-	ModelName       string  `json:"model_name,omitempty"`
-	ModelVersion    string  `json:"model_version,omitempty"`
+	ModelProvider    string   `json:"model_provider,omitempty"`
+	ModelName        string   `json:"model_name,omitempty"`
+	ModelVersion     string   `json:"model_version,omitempty"`
 	ModelTemperature *float64 `json:"model_temperature,omitempty"`
-	PromptHash      string  `json:"prompt_hash,omitempty"` // sha256 of the prompt
+	PromptHash       string   `json:"prompt_hash,omitempty"` // sha256 of the prompt
 
 	// Decision, the caller's interpretation of the result.
 	DecisionKind   string `json:"decision_kind,omitempty"`   // e.g. "approve", "deny", "advise"
@@ -42,14 +48,14 @@ type AttestedContext struct {
 // about its origin; for confidentiality, the raw bytes are NOT stored
 // in the audit bundle by default (the caller can opt in).
 type Payload struct {
-	Kind            string `json:"kind"`             // "verdifax.artifact.payload.v1"
-	PayloadID       string `json:"payload_id"`       // matches envelope payload field
-	ContentHash     string `json:"content_hash"`     // sha256 of raw payload bytes
-	ContentLength   int    `json:"content_length"`   // bytes
-	ContentInline   string `json:"content_inline,omitempty"` // base64; only when caller opts in
-	OriginType      string `json:"origin_type"`      // "api" | "user" | "system"
-	SchemaVersion   string `json:"schema_version"`   // "v1"
-	Hash            string `json:"hash"`             // canonical hash of this object (filled by Build)
+	Kind          string `json:"kind"`                     // "verdifax.artifact.payload.v1"
+	PayloadID     string `json:"payload_id"`               // matches envelope payload field
+	ContentHash   string `json:"content_hash"`             // sha256 of raw payload bytes
+	ContentLength int    `json:"content_length"`           // bytes
+	ContentInline string `json:"content_inline,omitempty"` // base64; only when caller opts in
+	OriginType    string `json:"origin_type"`              // "api" | "user" | "system"
+	SchemaVersion string `json:"schema_version"`           // "v1"
+	Hash          string `json:"hash"`                     // canonical hash of this object (filled by Build)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -60,14 +66,14 @@ type Payload struct {
 // It binds the payload to the program and route, and is the first
 // link in the deterministic execution chain.
 type Envelope struct {
-	Kind               string `json:"kind"` // "verdifax.artifact.envelope.v1"
-	EnvelopeID         string `json:"envelope_id"`
-	PayloadHash        string `json:"payload_hash"`
-	ProgramID          string `json:"program_id"`
-	RouteID            string `json:"route_id"`
-	RegistryRecordHash string `json:"registry_record_hash"`
-	Timestamp          string `json:"timestamp"`     // RFC3339
-	Hash               string `json:"hash"`
+	Kind               string        `json:"kind"` // "verdifax.artifact.envelope.v1"
+	EnvelopeID         string        `json:"envelope_id"`
+	PayloadHash        string        `json:"payload_hash"`
+	ProgramID          string        `json:"program_id"`
+	RouteID            string        `json:"route_id"`
+	RegistryRecordHash string        `json:"registry_record_hash"`
+	Timestamp          string        `json:"timestamp"` // RFC3339
+	Hash               string        `json:"hash"`
 	Seal               SealReference `json:"seal"`
 }
 
@@ -79,12 +85,12 @@ type Envelope struct {
 // binds the envelope to a specific slot-scoped sequence position so
 // the execution order is reproducible.
 type Transport struct {
-	Kind         string `json:"kind"` // "verdifax.artifact.transport.v1"
-	EnvelopeID   string `json:"envelope_id"`
-	EnvelopeHash string `json:"envelope_hash"`
-	SequenceID   string `json:"sequence_id"`
-	Route        []string `json:"route"` // canonical hop list
-	Hash         string `json:"hash"`
+	Kind         string        `json:"kind"` // "verdifax.artifact.transport.v1"
+	EnvelopeID   string        `json:"envelope_id"`
+	EnvelopeHash string        `json:"envelope_hash"`
+	SequenceID   string        `json:"sequence_id"`
+	Route        []string      `json:"route"` // canonical hop list
+	Hash         string        `json:"hash"`
 	Seal         SealReference `json:"seal"`
 }
 
@@ -106,9 +112,9 @@ type EPA struct {
 }
 
 type EnvSnapshot struct {
-	Time   string `json:"time"`   // RFC3339
-	Region string `json:"region"` // e.g. "fly:iad", "self-host"
-	OS     string `json:"os"`     // "linux", "darwin"
+	Time      string `json:"time"`   // RFC3339
+	Region    string `json:"region"` // e.g. "fly:iad", "self-host"
+	OS        string `json:"os"`     // "linux", "darwin"
 	GoVersion string `json:"go_version"`
 }
 
@@ -119,12 +125,12 @@ type EnvSnapshot struct {
 // EFA describes the per-kernel execution chain (DSE, TOK, DSC, NREP,
 // AIVP, DCAE, six steps in canonical order).
 type EFA struct {
-	Kind            string         `json:"kind"` // "verdifax.artifact.efa.v1"
-	Steps           []ExecStep     `json:"steps"`
-	Deterministic   bool           `json:"deterministic"`
-	FailClosed      bool           `json:"fail_closed"`
-	Hash            string         `json:"hash"`
-	Seal            SealReference  `json:"seal"`
+	Kind          string        `json:"kind"` // "verdifax.artifact.efa.v1"
+	Steps         []ExecStep    `json:"steps"`
+	Deterministic bool          `json:"deterministic"`
+	FailClosed    bool          `json:"fail_closed"`
+	Hash          string        `json:"hash"`
+	Seal          SealReference `json:"seal"`
 }
 
 type ExecStep struct {
@@ -140,21 +146,21 @@ type ExecStep struct {
 
 // AER describes the post-execution result record.
 type AER struct {
-	Kind          string         `json:"kind"` // "verdifax.artifact.aer.v1"
-	EnvelopeID    string         `json:"envelope_id"`
-	SequenceID    string         `json:"sequence_id"`
-	ExecutionIDs  []string       `json:"execution_ids"` // 6 entries, canonical order
-	FinalState    string         `json:"final_state"`   // "committed" | "halted"
-	Decision      DecisionRecord `json:"decision"`
-	Hash          string         `json:"hash"`
-	Seal          SealReference  `json:"seal"`
+	Kind         string         `json:"kind"` // "verdifax.artifact.aer.v1"
+	EnvelopeID   string         `json:"envelope_id"`
+	SequenceID   string         `json:"sequence_id"`
+	ExecutionIDs []string       `json:"execution_ids"` // 6 entries, canonical order
+	FinalState   string         `json:"final_state"`   // "committed" | "halted"
+	Decision     DecisionRecord `json:"decision"`
+	Hash         string         `json:"hash"`
+	Seal         SealReference  `json:"seal"`
 }
 
 type DecisionRecord struct {
-	Source       string `json:"source"`       // "caller_attested" | "self_attested_deterministic"
-	Kind         string `json:"kind,omitempty"`
-	Result       string `json:"result,omitempty"`
-	Note         string `json:"note,omitempty"`
+	Source string `json:"source"` // "caller_attested" | "self_attested_deterministic"
+	Kind   string `json:"kind,omitempty"`
+	Result string `json:"result,omitempty"`
+	Note   string `json:"note,omitempty"`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -166,12 +172,12 @@ type DecisionRecord struct {
 // not stored in the audit bundle (they can be many KB); only the hash,
 // shape metadata, and a short scaffold note for the Phase 6 upgrade.
 type Transcript struct {
-	Kind           string         `json:"kind"` // "verdifax.artifact.transcript.v1"
-	ProofHashInput string         `json:"proof_hash_input"`  // the hash that fed L7
-	TranscriptHash string         `json:"transcript_hash"`   // computed by ZKSP
-	Scaffold       ScaffoldNote   `json:"scaffold"`
-	Hash           string         `json:"hash"`
-	Seal           SealReference  `json:"seal"`
+	Kind           string        `json:"kind"`             // "verdifax.artifact.transcript.v1"
+	ProofHashInput string        `json:"proof_hash_input"` // the hash that fed L7
+	TranscriptHash string        `json:"transcript_hash"`  // computed by ZKSP
+	Scaffold       ScaffoldNote  `json:"scaffold"`
+	Hash           string        `json:"hash"`
+	Seal           SealReference `json:"seal"`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -183,31 +189,31 @@ type Transcript struct {
 // PHASE5_HARDWARE_REQUIREMENTS.md; the real TPM2 / SEV-SNP quote lands
 // in Phase 7. The audit bundle is honest about this.
 type HardwareAttestation struct {
-	Kind                  string         `json:"kind"` // "verdifax.artifact.hw_attestation.v1"
-	AttestationMode       string         `json:"attestation_mode"` // "policy_scaffold" | "tpm2" | "sev_snp"
-	EnclaveMeasurement    string         `json:"enclave_measurement"`
-	FirmwareClass         string         `json:"firmware_class"`
-	SecureBootState       string         `json:"secure_boot_state"`
-	ExecutionEnvironment  string         `json:"execution_environment"`
-	PCRSelection          string         `json:"pcr_selection"`
-	Tier4Blockers         []string       `json:"tier4_blockers"`
+	Kind                 string   `json:"kind"`             // "verdifax.artifact.hw_attestation.v1"
+	AttestationMode      string   `json:"attestation_mode"` // "policy_scaffold" | "tpm2" | "sev_snp"
+	EnclaveMeasurement   string   `json:"enclave_measurement"`
+	FirmwareClass        string   `json:"firmware_class"`
+	SecureBootState      string   `json:"secure_boot_state"`
+	ExecutionEnvironment string   `json:"execution_environment"`
+	PCRSelection         string   `json:"pcr_selection"`
+	Tier4Blockers        []string `json:"tier4_blockers"`
 
 	// SEV-SNP evidence, present only in "sev_snp" mode (shipped
 	// 2026-07-17). These fields are NOT part of the artifact's hash
 	// preimage; their integrity is far stronger: the quote is signed
 	// by AMD silicon and this verifier re-checks that signature, the
 	// pinned chain, and the run binding from these raw bytes.
-	Platform         string                `json:"platform,omitempty"`
-	QuoteB64         string                `json:"quote_b64,omitempty"`
-	VLEKCertPEM      string                `json:"vlek_cert_pem,omitempty"`
-	CertChainPEM     string                `json:"cert_chain_pem,omitempty"`
-	ReportDataHex    string                `json:"report_data_hex,omitempty"`
-	ReportDataRecipe string                `json:"report_data_recipe,omitempty"`
-	Verification     *SevSnpVerifyClaim    `json:"verification,omitempty"`
+	Platform         string             `json:"platform,omitempty"`
+	QuoteB64         string             `json:"quote_b64,omitempty"`
+	VLEKCertPEM      string             `json:"vlek_cert_pem,omitempty"`
+	CertChainPEM     string             `json:"cert_chain_pem,omitempty"`
+	ReportDataHex    string             `json:"report_data_hex,omitempty"`
+	ReportDataRecipe string             `json:"report_data_recipe,omitempty"`
+	Verification     *SevSnpVerifyClaim `json:"verification,omitempty"`
 
-	Scaffold              ScaffoldNote   `json:"scaffold"`
-	Hash                  string         `json:"hash"`
-	Seal                  SealReference  `json:"seal"`
+	Scaffold ScaffoldNote  `json:"scaffold"`
+	Hash     string        `json:"hash"`
+	Seal     SealReference `json:"seal"`
 }
 
 // SevSnpVerifyClaim mirrors the orchestrator's recorded verification
@@ -234,18 +240,18 @@ type SevSnpVerifyClaim struct {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type LeakageBundle struct {
-	Kind                   string         `json:"kind"` // "verdifax.artifact.leakage.v1"
-	ConstantTimeCompliant  bool           `json:"constant_time_compliant"`
-	TimingVarianceObserved bool           `json:"timing_variance_observed"`
-	Mitigations            []string       `json:"mitigations"`
+	Kind                   string   `json:"kind"` // "verdifax.artifact.leakage.v1"
+	ConstantTimeCompliant  bool     `json:"constant_time_compliant"`
+	TimingVarianceObserved bool     `json:"timing_variance_observed"`
+	Mitigations            []string `json:"mitigations"`
 	// Scaffold flags the two booleans as design declarations of the
 	// deterministic scheduler rather than per-run measurements.
 	// Present in bundles sealed from orchestrator b604027 on; the
 	// zero value in older bundles simply renders no flag. Outside
 	// the section's canonical hash, like ZKSP's note.
-	Scaffold               ScaffoldNote   `json:"scaffold"`
-	Hash                   string         `json:"hash"`
-	Seal                   SealReference  `json:"seal"`
+	Scaffold ScaffoldNote  `json:"scaffold"`
+	Hash     string        `json:"hash"`
+	Seal     SealReference `json:"seal"`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -253,13 +259,13 @@ type LeakageBundle struct {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type ZkspBinding struct {
-	Kind                 string         `json:"kind"` // "verdifax.artifact.zksp_binding.v1"
-	ProvingSystem        string         `json:"proving_system"`
-	VerificationStatus   string         `json:"verification_status"` // "SCAFFOLD_R1CS_HASH_FACADE" | legacy "VERIFIED_SOUND_COMPLETE_ZK" | ...
-	BindsTo              []string       `json:"binds_to"` // ["envelope_id", "aer_hash", "program_id", "registry_record_hash"]
-	Scaffold             ScaffoldNote   `json:"scaffold"`
-	Hash                 string         `json:"hash"`
-	Seal                 SealReference  `json:"seal"`
+	Kind               string        `json:"kind"` // "verdifax.artifact.zksp_binding.v1"
+	ProvingSystem      string        `json:"proving_system"`
+	VerificationStatus string        `json:"verification_status"` // "SCAFFOLD_R1CS_HASH_FACADE" | legacy "VERIFIED_SOUND_COMPLETE_ZK" | ...
+	BindsTo            []string      `json:"binds_to"`            // ["envelope_id", "aer_hash", "program_id", "registry_record_hash"]
+	Scaffold           ScaffoldNote  `json:"scaffold"`
+	Hash               string        `json:"hash"`
+	Seal               SealReference `json:"seal"`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -267,12 +273,12 @@ type ZkspBinding struct {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type MigrationToken struct {
-	Kind        string         `json:"kind"` // "verdifax.artifact.migration_token.v1"
-	FromVersion string         `json:"from_version"`
-	ToVersion   string         `json:"to_version"`
-	StateHash   string         `json:"state_hash"`
-	Hash        string         `json:"hash"`
-	Seal        SealReference  `json:"seal"`
+	Kind        string        `json:"kind"` // "verdifax.artifact.migration_token.v1"
+	FromVersion string        `json:"from_version"`
+	ToVersion   string        `json:"to_version"`
+	StateHash   string        `json:"state_hash"`
+	Hash        string        `json:"hash"`
+	Seal        SealReference `json:"seal"`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -280,11 +286,11 @@ type MigrationToken struct {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type ReplayFingerprint struct {
-	Kind                string         `json:"kind"` // "verdifax.artifact.replay.v1"
-	DeterministicInputs []string       `json:"deterministic_inputs"`
-	ExpectedOutputHash  string         `json:"expected_output_hash"`
-	Hash                string         `json:"hash"`
-	Seal                SealReference  `json:"seal"`
+	Kind                string        `json:"kind"` // "verdifax.artifact.replay.v1"
+	DeterministicInputs []string      `json:"deterministic_inputs"`
+	ExpectedOutputHash  string        `json:"expected_output_hash"`
+	Hash                string        `json:"hash"`
+	Seal                SealReference `json:"seal"`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -310,10 +316,10 @@ type ReplayFingerprint struct {
 // that binds the temporal claim directly into pote.Hash is tracked as
 // follow-up work.
 type PoteProof struct {
-	Kind                string         `json:"kind"` // "verdifax.artifact.pote.v1"
-	ProofType           string         `json:"proof_type"`
-	ExecutionTraceHash  string         `json:"execution_trace_hash"`
-	LogEntryID          string         `json:"log_entry_id"` // rekor entry
+	Kind               string `json:"kind"` // "verdifax.artifact.pote.v1"
+	ProofType          string `json:"proof_type"`
+	ExecutionTraceHash string `json:"execution_trace_hash"`
+	LogEntryID         string `json:"log_entry_id"` // rekor entry
 
 	// Rekor temporal evidence (populated when LedgerBackend = "rekor",
 	// omitted entirely otherwise so mock-mode JSON stays clean).
@@ -323,9 +329,9 @@ type PoteProof struct {
 	SignedEntryTimestamp string `json:"signed_entry_timestamp,omitempty"` // Rekor's ECDSA signature over the timestamp + entry
 	LedgerCheckpoint     string `json:"ledger_checkpoint,omitempty"`      // signed tree-head at sealing
 
-	Scaffold            ScaffoldNote   `json:"scaffold"`
-	Hash                string         `json:"hash"`
-	Seal                SealReference  `json:"seal"`
+	Scaffold ScaffoldNote  `json:"scaffold"`
+	Hash     string        `json:"hash"`
+	Seal     SealReference `json:"seal"`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -333,22 +339,22 @@ type PoteProof struct {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type FinalVFA struct {
-	Kind                string         `json:"kind"` // "verdifax.artifact.final_vfa.v1"
-	EnvelopeHash        string         `json:"envelope_hash"`
-	TransportHash       string         `json:"transport_hash"`
-	EpaHash             string         `json:"epa_hash"`
-	EfaHash             string         `json:"efa_hash"`
-	AerHash             string         `json:"aer_hash"`
-	TranscriptHash      string         `json:"transcript_hash"`
-	HardwareAttestHash  string         `json:"hardware_attestation_hash"`
-	LeakageBundleHash   string         `json:"leakage_bundle_hash"`
-	ZkspBindingHash     string         `json:"zksp_binding_hash"`
-	MigrationTokenHash  string         `json:"migration_token_hash"`
-	ReplayFingerprint   string         `json:"replay_fingerprint"`
-	PoteProofHash       string         `json:"pote_proof_hash"`
-	IndependentVerified bool           `json:"independent_verified"`
-	Hash                string         `json:"hash"`
-	Seal                SealReference  `json:"seal"`
+	Kind                string        `json:"kind"` // "verdifax.artifact.final_vfa.v1"
+	EnvelopeHash        string        `json:"envelope_hash"`
+	TransportHash       string        `json:"transport_hash"`
+	EpaHash             string        `json:"epa_hash"`
+	EfaHash             string        `json:"efa_hash"`
+	AerHash             string        `json:"aer_hash"`
+	TranscriptHash      string        `json:"transcript_hash"`
+	HardwareAttestHash  string        `json:"hardware_attestation_hash"`
+	LeakageBundleHash   string        `json:"leakage_bundle_hash"`
+	ZkspBindingHash     string        `json:"zksp_binding_hash"`
+	MigrationTokenHash  string        `json:"migration_token_hash"`
+	ReplayFingerprint   string        `json:"replay_fingerprint"`
+	PoteProofHash       string        `json:"pote_proof_hash"`
+	IndependentVerified bool          `json:"independent_verified"`
+	Hash                string        `json:"hash"`
+	Seal                SealReference `json:"seal"`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -384,7 +390,7 @@ type AuditBundle struct {
 	FinalVFA            FinalVFA            `json:"final_vfa"`
 
 	// Five extension categories that turn the bundle into a complete
-	// auditor-ready record. Each is optional at the protocol level , 
+	// auditor-ready record. Each is optional at the protocol level ,
 	// callers that don't supply one get an honest "not declared" record
 	// rather than fabricated data. SystemProvenance is server-detected.
 	RequestSubstance       RequestSubstance       `json:"request_substance"`
@@ -425,7 +431,7 @@ type AuditBundle struct {
 	// authenticated runs this section holds the API key holder's
 	// stable actor identity, base64-encoded Ed25519 public key, and
 	// signature over the canonical preimage (see internal/nrep). For
-	// anonymous (open-mode) runs all three fields are empty , 
+	// anonymous (open-mode) runs all three fields are empty ,
 	// "skipped" as a legitimate state, mirroring the manifest. The
 	// signature itself is verifiable by anyone holding the public
 	// key plus the run's envelope_id and aer_hash; no Verdifax
@@ -451,10 +457,19 @@ type AuditBundle struct {
 	// per-run timings in the leaf would break replay determinism.
 	// All empty in bundles sealed before leaf v3, and their absence
 	// is reported, never silently accepted.
-	NrepSectionHash   string         `json:"nrep_section_hash,omitempty"`
-	ScaffoldFlagsHash string         `json:"scaffold_flags_hash,omitempty"`
-	RuntimeTimingHash string         `json:"runtime_timing_hash,omitempty"`
-	RuntimeTiming     []StageTiming  `json:"runtime_timing,omitempty"`
+	NrepSectionHash   string        `json:"nrep_section_hash,omitempty"`
+	ScaffoldFlagsHash string        `json:"scaffold_flags_hash,omitempty"`
+	RuntimeTimingHash string        `json:"runtime_timing_hash,omitempty"`
+	RuntimeTiming     []StageTiming `json:"runtime_timing,omitempty"`
+
+	// PreAnchor is the anchored table (leaf v5): every deterministic
+	// pre-anchor value by frozen name. Its digest is bound inside the
+	// version-5 ledger leaf, and every entry is cross-checked against
+	// the section that displays it. Empty in pre-v5 bundles, which
+	// verifiers report as partial anchor coverage.
+	PreAnchor       []PreAnchorEntry `json:"pre_anchor,omitempty"`
+	PreAnchorDigest string           `json:"pre_anchor_digest,omitempty"`
+	AttestedDigest  string           `json:"attested_digest,omitempty"`
 
 	// ExecutionRecord discloses the preimage of the run's attestation
 	// execution record (aer.v1) and its proof (proof.v1), so a verifier
@@ -538,7 +553,7 @@ type NrepSection struct {
 //     without storing the raw text.
 //   - AdapterID names which model adapter produced the decision
 //     ("mock-claude", "live-claude-api", or future identifiers) so
-//     verifiers can scope their trust evaluation appropriately , 
+//     verifiers can scope their trust evaluation appropriately ,
 //     mock-mode runs should not be presented to third parties as
 //     evidence of real-model governance.
 type AivpT4Section struct {
@@ -615,7 +630,12 @@ type RekorAnchor struct {
 	// The verifier selects the form from this value rather than assuming
 	// v2, because assuming v2 would report every legacy bundle as forged,
 	// which is a worse error than the one being corrected.
-	InputNonce int64 `json:"input_nonce,omitempty"`
+	// Serialized as a STRING by producers from 2026-10-15 (round
+	// five): the nanosecond nonce exceeds JavaScript's exact-integer
+	// range, so JSON.parse and jq silently rounded it and then this
+	// verifier reported tampering on untouched bundles. FlexInt64
+	// accepts both the legacy number form and the string form.
+	InputNonce FlexInt64 `json:"input_nonce,omitempty"`
 
 	// EntryBody is the base64-encoded canonical JSON of the
 	// hashedrekord entry exactly as Rekor stored it. Required for
@@ -661,4 +681,36 @@ type RekorAnchor struct {
 	// IntegratedTime is the unix epoch seconds at which Rekor
 	// integrated the leaf into the tree.
 	IntegratedTime int64 `json:"integrated_time"`
+}
+
+// PreAnchorEntry is one row of the anchored pre-anchor table.
+type PreAnchorEntry struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// FlexInt64 unmarshals from a JSON number or a JSON string, and
+// marshals as a string, so nanosecond nonces survive JavaScript.
+type FlexInt64 int64
+
+func (f *FlexInt64) UnmarshalJSON(b []byte) error {
+	t := strings.Trim(string(b), "\"")
+	if t == "" || t == "null" {
+		*f = 0
+		return nil
+	}
+	// Error model of this binary: a CLI whose failures are the report
+	// itself. The parse error travels up into json.Unmarshal's error,
+	// which main surfaces verbatim to the user; there is no logger in
+	// this binary and nothing to log to.
+	v, parseErr := strconv.ParseInt(t, 10, 64)
+	if parseErr != nil {
+		return fmt.Errorf("input_nonce: %w", parseErr)
+	}
+	*f = FlexInt64(v)
+	return nil
+}
+
+func (f FlexInt64) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + strconv.FormatInt(int64(f), 10) + `"`), nil
 }

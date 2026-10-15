@@ -278,29 +278,29 @@ func RecomputeSystemProvenanceHash(sp SystemProvenance) string {
 // hashes because the empty-struct hash is itself stable.
 func RecomputeBundleHash(b *AuditBundle) string {
 	return MustCanonicalHash(struct {
-		Kind                        string `json:"kind"`
-		SchemaVersion               string `json:"schema_version"`
-		ManifestHash                string `json:"manifest_hash"`
-		PayloadHash                 string `json:"payload_hash"`
-		EnvelopeHash                string `json:"envelope_hash"`
-		TransportHash               string `json:"transport_hash"`
-		EpaHash                     string `json:"epa_hash"`
-		EfaHash                     string `json:"efa_hash"`
-		AerHash                     string `json:"aer_hash"`
-		TranscriptHash              string `json:"transcript_hash"`
-		HwaHash                     string `json:"hwa_hash"`
-		LeakageHash                 string `json:"leakage_hash"`
-		ZkspHash                    string `json:"zksp_hash"`
-		MigrationHash               string `json:"migration_hash"`
-		ReplayHash                  string `json:"replay_hash"`
-		PoteHash                    string `json:"pote_hash"`
-		VfaHash                     string `json:"vfa_hash"`
-		RequestSubstanceHash        string `json:"request_substance_hash"`
-		AuthorizationChainHash      string `json:"authorization_chain_hash"`
-		RegulatoryScaffoldingHash   string `json:"regulatory_scaffolding_hash"`
-		CausalGraphHash             string `json:"causal_graph_hash"`
-		SystemProvenanceHash        string `json:"system_provenance_hash"`
-		ReproducibilityContextHash  string `json:"reproducibility_context_hash"`
+		Kind                       string `json:"kind"`
+		SchemaVersion              string `json:"schema_version"`
+		ManifestHash               string `json:"manifest_hash"`
+		PayloadHash                string `json:"payload_hash"`
+		EnvelopeHash               string `json:"envelope_hash"`
+		TransportHash              string `json:"transport_hash"`
+		EpaHash                    string `json:"epa_hash"`
+		EfaHash                    string `json:"efa_hash"`
+		AerHash                    string `json:"aer_hash"`
+		TranscriptHash             string `json:"transcript_hash"`
+		HwaHash                    string `json:"hwa_hash"`
+		LeakageHash                string `json:"leakage_hash"`
+		ZkspHash                   string `json:"zksp_hash"`
+		MigrationHash              string `json:"migration_hash"`
+		ReplayHash                 string `json:"replay_hash"`
+		PoteHash                   string `json:"pote_hash"`
+		VfaHash                    string `json:"vfa_hash"`
+		RequestSubstanceHash       string `json:"request_substance_hash"`
+		AuthorizationChainHash     string `json:"authorization_chain_hash"`
+		RegulatoryScaffoldingHash  string `json:"regulatory_scaffolding_hash"`
+		CausalGraphHash            string `json:"causal_graph_hash"`
+		SystemProvenanceHash       string `json:"system_provenance_hash"`
+		ReproducibilityContextHash string `json:"reproducibility_context_hash"`
 	}{
 		b.Kind, b.SchemaVersion, b.ManifestHash,
 		b.Payload.Hash, b.Envelope.Hash, b.Transport.Hash,

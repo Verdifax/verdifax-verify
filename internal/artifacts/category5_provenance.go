@@ -16,13 +16,13 @@ package artifacts
 type SystemProvenance struct {
 	Kind string `json:"kind"` // "verdifax.system_provenance.v1"
 
-	OrchestratorVersion string             `json:"orchestrator_version"`
-	OrchestratorGitSHA  string             `json:"orchestrator_git_sha"`
-	BuildProvenance     BuildProvenance    `json:"build_provenance"`
-	ConfigHash          string             `json:"config_hash,omitempty"`
-	KernelVersions      []KernelVersion    `json:"kernel_versions"`
-	DependencyManifestHash string          `json:"dependency_manifest_hash,omitempty"`
-	Environment         RuntimeEnvironment `json:"environment"`
+	OrchestratorVersion    string             `json:"orchestrator_version"`
+	OrchestratorGitSHA     string             `json:"orchestrator_git_sha"`
+	BuildProvenance        BuildProvenance    `json:"build_provenance"`
+	ConfigHash             string             `json:"config_hash,omitempty"`
+	KernelVersions         []KernelVersion    `json:"kernel_versions"`
+	DependencyManifestHash string             `json:"dependency_manifest_hash,omitempty"`
+	Environment            RuntimeEnvironment `json:"environment"`
 
 	Hash string        `json:"hash"`
 	Seal SealReference `json:"seal,omitempty"`
@@ -43,7 +43,7 @@ type BuildProvenance struct {
 	SBOMURL  string `json:"sbom_url,omitempty"`
 
 	// Builder, who built it.
-	BuilderID         string `json:"builder_id,omitempty"`         // "github_actions" | "local"
+	BuilderID         string `json:"builder_id,omitempty"`          // "github_actions" | "local"
 	BuildInvocationID string `json:"build_invocation_id,omitempty"` // CI run id
 	BuildStartedAt    string `json:"build_started_at,omitempty"`
 	BuildFinishedAt   string `json:"build_finished_at,omitempty"`
@@ -55,20 +55,20 @@ type BuildProvenance struct {
 
 // KernelVersion, one row of the per-kernel version table.
 type KernelVersion struct {
-	Kernel  string `json:"kernel"`  // "DSE" | "TOK" | "DSC" | "NREP" | "AIVP" | "DCAE"
-	Version string `json:"version"` // semantic version
+	Kernel  string `json:"kernel"`         // "DSE" | "TOK" | "DSC" | "NREP" | "AIVP" | "DCAE"
+	Version string `json:"version"`        // semantic version
 	Hash    string `json:"hash,omitempty"` // canonical kernel-binary hash if known
 }
 
 // RuntimeEnvironment, where the orchestrator is running right now.
 type RuntimeEnvironment struct {
-	Cloud                string `json:"cloud"`                  // "fly" | "self_hosted" | "aws" | "gcp" | "azure"
-	Region               string `json:"region"`                 // e.g. "iad", "us-east-1"
-	InstanceID           string `json:"instance_id,omitempty"`  // cloud-specific id
+	Cloud                string `json:"cloud"`                 // "fly" | "self_hosted" | "aws" | "gcp" | "azure"
+	Region               string `json:"region"`                // e.g. "iad", "us-east-1"
+	InstanceID           string `json:"instance_id,omitempty"` // cloud-specific id
 	InstanceType         string `json:"instance_type,omitempty"`
 	ContainerImageDigest string `json:"container_image_digest,omitempty"` // e.g. "ghcr.io/verdifax/verdifax-api@sha256:..."
-	OS                   string `json:"os"`                     // "linux" | "darwin"
-	Arch                 string `json:"arch"`                   // "amd64" | "arm64"
+	OS                   string `json:"os"`                               // "linux" | "darwin"
+	Arch                 string `json:"arch"`                             // "amd64" | "arm64"
 	GoVersion            string `json:"go_version"`
 	Hostname             string `json:"hostname,omitempty"`
 	Uptime               int64  `json:"uptime_seconds,omitempty"`

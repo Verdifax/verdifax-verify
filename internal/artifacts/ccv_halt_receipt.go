@@ -8,7 +8,7 @@ package artifacts
 //   - CCVHaltReceipt, proves "this was correctly halted mid-execution"
 //
 // Both share the same canonical-bytes + SHA-256 sealing machinery, the
-// same independent-verifier API, and the same chain-of-custody binding , 
+// same independent-verifier API, and the same chain-of-custody binding ,
 // the trio (AllowToken, DenyReceipt, CCVHaltReceipt) plus MCDFinding
 // gives Phase 11 four artifact-typed outcomes for any orchestrated run:
 //

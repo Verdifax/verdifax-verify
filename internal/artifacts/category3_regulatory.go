@@ -49,12 +49,12 @@ type RegulatoryScaffolding struct {
 // just its ID. Policies change; the audit must record which version
 // applied to *this* run.
 type PolicySnapshot struct {
-	PolicyID       string `json:"policy_id"`                  // e.g. "policy_financial_approval"
-	PolicyVersion  string `json:"policy_version"`             // e.g. "v2.3.1"
-	PolicyHash     string `json:"policy_hash"`                // sha256 of the policy bytes
-	PolicyURL      string `json:"policy_url,omitempty"`       // immutable URL (e.g. content-addressed)
-	SnapshotInline string `json:"snapshot_inline,omitempty"`  // opt-in raw policy bytes
-	EffectiveAt    string `json:"effective_at,omitempty"`     // RFC3339
+	PolicyID       string `json:"policy_id"`                 // e.g. "policy_financial_approval"
+	PolicyVersion  string `json:"policy_version"`            // e.g. "v2.3.1"
+	PolicyHash     string `json:"policy_hash"`               // sha256 of the policy bytes
+	PolicyURL      string `json:"policy_url,omitempty"`      // immutable URL (e.g. content-addressed)
+	SnapshotInline string `json:"snapshot_inline,omitempty"` // opt-in raw policy bytes
+	EffectiveAt    string `json:"effective_at,omitempty"`    // RFC3339
 }
 
 // DataClassification supports commercial, US government, export-control,
@@ -107,11 +107,11 @@ type DataClassification struct {
 //
 // Levels (from EO 13526 Sec. 1.2):
 //
-//   "UNCLASSIFIED" , no classification; not for restricted handling
-//   "CUI": Controlled Unclassified Information (32 CFR 2002)
-//   "CONFIDENTIAL" , unauthorized disclosure could cause damage to national security
-//   "SECRET": unauthorized disclosure could cause serious damage
-//   "TOP_SECRET": unauthorized disclosure could cause exceptionally grave damage
+//	"UNCLASSIFIED" , no classification; not for restricted handling
+//	"CUI": Controlled Unclassified Information (32 CFR 2002)
+//	"CONFIDENTIAL" , unauthorized disclosure could cause damage to national security
+//	"SECRET": unauthorized disclosure could cause serious damage
+//	"TOP_SECRET": unauthorized disclosure could cause exceptionally grave damage
 //
 // Compartments and SAP go beyond the level. SCI is access-controlled
 // information held to a higher need-to-know standard than ordinary
@@ -177,14 +177,14 @@ type USGovClassification struct {
 	CUIDecontrolDate string `json:"cui_decontrol_date,omitempty"`
 
 	// Atomic Energy Act material flags.
-	RestrictedData         bool `json:"restricted_data,omitempty"`           // RD
-	FormerlyRestrictedData bool `json:"formerly_restricted_data,omitempty"`  // FRD
-	TransclassifiedFRD     bool `json:"transclassified_frd,omitempty"`       // TFNI
+	RestrictedData         bool `json:"restricted_data,omitempty"`          // RD
+	FormerlyRestrictedData bool `json:"formerly_restricted_data,omitempty"` // FRD
+	TransclassifiedFRD     bool `json:"transclassified_frd,omitempty"`      // TFNI
 
 	// Original Classification Authority (OCA) and derivative info.
-	OCAOrgID         string `json:"oca_org_id,omitempty"`         // e.g. "DCSA-12345"
-	DerivedFrom      string `json:"derived_from,omitempty"`       // source classification ref
-	DeclassifyOn     string `json:"declassify_on,omitempty"`      // RFC3339 date OR exemption code "X1".."X8"
+	OCAOrgID            string `json:"oca_org_id,omitempty"`           // e.g. "DCSA-12345"
+	DerivedFrom         string `json:"derived_from,omitempty"`         // source classification ref
+	DeclassifyOn        string `json:"declassify_on,omitempty"`        // RFC3339 date OR exemption code "X1".."X8"
 	DeclassifyExemption string `json:"declassify_exemption,omitempty"` // "25X1-human" etc.
 
 	// Marking string, the human-readable banner line e.g.
@@ -199,13 +199,13 @@ type USGovClassification struct {
 type ExportControlClassification struct {
 	// ITAR (22 CFR 120-130), defense articles and services on the
 	// United States Munitions List (USML).
-	ITARControlled  bool   `json:"itar_controlled,omitempty"`
-	USMLCategory    string `json:"usml_category,omitempty"`    // e.g. "Category VIII"
+	ITARControlled bool   `json:"itar_controlled,omitempty"`
+	USMLCategory   string `json:"usml_category,omitempty"` // e.g. "Category VIII"
 
 	// EAR (15 CFR 730-774), dual-use items on the Commerce Control List.
-	EARControlled bool   `json:"ear_controlled,omitempty"`
-	ECCN          string `json:"eccn,omitempty"`             // e.g. "5A002"
-	EAR99         bool   `json:"ear99,omitempty"`            // catch-all for non-listed items
+	EARControlled    bool   `json:"ear_controlled,omitempty"`
+	ECCN             string `json:"eccn,omitempty"`              // e.g. "5A002"
+	EAR99            bool   `json:"ear99,omitempty"`             // catch-all for non-listed items
 	LicenseException string `json:"license_exception,omitempty"` // e.g. "ENC", "TSR", "CIV"
 
 	// Sanctions
@@ -253,43 +253,43 @@ type AlliedClassification struct {
 
 // DataResidency, where the data was processed, hosted, and stored.
 type DataResidency struct {
-	ProcessingRegion   string   `json:"processing_region"`             // e.g. "us-east-1", "fly:iad"
-	ModelHostingRegion string   `json:"model_hosting_region,omitempty"` // for caller-attested AI calls
-	StorageRegion      string   `json:"storage_region"`                 // where this audit record is stored
-	CrossBorderTransfer bool    `json:"cross_border_transfer,omitempty"` // any data crossed a national border
-	TransferMechanism  string   `json:"transfer_mechanism,omitempty"`   // "SCC", "BCR", "adequacy_decision", "consent"
-	Sovereignty        []string `json:"sovereignty,omitempty"`          // ["GDPR", "EU_AI_ACT", "FedRAMP_HIGH", "IL5", "PCIDSS"]
+	ProcessingRegion    string   `json:"processing_region"`               // e.g. "us-east-1", "fly:iad"
+	ModelHostingRegion  string   `json:"model_hosting_region,omitempty"`  // for caller-attested AI calls
+	StorageRegion       string   `json:"storage_region"`                  // where this audit record is stored
+	CrossBorderTransfer bool     `json:"cross_border_transfer,omitempty"` // any data crossed a national border
+	TransferMechanism   string   `json:"transfer_mechanism,omitempty"`    // "SCC", "BCR", "adequacy_decision", "consent"
+	Sovereignty         []string `json:"sovereignty,omitempty"`           // ["GDPR", "EU_AI_ACT", "FedRAMP_HIGH", "IL5", "PCIDSS"]
 }
 
 // RetentionPolicy, how long this audit record is kept.
 type RetentionPolicy struct {
-	RetentionDays      int    `json:"retention_days"`             // 0 means indefinite
-	LegalHold          bool   `json:"legal_hold"`                 // record is held for litigation
-	LegalHoldReason    string `json:"legal_hold_reason,omitempty"`
-	LegalHoldUntil     string `json:"legal_hold_until,omitempty"` // RFC3339 or empty for indefinite
-	DeletionEligible   bool   `json:"deletion_eligible"`
-	GDPRRightToErase   bool   `json:"gdpr_right_to_erase"`        // can be deleted under GDPR Art. 17
-	HIPAARetentionMin  bool   `json:"hipaa_retention_minimum,omitempty"` // 6-year HIPAA minimum applies
-	SOXRetentionMin    bool   `json:"sox_retention_minimum,omitempty"`   // 7-year SOX minimum applies
+	RetentionDays     int    `json:"retention_days"` // 0 means indefinite
+	LegalHold         bool   `json:"legal_hold"`     // record is held for litigation
+	LegalHoldReason   string `json:"legal_hold_reason,omitempty"`
+	LegalHoldUntil    string `json:"legal_hold_until,omitempty"` // RFC3339 or empty for indefinite
+	DeletionEligible  bool   `json:"deletion_eligible"`
+	GDPRRightToErase  bool   `json:"gdpr_right_to_erase"`               // can be deleted under GDPR Art. 17
+	HIPAARetentionMin bool   `json:"hipaa_retention_minimum,omitempty"` // 6-year HIPAA minimum applies
+	SOXRetentionMin   bool   `json:"sox_retention_minimum,omitempty"`   // 7-year SOX minimum applies
 }
 
 // FrameworkRef, one applicable compliance framework.
 type FrameworkRef struct {
-	Framework      string `json:"framework"`              // "EU_AI_ACT", "HIPAA", "SOX", "FedRAMP", "ISO27001", "SOC2", "GDPR", "CCPA", "NIS2"
-	AssessmentID   string `json:"assessment_id,omitempty"` // DPIA / AI conformity assessment / audit ID
-	AssessmentURL  string `json:"assessment_url,omitempty"`
-	RiskClass      string `json:"risk_class,omitempty"`   // EU AI Act tier: "minimal" | "limited" | "high" | "unacceptable"
-	ControlIDs     []string `json:"control_ids,omitempty"` // specific control references
-	AttestationID  string `json:"attestation_id,omitempty"` // FedRAMP Authorization, SOC2 report, etc.
+	Framework     string   `json:"framework"`               // "EU_AI_ACT", "HIPAA", "SOX", "FedRAMP", "ISO27001", "SOC2", "GDPR", "CCPA", "NIS2"
+	AssessmentID  string   `json:"assessment_id,omitempty"` // DPIA / AI conformity assessment / audit ID
+	AssessmentURL string   `json:"assessment_url,omitempty"`
+	RiskClass     string   `json:"risk_class,omitempty"`     // EU AI Act tier: "minimal" | "limited" | "high" | "unacceptable"
+	ControlIDs    []string `json:"control_ids,omitempty"`    // specific control references
+	AttestationID string   `json:"attestation_id,omitempty"` // FedRAMP Authorization, SOC2 report, etc.
 }
 
 // BiasCheckRef, caller-attested fairness / bias test reference.
 type BiasCheckRef struct {
-	TestID         string  `json:"test_id"`
-	LastRunAt      string  `json:"last_run_at"`             // RFC3339
-	Outcome        string  `json:"outcome"`                 // "passed" | "flagged" | "failed"
-	OverallScore   float64 `json:"overall_score,omitempty"`
+	TestID              string   `json:"test_id"`
+	LastRunAt           string   `json:"last_run_at"` // RFC3339
+	Outcome             string   `json:"outcome"`     // "passed" | "flagged" | "failed"
+	OverallScore        float64  `json:"overall_score,omitempty"`
 	ProtectedAttributes []string `json:"protected_attributes,omitempty"` // ["race","gender","age",...]
-	ReportURL      string  `json:"report_url,omitempty"`
-	Methodology    string  `json:"methodology,omitempty"`   // e.g. "demographic_parity", "equalized_odds"
+	ReportURL           string   `json:"report_url,omitempty"`
+	Methodology         string   `json:"methodology,omitempty"` // e.g. "demographic_parity", "equalized_odds"
 }

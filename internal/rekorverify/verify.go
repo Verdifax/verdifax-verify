@@ -38,7 +38,7 @@
 //	    // verification failed; the err describes which check failed
 //	}
 //
-// SECURITY MODEL
+// # SECURITY MODEL
 //
 // The verification is sound if and only if:
 //

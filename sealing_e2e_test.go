@@ -43,7 +43,7 @@ func v3Bundle(t *testing.T) *artifacts.AuditBundle {
 	b.RekorAnchor.InputNonce = 424242
 	preimage := joinLeafParts(leafDomainV3,
 		b.Envelope.EnvelopeID, b.AER.Seal.SealedHash, b.ZkspBinding.Seal.SealedHash,
-		strconv.FormatInt(b.RekorAnchor.InputNonce, 10),
+		strconv.FormatInt(int64(b.RekorAnchor.InputNonce), 10),
 		b.NrepSectionHash, b.ScaffoldFlagsHash)
 	sum := sha256.Sum256([]byte(preimage))
 	b.RekorAnchor.LeafHashHex = hex.EncodeToString(sum[:])

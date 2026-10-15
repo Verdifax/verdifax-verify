@@ -121,12 +121,12 @@ func VerifyDenyReceiptHash(receipt *DenyReceipt) error {
 //
 // See BUILDING DOCS/DENY_RECEIPT_SCHEMA_V0.md §3 for the rationale.
 type DenySidecar struct {
-	Kind             string                  `json:"kind"` // "verdifax.artifact.deny_sidecar.v1"
-	EnvelopeID       string                  `json:"envelope_id"`
-	DenyReceiptHash  string                  `json:"deny_receipt_hash"`
-	DenyReasonText   string                  `json:"deny_reason_text"`
-	EvaluationTrace  []EvaluationTraceEntry  `json:"evaluation_trace,omitempty"`
-	MCDFindingDetail *MCDFindingDetail       `json:"mcd_finding_detail,omitempty"`
+	Kind             string                 `json:"kind"` // "verdifax.artifact.deny_sidecar.v1"
+	EnvelopeID       string                 `json:"envelope_id"`
+	DenyReceiptHash  string                 `json:"deny_receipt_hash"`
+	DenyReasonText   string                 `json:"deny_reason_text"`
+	EvaluationTrace  []EvaluationTraceEntry `json:"evaluation_trace,omitempty"`
+	MCDFindingDetail *MCDFindingDetail      `json:"mcd_finding_detail,omitempty"`
 }
 
 // EvaluationTraceEntry is one rule's evaluation result captured in the
@@ -140,9 +140,9 @@ type EvaluationTraceEntry struct {
 // MCDFindingDetail is the human-readable detail of an MCD signature hit
 // included in the deny sidecar (not the sealed receipt).
 type MCDFindingDetail struct {
-	SignatureID     string `json:"signature_id"`
-	SignatureName   string `json:"signature_name"`
-	MatchedText     string `json:"matched_text"`
-	Severity        string `json:"severity"`
-	SourceCitation  string `json:"source_citation"`
+	SignatureID    string `json:"signature_id"`
+	SignatureName  string `json:"signature_name"`
+	MatchedText    string `json:"matched_text"`
+	Severity       string `json:"severity"`
+	SourceCitation string `json:"source_citation"`
 }
