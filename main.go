@@ -52,7 +52,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.8.0"
+const Version = "0.8.1"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -100,6 +100,8 @@ type Report struct {
 	NrepSignature NrepCheck        `json:"nrep_signature"`
 	RuntimeTiming TimingCheck      `json:"runtime_timing"`
 	AllPassed     bool             `json:"all_passed"`
+	Anchored      bool             `json:"anchored"`
+	VerdictTier   string           `json:"verdict_tier"`
 	HasScaffold   bool             `json:"has_scaffold"`
 	ScaffoldList  []string         `json:"scaffold_list,omitempty"`
 }
@@ -108,6 +110,7 @@ func main() {
 	var (
 		jsonOutput      = flag.Bool("json", false, "emit machine-readable JSON instead of human report")
 		strictMode      = flag.Bool("strict", false, "fail (exit 1) on any scaffold-flagged value")
+		allowUnanchored = flag.Bool("allow-unanchored", false, "exit 0 for a bundle with no public-log anchor; without this flag, unanchored bundles fail, because every sealing property this tool checks hangs off the anchor and an attacker can strip an anchor claim by editing one unprotected field (the documented downgrade attack)")
 		showVersion     = flag.Bool("version", false, "print version and exit")
 		showEvidence    = flag.Bool("show-evidence-summary", false, "print a one-glance maturity summary (real vs scaffold counts, Rekor anchor status, PoTE preimage version, strict-mode gate disposition) and exit; combine with --json for machine-readable form")
 	)
@@ -140,7 +143,7 @@ func main() {
 		} else {
 			printEvidenceSummary(summary)
 		}
-		if !report.AllPassed || (*strictMode && report.HasScaffold) {
+		if exitShouldFail(report, *strictMode, *allowUnanchored) {
 			os.Exit(1)
 		}
 		return
@@ -152,9 +155,26 @@ func main() {
 		printHumanReport(bundle, report)
 	}
 
-	if !report.AllPassed || (*strictMode && report.HasScaffold) {
+	if exitShouldFail(report, *strictMode, *allowUnanchored) {
 		os.Exit(1)
 	}
+}
+
+// exitShouldFail is the single exit-code policy (v0.8.1). Unanchored
+// bundles fail without --allow-unanchored: production never seals in
+// mock mode, so an unanchored bundle in the wild is either a dev
+// artifact (pass the flag) or a stripped anchor (the point).
+func exitShouldFail(r *Report, strict, allowUnanchored bool) bool {
+	if !r.AllPassed {
+		return true
+	}
+	if strict && r.HasScaffold {
+		return true
+	}
+	if !r.Anchored && !allowUnanchored {
+		return true
+	}
+	return false
 }
 
 // EvidenceSummary is the structured one-glance view emitted by
@@ -572,6 +592,29 @@ func verify(b *artifacts.AuditBundle) *Report {
 		allPassed = false
 	}
 	r.AllPassed = allPassed
+
+	// Verdict tiering (v0.8.1), the answer to the demonstrated
+	// downgrade attack: the v3 sealing only runs for anchored
+	// bundles, and the backend field that declares anchoring is
+	// itself unprotected, so flipping it to "mock" switched every
+	// seal off while the verdict still read VERIFIED. An offline
+	// tool cannot cryptographically distinguish an honestly
+	// mock-sealed bundle from an anchored one with its anchor
+	// stripped; what it CAN do is refuse to give them the same
+	// verdict. An unanchored bundle is at most SELF-CONSISTENT:
+	// every hash in it can be rewritten together offline, and the
+	// report and exit code now say so instead of printing the same
+	// checkmark an anchored bundle earns.
+	r.Anchored = r.RekorAnchor.Performed && r.RekorAnchor.Match &&
+		r.LeafBinding.Performed && r.LeafBinding.Match
+	switch {
+	case !allPassed:
+		r.VerdictTier = "FAILED"
+	case r.Anchored:
+		r.VerdictTier = "VERIFIED_ANCHORED"
+	default:
+		r.VerdictTier = "SELF_CONSISTENT_NOT_ANCHORED"
+	}
 	return r
 }
 
@@ -749,10 +792,18 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	fmt.Println()
 
 	switch {
+	case r.AllPassed && !r.Anchored:
+		fmt.Println("VERDICT: ⚠ SELF-CONSISTENT ONLY, NOT ANCHORED.")
+		fmt.Println("  Every hash recomputes, but this bundle claims no public-log anchor,")
+		fmt.Println("  so every hash in it could have been rewritten together offline,")
+		fmt.Println("  including this bundle's own statement that it was never anchored.")
+		fmt.Println("  Production seals are always anchored: treat an unanchored bundle as")
+		fmt.Println("  a dev artifact or a stripped anchor. Exit code fails without")
+		fmt.Println("  --allow-unanchored.")
 	case r.AllPassed && !r.HasScaffold:
-		fmt.Println("VERDICT: ✓ VERIFIED, every hash recomputes correctly, no scaffold values flagged.")
+		fmt.Println("VERDICT: ✓ VERIFIED AND ANCHORED, every hash recomputes correctly, no scaffold values flagged.")
 	case r.AllPassed && r.HasScaffold:
-		fmt.Println("VERDICT: ✓ VERIFIED (with scaffold flags)")
+		fmt.Println("VERDICT: ✓ VERIFIED AND ANCHORED (with scaffold flags)")
 		fmt.Println("  Scaffold artifacts (closing paths at docs.verdifax.com/concepts/scaffold-gaps/):")
 		for _, s := range r.ScaffoldList {
 			fmt.Println("    ·", s)

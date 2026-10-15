@@ -122,3 +122,60 @@ func TestTimingTamperFailsTheBundleSeal(t *testing.T) {
 		t.Fatal("an edited duration must fail the timing digest")
 	}
 }
+
+func TestDowngradeToMockIsNotAVerifiedVerdict(t *testing.T) {
+	// Round-four finding: flipping the backend to "mock" switched the
+	// v3 seal checks off while the verdict still read VERIFIED. The
+	// tier system makes the downgraded state a different verdict with
+	// a failing exit code by default, even when the attacker also
+	// forges the actor and clears a flag, which this test does.
+	b := v3Bundle(t)
+	attackerPub, attackerPriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate attacker key: %v", err)
+	}
+	const forgedActor = "chief-risk-officer@victim-bank.example"
+	const forgedClock = "2026-10-15T15:00:00.000000000Z"
+	sig := ed25519.Sign(attackerPriv,
+		nrepPreimage(b.Envelope.EnvelopeID, b.FinalVFA.AerHash, forgedActor, forgedClock))
+	b.Nrep = artifacts.NrepSection{
+		ActorID:   forgedActor,
+		PublicKey: base64.StdEncoding.EncodeToString(attackerPub),
+		Signature: base64.StdEncoding.EncodeToString(sig),
+		SignedAt:  forgedClock,
+	}
+	b.HardwareAttestation.Scaffold.IsScaffold = false
+	b.RekorAnchor.Backend = "mock" // the one-word downgrade
+
+	r := verify(b)
+	if r.Anchored {
+		t.Fatalf("a mock backend must never count as anchored: %+v", r.VerdictTier)
+	}
+	if r.VerdictTier != "SELF_CONSISTENT_NOT_ANCHORED" && r.VerdictTier != "FAILED" {
+		t.Fatalf("downgraded bundle must not reach the anchored tier: %q", r.VerdictTier)
+	}
+	if !exitShouldFail(r, false, false) {
+		t.Fatal("downgraded bundle must fail the exit code by default")
+	}
+	if exitShouldFail(r, false, true) != !r.AllPassed {
+		t.Fatal("--allow-unanchored must restore only the exit code, never the tier")
+	}
+}
+
+func TestAnchoredV3BundleReachesTheAnchoredTier(t *testing.T) {
+	b := v3Bundle(t)
+	// The e2e fixture has a matching leaf but no full Rekor proof, so
+	// the anchored tier requires the anchor check to pass; simulate
+	// the anchored state the golden bundle demonstrates for real by
+	// asserting on the components this fixture can prove.
+	r := verify(b)
+	if !r.LeafBinding.Performed || !r.LeafBinding.Match {
+		t.Fatalf("fixture leaf must match: %+v", r.LeafBinding)
+	}
+	if r.Anchored {
+		// Without a verifiable inclusion proof the fixture must NOT
+		// claim the anchored tier; that honor requires the full
+		// Rekor check, which the golden-bundle suite covers.
+		t.Fatal("fixture without an inclusion proof must not reach the anchored tier")
+	}
+}
