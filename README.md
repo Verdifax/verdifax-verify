@@ -85,20 +85,24 @@ bundle citing a real Rekor entry belonging to a different run satisfied
 both and verified cleanly. It now fails, and the failure is a failure,
 not an advisory line.
 
-**Also proves, since v0.7.0:** that a bundle claiming an actor identity
-carries a genuine Ed25519 signature over *this run's* `envelope_id` and
-`aer_hash`, checked against the public key sealed in the bundle's
-`nrep` section. An external review (2026-10-15) correctly pointed out
-that earlier versions carried the signature but never checked it; now a
-claimed actor binding that does not validate fails the verification
-outright. Bundles sealed before the `signed_at` field shipped carry
-real signatures whose preimage cannot be rebuilt offline; the report
-says so explicitly rather than counting them as passed. Note the honest
-boundary: the key is the one the bundle itself presents, so the check
-proves the record was signed by the key it names and binds the
-signature to this exact run; tying that key to a real-world identity
-still requires the orchestrator's actor-identity endpoint or your own
-key registry.
+**Also checks, since v0.7.0, with the honest wording tightened in
+v0.7.1:** the Ed25519 actor signature in the bundle's `nrep` section,
+rebuilt from this run's `envelope_id`, `aer_hash` and `signed_at` and
+validated against the public key the bundle itself supplies. Read that
+last clause carefully: because the key comes from the bundle and the
+nrep section is not yet covered by the bundle hash or the public-log
+leaf, an attacker can replace the whole section with a self-consistent
+one of their own, and this check cannot tell. A second external review
+(2026-10-15) demonstrated exactly that against v0.7.0, which printed
+"verified" for a forged identity; v0.7.1 therefore reports a passing
+check as CONSISTENT, never verified, and states on every line that the
+key is not pinned and the section is not sealed. An invalid signature
+still fails the whole verdict, which catches tampering by anyone who
+does not bother to re-sign. Sealing the section into the hashed record
+and the anchor, and pinning keys against a registry, are the queued
+work that turns consistency into identity; until both land, treat the
+actor line as internal consistency only. Bundles sealed before
+`signed_at` shipped are reported as not offline-checkable at all.
 
 **Does not prove:** that the underlying execution actually happened on
 Verdifax-operated hardware. Anchoring establishes that a bundle existed

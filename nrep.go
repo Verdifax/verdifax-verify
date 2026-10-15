@@ -19,7 +19,24 @@ package main
 // prevents a component containing another component's value from
 // producing a colliding preimage.
 //
-// Four states, mirroring the Rekor and leaf-binding checks:
+// WHAT THIS CHECK CAN AND CANNOT PROVE, stated bluntly because an
+// external review (2026-10-15) demonstrated the gap with a working
+// forgery against v0.7.0: the public key is the one the bundle itself
+// supplies, and in current bundles the nrep section is not covered by
+// the bundle hash or the public-log leaf. An attacker can therefore
+// replace the whole section, actor name, key, signature, clock, with
+// a self-consistent one of their own making, and this check will
+// validate it. For that reason a passing check is reported as
+// CONSISTENT, never as verified: it proves the section is internally
+// consistent and bound to this run's envelope_id and aer_hash by
+// whoever held the embedded key, and nothing about who that was.
+// Identity assurance requires pinning the key against a registry and
+// sealing the section into the hashed record and the anchor, both of
+// which are in progress; until then the one thing an INVALID
+// signature still proves is sloppy tampering, so invalid flips the
+// verdict while valid earns only the consistency wording.
+//
+// States, mirroring the Rekor and leaf-binding checks:
 //
 //   - Performed=false, empty section: the run claimed no actor
 //     identity (anonymous or pre-Phase-15). Not a failure, and per the
@@ -27,14 +44,11 @@ package main
 //     run's authority must be established by surrounding-system logs.
 //   - Performed=false, signature present but signed_at empty: the
 //     bundle predates the signed_at field, so the preimage cannot be
-//     rebuilt offline. The signature is real but untestable here;
-//     reported distinctly so a reader never mistakes it for a pass.
-//   - Performed=true, Match=true: the signature verifies over this
-//     run's envelope_id and aer_hash with the sealed public key.
-//   - Performed=true, Match=false: the signature does not verify. A
-//     failure, it flips the overall verdict, because a bundle claiming
-//     an actor binding that does not validate is exactly the forgery
-//     this check exists to catch.
+//     rebuilt offline. Reported distinctly from every other state.
+//   - Performed=true, Match=true: the signature is CONSISTENT, see
+//     above for exactly how little that means about identity.
+//   - Performed=true, Match=false: the signature does not validate
+//     even on its own terms. A failure; it flips the verdict.
 
 import (
 	"crypto/ed25519"
@@ -55,6 +69,13 @@ type NrepCheck struct {
 	Match     bool   `json:"match"`
 	ActorID   string `json:"actor_id,omitempty"`
 	Reason    string `json:"reason,omitempty"`
+
+	// KeyPinned and Sealed are both false in every bundle this
+	// version can see; they exist so the JSON shape is stable when
+	// registry pinning and section sealing land, and so no consumer
+	// can misread Match=true as identity assurance in the meantime.
+	KeyPinned bool `json:"key_pinned"`
+	Sealed    bool `json:"sealed"`
 }
 
 // verifyNrepSignature checks the bundle's nrep section against the
@@ -139,7 +160,7 @@ func nrepPreimage(envelopeID, aerHash, actorID, runClock string) []byte {
 func printNrepCheck(c NrepCheck) {
 	switch {
 	case c.Performed && c.Match:
-		fmt.Printf("  Actor signature:  verified · %s\n", c.ActorID)
+		fmt.Printf("  Actor signature:  consistent · %s (key not pinned; section not sealed, identity NOT established)\n", c.ActorID)
 	case c.Performed && !c.Match:
 		fmt.Printf("  Actor signature:  ✗ FAILED · %s\n", c.Reason)
 	case c.ActorID != "":

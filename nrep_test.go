@@ -136,3 +136,38 @@ func TestNrepGoldenBundlePredatesSignedAt(t *testing.T) {
 		t.Fatalf("actor id should surface in the not-verifiable state: %+v", c)
 	}
 }
+
+func TestNrepForgedSectionIsConsistentNotIdentity(t *testing.T) {
+	// Encodes the 2026-10-15 external forgery demonstration as a
+	// permanent boundary test: an attacker who replaces the WHOLE
+	// nrep section, their own actor name, their own key, their own
+	// signature over this run's real envelope_id and aer_hash,
+	// produces a section this check finds consistent, because the
+	// key comes from the bundle and nothing sealed covers the
+	// section yet. The check MUST therefore never present Match as
+	// identity: KeyPinned and Sealed must both be false until
+	// registry pinning and section sealing actually land, at which
+	// point this test gets rewritten, not deleted.
+	b, _ := signedBundle(t)
+	attackerPub, attackerPriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate attacker key: %v", err)
+	}
+	const forgedActor = "chief-risk-officer@victim-bank.example"
+	const forgedClock = "2026-10-15T13:00:00.000000000Z"
+	sig := ed25519.Sign(attackerPriv,
+		nrepPreimage(b.Envelope.EnvelopeID, b.FinalVFA.AerHash, forgedActor, forgedClock))
+	b.Nrep = artifacts.NrepSection{
+		ActorID:   forgedActor,
+		PublicKey: base64.StdEncoding.EncodeToString(attackerPub),
+		Signature: base64.StdEncoding.EncodeToString(sig),
+		SignedAt:  forgedClock,
+	}
+	c := verifyNrepSignature(b)
+	if !c.Performed || !c.Match {
+		t.Fatalf("forged-but-self-consistent section is expected to pass consistency: %+v", c)
+	}
+	if c.KeyPinned || c.Sealed {
+		t.Fatalf("nothing may claim pinning or sealing yet: %+v", c)
+	}
+}
