@@ -98,11 +98,27 @@ one of their own, and this check cannot tell. A second external review
 check as CONSISTENT, never verified, and states on every line that the
 key is not pinned and the section is not sealed. An invalid signature
 still fails the whole verdict, which catches tampering by anyone who
-does not bother to re-sign. Sealing the section into the hashed record
-and the anchor, and pinning keys against a registry, are the queued
-work that turns consistency into identity; until both land, treat the
-actor line as internal consistency only. Bundles sealed before
-`signed_at` shipped are reported as not offline-checkable at all.
+does not bother to re-sign. Pinning keys against a registry remains queued;
+until it lands, even a sealed actor line is consistency, not identity.
+Bundles sealed before `signed_at` shipped are reported as not
+offline-checkable at all.
+
+**Also proves, since v0.8.0:** that the actor section and the scaffold
+flags of a version-3 anchored bundle are the ones that were anchored.
+The v3 ledger leaf embeds digests of both, and this verifier recomputes
+those digests from the bundle's own contents when rebuilding the leaf,
+so replacing the actor section or clearing a placeholder flag breaks
+the anchored leaf no matter how many unanchored hashes the editor
+rewrites; both forgeries demonstrated against v0.7.0 are encoded as
+tests and now fail. A sealed actor line reads "consistent and SEALED to
+the anchor"; identity still waits on key pinning. Runtime stage timings
+(real measurements, new in the same release) are digest-sealed at the
+bundle level and reported with their honest boundary: the timing digest
+is deliberately NOT in the anchored leaf, because per-run timings there
+would break the replay-determinism promise, so an editor who rewrites
+timings and digest together is outside what a bundle-level seal can
+catch. Pre-v3 bundles report every one of these states explicitly
+instead of pretending.
 
 **Does not prove:** that the underlying execution actually happened on
 Verdifax-operated hardware. Anchoring establishes that a bundle existed

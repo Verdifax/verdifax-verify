@@ -64,6 +64,7 @@ import (
 const (
 	leafDomainV1 = "verdifax.ledger.input.v1"
 	leafDomainV2 = "verdifax.ledger.input.v2"
+	leafDomainV3 = "verdifax.ledger.input.v3"
 )
 
 // LeafBindingCheck records whether the anchored leaf is this run's.
@@ -149,18 +150,38 @@ func verifyLeafBinding(b *artifacts.AuditBundle) LeafBindingCheck {
 	}
 
 	// Version selection is driven by the data, not assumed. A bundle
-	// sealed before the nonce arrived has none and used the v1 preimage.
-	// Hardcoding v2 would report every legacy bundle as forged, which is
-	// a worse error than the one being fixed.
+	// sealed before the nonce arrived has none and used the v1 preimage;
+	// one carrying the sealing digests used v3. Hardcoding any single
+	// form would report every other generation as forged, which is a
+	// worse error than the ones being fixed.
+	//
+	// For v3 the two digests are RECOMPUTED from the bundle's section
+	// contents, never read from the stored top-level fields: that is
+	// the entire point. An editor who alters the actor section or
+	// clears a scaffold flag changes the recomputed digest, the
+	// candidate leaf stops matching the anchored one, and no amount of
+	// rewriting unanchored hashes can repair it.
 	var (
 		preimage string
 		form     string
 	)
-	if a.InputNonce != 0 {
+	switch {
+	case b.NrepSectionHash != "" || b.ScaffoldFlagsHash != "":
+		form = leafDomainV3
+		nrepRecomputed := artifacts.ComputeNrepSectionHash(
+			b.Nrep.ActorID, b.Nrep.PublicKey, b.Nrep.Signature, b.Nrep.SignedAt)
+		scaffoldRecomputed := artifacts.ComputeScaffoldFlagsHash(
+			b.Transcript.Scaffold.IsScaffold,
+			b.HardwareAttestation.Scaffold.IsScaffold,
+			b.ZkspBinding.Scaffold.IsScaffold,
+			b.LeakageBundle.Scaffold.IsScaffold)
+		preimage = joinLeafParts(leafDomainV3, envelopeID, aerHash, bindingHash,
+			strconv.FormatInt(a.InputNonce, 10), nrepRecomputed, scaffoldRecomputed)
+	case a.InputNonce != 0:
 		form = leafDomainV2
 		preimage = joinLeafParts(leafDomainV2, envelopeID, aerHash, bindingHash,
 			strconv.FormatInt(a.InputNonce, 10))
-	} else {
+	default:
 		form = leafDomainV1
 		preimage = joinLeafParts(leafDomainV1, envelopeID, aerHash, bindingHash)
 	}
@@ -179,6 +200,11 @@ func verifyLeafBinding(b *artifacts.AuditBundle) LeafBindingCheck {
 		out.Reason = "the leaf hash anchored in the public log is not the one this " +
 			"run's envelope, AER and binding hashes produce. The log entry is real, " +
 			"but it does not belong to this run"
+		if form == leafDomainV3 {
+			out.Reason += "; because this is a v3 leaf, the mismatch can also mean " +
+				"the actor section or a scaffold flag was altered after anchoring, " +
+				"since both digests are recomputed from the bundle's contents"
+		}
 	}
 	return out
 }

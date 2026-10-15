@@ -442,6 +442,20 @@ type AuditBundle struct {
 	// ManifestHash matches the bundle's manifest hash.
 	FormalVerification FormalVerification `json:"formal_verification,omitempty"`
 
+	// NrepSectionHash and ScaffoldFlagsHash are the anchored sealing
+	// digests (2026-10-15): recomputable from this bundle's own
+	// section contents (sealing.go) and bound inside the version-3
+	// ledger leaf, so the actor section and the scaffold flags
+	// cannot be rewritten offline without breaking the anchored
+	// leaf. RuntimeTimingHash is bundle-sealed only, by design:
+	// per-run timings in the leaf would break replay determinism.
+	// All empty in bundles sealed before leaf v3, and their absence
+	// is reported, never silently accepted.
+	NrepSectionHash   string         `json:"nrep_section_hash,omitempty"`
+	ScaffoldFlagsHash string         `json:"scaffold_flags_hash,omitempty"`
+	RuntimeTimingHash string         `json:"runtime_timing_hash,omitempty"`
+	RuntimeTiming     []StageTiming  `json:"runtime_timing,omitempty"`
+
 	// ExecutionRecord discloses the preimage of the run's attestation
 	// execution record (aer.v1) and its proof (proof.v1), so a verifier
 	// recomputes both from this bundle alone; see execution_record.go.

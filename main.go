@@ -52,7 +52,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.7.1"
+const Version = "0.8.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -98,6 +98,7 @@ type Report struct {
 	RekorAnchor   RekorAnchorCheck `json:"rekor_anchor"`
 	LeafBinding   LeafBindingCheck `json:"leaf_binding"`
 	NrepSignature NrepCheck        `json:"nrep_signature"`
+	RuntimeTiming TimingCheck      `json:"runtime_timing"`
 	AllPassed     bool             `json:"all_passed"`
 	HasScaffold   bool             `json:"has_scaffold"`
 	ScaffoldList  []string         `json:"scaffold_list,omitempty"`
@@ -524,7 +525,8 @@ func verify(b *artifacts.AuditBundle) *Report {
 	// line a bundle naming a genuine but unrelated Rekor entry passes
 	// every check in this tool.
 	r.LeafBinding = verifyLeafBinding(b)
-	r.NrepSignature = verifyNrepSignature(b)
+	r.NrepSignature = verifyNrepSignature(b, r.LeafBinding)
+	r.RuntimeTiming = verifyRuntimeTiming(b)
 
 	// Roll-up.
 	allPassed := r.BundleHashOK
@@ -562,6 +564,11 @@ func verify(b *artifacts.AuditBundle) *Report {
 	// signal of the same rank as a mismatched leaf: a failure, never
 	// an advisory note.
 	if r.NrepSignature.Performed && !r.NrepSignature.Match {
+		allPassed = false
+	}
+	// A timing digest that does not match the durations it claims to
+	// seal is tampering or corruption, a failure either way.
+	if r.RuntimeTiming.Performed && !r.RuntimeTiming.Match {
 		allPassed = false
 	}
 	r.AllPassed = allPassed
@@ -738,6 +745,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	printRekorAnchor(r.RekorAnchor, b.RekorAnchor.LogEntryID)
 	printLeafBinding(r.LeafBinding)
 	printNrepCheck(r.NrepSignature)
+	printTimingCheck(r.RuntimeTiming)
 	fmt.Println()
 
 	switch {

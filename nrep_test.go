@@ -43,7 +43,7 @@ func signedBundle(t *testing.T) (*artifacts.AuditBundle, ed25519.PrivateKey) {
 
 func TestNrepSignatureVerifies(t *testing.T) {
 	b, _ := signedBundle(t)
-	c := verifyNrepSignature(b)
+	c := verifyNrepSignature(b, LeafBindingCheck{})
 	if !c.Performed || !c.Match {
 		t.Fatalf("genuine signature should verify: %+v", c)
 	}
@@ -57,7 +57,7 @@ func TestNrepFlippedSignatureFails(t *testing.T) {
 	raw, _ := base64.StdEncoding.DecodeString(b.Nrep.Signature)
 	raw[0] ^= 0x01
 	b.Nrep.Signature = base64.StdEncoding.EncodeToString(raw)
-	c := verifyNrepSignature(b)
+	c := verifyNrepSignature(b, LeafBindingCheck{})
 	if !c.Performed || c.Match {
 		t.Fatalf("flipped signature must fail: %+v", c)
 	}
@@ -68,7 +68,7 @@ func TestNrepTamperedSignedAtFails(t *testing.T) {
 	// a backdated or altered signed_at.
 	b, _ := signedBundle(t)
 	b.Nrep.SignedAt = "2026-10-15T17:59:59.000000000Z"
-	c := verifyNrepSignature(b)
+	c := verifyNrepSignature(b, LeafBindingCheck{})
 	if !c.Performed || c.Match {
 		t.Fatalf("tampered signed_at must fail: %+v", c)
 	}
@@ -78,7 +78,7 @@ func TestNrepTamperedAerHashFails(t *testing.T) {
 	// A signature lifted onto a different run's record must not verify.
 	b, _ := signedBundle(t)
 	b.FinalVFA.AerHash = "0000000000000000000000000000000000000000000000000000000000000000"
-	c := verifyNrepSignature(b)
+	c := verifyNrepSignature(b, LeafBindingCheck{})
 	if !c.Performed || c.Match {
 		t.Fatalf("signature over a different aer_hash must fail: %+v", c)
 	}
@@ -91,7 +91,7 @@ func TestNrepWrongKeyFails(t *testing.T) {
 		t.Fatalf("generate key: %v", err)
 	}
 	b.Nrep.PublicKey = base64.StdEncoding.EncodeToString(otherPub)
-	c := verifyNrepSignature(b)
+	c := verifyNrepSignature(b, LeafBindingCheck{})
 	if !c.Performed || c.Match {
 		t.Fatalf("signature against the wrong key must fail: %+v", c)
 	}
@@ -101,7 +101,7 @@ func TestNrepEmptySectionIsNotAFailure(t *testing.T) {
 	b := &artifacts.AuditBundle{}
 	b.Envelope.EnvelopeID = "env-x"
 	b.FinalVFA.AerHash = "aa"
-	c := verifyNrepSignature(b)
+	c := verifyNrepSignature(b, LeafBindingCheck{})
 	if c.Performed {
 		t.Fatalf("empty section must report no claim, not a verdict: %+v", c)
 	}
@@ -110,7 +110,7 @@ func TestNrepEmptySectionIsNotAFailure(t *testing.T) {
 func TestNrepPartialSectionFails(t *testing.T) {
 	b, _ := signedBundle(t)
 	b.Nrep.PublicKey = ""
-	c := verifyNrepSignature(b)
+	c := verifyNrepSignature(b, LeafBindingCheck{})
 	if !c.Performed || c.Match {
 		t.Fatalf("partial section must fail: %+v", c)
 	}
@@ -128,7 +128,7 @@ func TestNrepGoldenBundlePredatesSignedAt(t *testing.T) {
 	if b.Nrep.SignedAt != "" {
 		t.Skip("golden bundle gained signed_at; this legacy-state test no longer applies")
 	}
-	c := verifyNrepSignature(b)
+	c := verifyNrepSignature(b, LeafBindingCheck{})
 	if c.Performed {
 		t.Fatalf("pre-signed_at bundle must report not-verifiable, got a verdict: %+v", c)
 	}
@@ -163,7 +163,7 @@ func TestNrepForgedSectionIsConsistentNotIdentity(t *testing.T) {
 		Signature: base64.StdEncoding.EncodeToString(sig),
 		SignedAt:  forgedClock,
 	}
-	c := verifyNrepSignature(b)
+	c := verifyNrepSignature(b, LeafBindingCheck{})
 	if !c.Performed || !c.Match {
 		t.Fatalf("forged-but-self-consistent section is expected to pass consistency: %+v", c)
 	}

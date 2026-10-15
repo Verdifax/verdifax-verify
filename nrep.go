@@ -70,10 +70,11 @@ type NrepCheck struct {
 	ActorID   string `json:"actor_id,omitempty"`
 	Reason    string `json:"reason,omitempty"`
 
-	// KeyPinned and Sealed are both false in every bundle this
-	// version can see; they exist so the JSON shape is stable when
-	// registry pinning and section sealing land, and so no consumer
-	// can misread Match=true as identity assurance in the meantime.
+	// KeyPinned stays false until registry pinning lands. Sealed is
+	// true when a version-3 anchored leaf, embedding this section's
+	// recomputed digest, matched: the section can then no longer be
+	// replaced offline. Sealed consistency is still not identity;
+	// that upgrade needs the key pinned.
 	KeyPinned bool `json:"key_pinned"`
 	Sealed    bool `json:"sealed"`
 }
@@ -81,7 +82,11 @@ type NrepCheck struct {
 // verifyNrepSignature checks the bundle's nrep section against the
 // bundle's own envelope_id and aer_hash. See the file comment for the
 // four states.
-func verifyNrepSignature(b *artifacts.AuditBundle) NrepCheck {
+// verifyNrepSignature takes the leaf-binding verdict so it can report
+// the sealed state honestly: Sealed is true only when a version-3
+// leaf, whose preimage embeds the actor-section digest recomputed
+// from this very section, matched the anchored leaf hash.
+func verifyNrepSignature(b *artifacts.AuditBundle, leaf LeafBindingCheck) NrepCheck {
 	sec := b.Nrep
 
 	if sec.ActorID == "" && sec.PublicKey == "" && sec.Signature == "" {
@@ -134,7 +139,8 @@ func verifyNrepSignature(b *artifacts.AuditBundle) NrepCheck {
 		return NrepCheck{Performed: true, Match: false, ActorID: sec.ActorID,
 			Reason: "signature does not verify over this run's envelope_id and aer_hash"}
 	}
-	return NrepCheck{Performed: true, Match: true, ActorID: sec.ActorID}
+	sealed := leaf.Performed && leaf.Match && leaf.Form == leafDomainV3
+	return NrepCheck{Performed: true, Match: true, ActorID: sec.ActorID, Sealed: sealed}
 }
 
 // nrepPreimage is a byte-identical port of the producing side's
@@ -159,6 +165,8 @@ func nrepPreimage(envelopeID, aerHash, actorID, runClock string) []byte {
 // human-readable report, one line per state.
 func printNrepCheck(c NrepCheck) {
 	switch {
+	case c.Performed && c.Match && c.Sealed:
+		fmt.Printf("  Actor signature:  consistent and SEALED to the anchor · %s (key not pinned; identity still not established)\n", c.ActorID)
 	case c.Performed && c.Match:
 		fmt.Printf("  Actor signature:  consistent · %s (key not pinned; section not sealed, identity NOT established)\n", c.ActorID)
 	case c.Performed && !c.Match:
