@@ -52,7 +52,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.6.3"
+const Version = "0.7.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -97,6 +97,7 @@ type Report struct {
 	Seals         []SealCheck      `json:"seal_references"`
 	RekorAnchor   RekorAnchorCheck `json:"rekor_anchor"`
 	LeafBinding   LeafBindingCheck `json:"leaf_binding"`
+	NrepSignature NrepCheck        `json:"nrep_signature"`
 	AllPassed     bool             `json:"all_passed"`
 	HasScaffold   bool             `json:"has_scaffold"`
 	ScaffoldList  []string         `json:"scaffold_list,omitempty"`
@@ -415,7 +416,7 @@ func verify(b *artifacts.AuditBundle) *Report {
 		mk("aer", b.AER.Hash, artifacts.RecomputeAERHash(b.AER), false),
 		mk("transcript", b.Transcript.Hash, artifacts.RecomputeTranscriptHash(b.Transcript), b.Transcript.Scaffold.IsScaffold),
 		mk("hardware_attestation", b.HardwareAttestation.Hash, artifacts.RecomputeHardwareAttestationHash(b.HardwareAttestation), b.HardwareAttestation.Scaffold.IsScaffold),
-		mk("leakage_bundle", b.LeakageBundle.Hash, artifacts.RecomputeLeakageBundleHash(b.LeakageBundle), false),
+		mk("leakage_bundle", b.LeakageBundle.Hash, artifacts.RecomputeLeakageBundleHash(b.LeakageBundle), b.LeakageBundle.Scaffold.IsScaffold),
 		mk("zksp_binding", b.ZkspBinding.Hash, artifacts.RecomputeZkspBindingHash(b.ZkspBinding), b.ZkspBinding.Scaffold.IsScaffold),
 		mk("migration_token", b.MigrationToken.Hash, artifacts.RecomputeMigrationTokenHash(b.MigrationToken), false),
 		mk("replay_fingerprint", b.ReplayFingerprint.Hash, artifacts.RecomputeReplayFingerprintHash(b.ReplayFingerprint), false),
@@ -523,6 +524,7 @@ func verify(b *artifacts.AuditBundle) *Report {
 	// line a bundle naming a genuine but unrelated Rekor entry passes
 	// every check in this tool.
 	r.LeafBinding = verifyLeafBinding(b)
+	r.NrepSignature = verifyNrepSignature(b)
 
 	// Roll-up.
 	allPassed := r.BundleHashOK
@@ -554,6 +556,12 @@ func verify(b *artifacts.AuditBundle) *Report {
 	// beside a passing verdict would be the same defect as filing a
 	// finding under "what this report does not show".
 	if r.LeafBinding.Performed && !r.LeafBinding.Match {
+		allPassed = false
+	}
+	// A claimed actor binding that does not validate is a forgery
+	// signal of the same rank as a mismatched leaf: a failure, never
+	// an advisory note.
+	if r.NrepSignature.Performed && !r.NrepSignature.Match {
 		allPassed = false
 	}
 	r.AllPassed = allPassed
@@ -729,6 +737,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	fmt.Println("SIGSTORE REKOR ANCHOR")
 	printRekorAnchor(r.RekorAnchor, b.RekorAnchor.LogEntryID)
 	printLeafBinding(r.LeafBinding)
+	printNrepCheck(r.NrepSignature)
 	fmt.Println()
 
 	switch {

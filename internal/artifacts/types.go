@@ -238,6 +238,12 @@ type LeakageBundle struct {
 	ConstantTimeCompliant  bool           `json:"constant_time_compliant"`
 	TimingVarianceObserved bool           `json:"timing_variance_observed"`
 	Mitigations            []string       `json:"mitigations"`
+	// Scaffold flags the two booleans as design declarations of the
+	// deterministic scheduler rather than per-run measurements.
+	// Present in bundles sealed from orchestrator b604027 on; the
+	// zero value in older bundles simply renders no flag. Outside
+	// the section's canonical hash, like ZKSP's note.
+	Scaffold               ScaffoldNote   `json:"scaffold"`
 	Hash                   string         `json:"hash"`
 	Seal                   SealReference  `json:"seal"`
 }
@@ -489,10 +495,18 @@ type NrepSection struct {
 
 	// Signature is base64-std of the 64-byte Ed25519 signature over
 	// "verdifax.nrep.v1" || envelope_id || aer_hash || actor_id ||
-	// run_clock. Verifiable using internal/nrep.Verify with the
-	// PublicKey above and the bundle's envelope_id + aer_hash.
-	// Empty when ActorID is empty.
+	// run_clock. Verified by this tool's verifyNrepSignature using
+	// the PublicKey above, the bundle's envelope_id + aer_hash, and
+	// SignedAt below as the run_clock. Empty when ActorID is empty.
 	Signature string `json:"signature"`
+
+	// SignedAt is the run_clock the signature covers, preserved
+	// verbatim so the preimage can be rebuilt offline. The signature
+	// itself binds it, so tampering here fails verification rather
+	// than any hash. Empty in bundles sealed before the field
+	// shipped; those signatures are real but not offline-verifiable,
+	// and the check reports that state distinctly from pass or fail.
+	SignedAt string `json:"signed_at,omitempty"`
 }
 
 // AivpT4Section is the audit-bundle representation of one AIVP-T4

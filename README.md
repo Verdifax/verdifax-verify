@@ -85,6 +85,21 @@ bundle citing a real Rekor entry belonging to a different run satisfied
 both and verified cleanly. It now fails, and the failure is a failure,
 not an advisory line.
 
+**Also proves, since v0.7.0:** that a bundle claiming an actor identity
+carries a genuine Ed25519 signature over *this run's* `envelope_id` and
+`aer_hash`, checked against the public key sealed in the bundle's
+`nrep` section. An external review (2026-10-15) correctly pointed out
+that earlier versions carried the signature but never checked it; now a
+claimed actor binding that does not validate fails the verification
+outright. Bundles sealed before the `signed_at` field shipped carry
+real signatures whose preimage cannot be rebuilt offline; the report
+says so explicitly rather than counting them as passed. Note the honest
+boundary: the key is the one the bundle itself presents, so the check
+proves the record was signed by the key it names and binds the
+signature to this exact run; tying that key to a real-world identity
+still requires the orchestrator's actor-identity endpoint or your own
+key registry.
+
 **Does not prove:** that the underlying execution actually happened on
 Verdifax-operated hardware. Anchoring establishes that a bundle existed
 and was publicly committed at a point in time; it does not establish
