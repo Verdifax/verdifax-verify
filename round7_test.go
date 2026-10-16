@@ -84,7 +84,7 @@ func fixedTestLog(t *testing.T) *testLog {
 		t.Fatalf("marshal test log key: %v", err)
 	}
 	sum := sha256.Sum256(der)
-	return &testLog{key: k, logID: hex.EncodeToString(sum[:])}
+	return &testLog{key: k, logID: hex.EncodeToString(sum[:]), signer: testSigner(t)}
 }
 
 // anchorRun puts b's run leaf on log l as its first entry, exactly as
@@ -96,6 +96,7 @@ func anchorRun(t *testing.T, l *testLog, b *artifacts.AuditBundle) {
 	a.Backend, a.LogID, a.EntryBody = "rekor", e.LogID, e.EntryBody
 	a.LogIndex, a.TreeSize, a.RootHashHex = e.LogIndex, e.TreeSize, e.RootHashHex
 	a.InclusionPath, a.Checkpoint = e.InclusionPath, e.Checkpoint
+	a.LogEntryID, a.IntegratedTime, a.SignedEntryTimestamp = e.LogEntryID, e.IntegratedTime, e.SignedEntryTimestamp
 }
 
 // v6Leaf rebuilds the v6 leaf from the record's own fields.

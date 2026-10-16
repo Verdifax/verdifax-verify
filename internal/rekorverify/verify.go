@@ -57,6 +57,7 @@ package rekorverify
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
@@ -128,7 +129,24 @@ type AnchorInput struct {
 	// key. Used as a sanity check: the verifier confirms the embedded
 	// public key's hash matches this LogID.
 	LogID string
+
+	// LogEntryID is the entry's GLOBAL index across Rekor shards (the
+	// number search.sigstore.dev shows), IntegratedTime the Unix time
+	// Rekor recorded the entry, and SignedEntryTimestamp Rekor's
+	// signature over (body, integratedTime, logID, global index). The
+	// SET is what authenticates the time and the global index: without
+	// it both are display values anyone can edit (round seven of the
+	// external review). It is required.
+	LogEntryID           string
+	IntegratedTime       int64
+	SignedEntryTimestamp string
 }
+
+// ErrNoSignedEntryTimestamp reports an anchor without Rekor's signed
+// entry timestamp, so its anchoring time and global index are not
+// authenticated.
+var ErrNoSignedEntryTimestamp = errors.New("rekorverify: anchor carries no signed_entry_timestamp, " +
+	"so its anchoring time and entry number are not authenticated")
 
 // VerifyAnchor performs full offline verification of a Rekor anchor:
 // the inclusion proof shape, the recomputed Merkle root, and the
@@ -245,7 +263,101 @@ func VerifyAnchorWithKey(in AnchorInput, rekorPubKey *ecdsa.PublicKey) error {
 			in.LogID, expectedLogID)
 	}
 
+	// 6. Verify the signed entry timestamp, which authenticates the
+	// anchoring time and the global entry index under the same log key.
+	if setErr := verifySignedEntryTimestamp(in, expectedLogID, rekorPubKey); setErr != nil {
+		return setErr
+	}
+
 	return nil
+}
+
+// setPayload is the object Rekor signs to produce a signed entry
+// timestamp. Field order is the canonical (sorted) key order Rekor
+// signs, and every value is plain ASCII (base64, hex, integers), so
+// encoding/json reproduces the canonical bytes exactly.
+type setPayload struct {
+	Body           string `json:"body"`
+	IntegratedTime int64  `json:"integratedTime"`
+	LogID          string `json:"logID"`
+	LogIndex       int64  `json:"logIndex"`
+}
+
+// verifySignedEntryTimestamp checks Rekor's ECDSA signature over the
+// entry body, integrated time, log id and GLOBAL index. A pass means
+// all four are exactly what Rekor recorded; an edit to any of them,
+// or a SET lifted from another entry, fails.
+func verifySignedEntryTimestamp(in AnchorInput, logIDHex string, rekorPubKey *ecdsa.PublicKey) error {
+	if in.SignedEntryTimestamp == "" {
+		return ErrNoSignedEntryTimestamp
+	}
+	globalIndex, parseErr := strconv.ParseInt(strings.TrimSpace(in.LogEntryID), 10, 64)
+	if parseErr != nil || globalIndex < 0 {
+		return fmt.Errorf("rekorverify: log_entry_id %q is not a global entry index", in.LogEntryID)
+	}
+	payload, marshalErr := json.Marshal(setPayload{
+		Body:           in.EntryBody,
+		IntegratedTime: in.IntegratedTime,
+		LogID:          strings.ToLower(logIDHex),
+		LogIndex:       globalIndex,
+	})
+	if marshalErr != nil {
+		return fmt.Errorf("rekorverify: encode signed entry timestamp payload: %w", marshalErr)
+	}
+	sig, decodeErr := base64.StdEncoding.DecodeString(in.SignedEntryTimestamp)
+	if decodeErr != nil {
+		return fmt.Errorf("rekorverify: signed_entry_timestamp base64 decode: %w", decodeErr)
+	}
+	digest := sha256.Sum256(payload)
+	if !ecdsa.VerifyASN1(rekorPubKey, digest[:], sig) {
+		return errors.New("rekorverify: signed entry timestamp does not verify under the log key: " +
+			"the anchoring time, entry number or entry body is not what the log recorded")
+	}
+	return nil
+}
+
+// EntrySigner identifies who submitted a hashedrekord entry. It decodes
+// the entry's public key, requires ECDSA P-256 (the only key type the
+// Verdifax producer uses), verifies the entry's signature over the
+// logged sha256 digest, and returns the hex SHA-256 of the key's DER
+// SubjectPublicKeyInfo. Rekor accepts entries from anyone with any
+// key; the caller decides which fingerprints it trusts.
+func EntrySigner(body []byte) (string, error) {
+	// Library error model: every failure is returned to the caller,
+	// which reports it verbatim; this package has no logger.
+	var e hashedRekordBody
+	if unmarshalErr := json.Unmarshal(body, &e); unmarshalErr != nil {
+		return "", fmt.Errorf("rekorverify: entry_body is not a JSON Rekor entry: %w", unmarshalErr)
+	}
+	pemBytes, pemErr := base64.StdEncoding.DecodeString(e.Spec.Signature.PublicKey.Content)
+	if pemErr != nil {
+		return "", fmt.Errorf("rekorverify: entry public key base64 decode: %w", pemErr)
+	}
+	block, _ := pem.Decode(pemBytes)
+	if block == nil || block.Type != "PUBLIC KEY" {
+		return "", errors.New("rekorverify: entry public key is not a PEM PUBLIC KEY")
+	}
+	parsed, parseErr := x509.ParsePKIXPublicKey(block.Bytes)
+	if parseErr != nil {
+		return "", fmt.Errorf("rekorverify: entry public key: %w", parseErr)
+	}
+	pub, ok := parsed.(*ecdsa.PublicKey)
+	if !ok || pub.Curve != elliptic.P256() {
+		return "", errors.New("rekorverify: entry public key is not ECDSA P-256")
+	}
+	digest, hexErr := hex.DecodeString(e.Spec.Data.Hash.Value)
+	if hexErr != nil || len(digest) != sha256.Size {
+		return "", errors.New("rekorverify: entry hash is not a 64-char hex SHA-256")
+	}
+	sig, sigErr := base64.StdEncoding.DecodeString(e.Spec.Signature.Content)
+	if sigErr != nil {
+		return "", fmt.Errorf("rekorverify: entry signature base64 decode: %w", sigErr)
+	}
+	if !ecdsa.VerifyASN1(pub, digest, sig) {
+		return "", errors.New("rekorverify: entry signature does not verify under the entry's own public key")
+	}
+	fp := sha256.Sum256(block.Bytes)
+	return hex.EncodeToString(fp[:]), nil
 }
 
 // hashedRekordBody is the subset of a hashedrekord v0.0.1 entry body
@@ -260,6 +372,12 @@ type hashedRekordBody struct {
 				Value     string `json:"value"`
 			} `json:"hash"`
 		} `json:"data"`
+		Signature struct {
+			Content   string `json:"content"`
+			PublicKey struct {
+				Content string `json:"content"`
+			} `json:"publicKey"`
+		} `json:"signature"`
 	} `json:"spec"`
 }
 

@@ -15,7 +15,10 @@ section of the record; bundles without one have their descriptive
 sections sealed inside the bundle only. From v0.11.0, records sealed with
 the version-6 leaf state inside their anchored values that a
 complete-record anchor must exist, so deleting it makes the record FAIL
-instead of reading as partial coverage. See
+instead of reading as partial coverage. From v0.12.0, every public-log
+entry must be logged by a published Verdifax log-signing key, and its
+anchoring time and entry number are authenticated by the log's signed
+entry timestamp. See
 [What this verifier proves](#what-this-verifier-proves-and-doesnt-prove). The manifest hash
 itself is not recomputed here: its preimage includes fields held only
 in the orchestrator's stored manifest, which the orchestrator re-derives
@@ -26,7 +29,11 @@ bundle file, this binary decides whether the evidence is internally
 consistent. Verification itself makes no network calls, needs no
 Verdifax credentials, and places no trust in the Verdifax API server:
 the Sigstore Rekor inclusion proof is checked offline against a Rekor
-public key embedded in the binary. The one network operation is
+public key embedded in the binary, and the entries' signers against the
+published Verdifax log-signing keys also embedded in it
+([Log-signing keys](#log-signing-keys)). That makes those keys, which
+Verdifax holds, part of what a passing verdict relies on. The one
+network operation is
 optional input retrieval: passing an `http://` or `https://` URL instead
 of a file path makes the binary fetch the bundle with a single GET
 request (30 second timeout, 32 MiB cap) before verifying it exactly as
@@ -232,6 +239,43 @@ on such a record as a failure; the leaf form appears in the JSON report
 as `leaf_binding.preimage_form` and the requirement as
 `complete_record_requirement`.
 
+**Also proves, since v0.12.0:** who logged each public-log entry, and
+when. The round-seven review (2026-10-16) showed that every earlier
+release read only an entry's kind and hash. Rekor accepts a hashedrekord
+entry from anyone with any key, so a forger could rewrite a record,
+recompute every digest, log the new leaves under a key of their own,
+and the record verified as `COMPLETE RECORD ANCHORED` with exit code 0.
+The anchoring time, the entry number and the signed entry timestamp
+were stored but never checked, so a re-logged forgery could display
+the original ones. v0.12.0 closes both:
+
+- **Who.** The verifier decodes each entry's public key, verifies the
+  entry's ECDSA P-256 signature over the logged digest, and requires
+  the key to be a pinned Verdifax log-signing key, accepted only within
+  its published period. A run's two entries must share one signer.
+- **When.** The verifier checks Rekor's signed entry timestamp on each
+  entry under the embedded Rekor key. It signs the entry body, the
+  integrated time, the log id and the global entry index together, so
+  all four are authenticated; editing any of them fails. The record
+  entry may not predate the run entry.
+- **Window.** Records sealed with pre-anchor table version 3 (leaf v7)
+  carry one more anchored row, `anchoring_window_seconds`, and the
+  verifier requires both entries to have been logged within that many
+  seconds after the run's sealed `clock_epoch` (allowing five minutes
+  of clock skew before it). Removing or changing the row breaks the
+  first entry. This is what catches a later re-log by the holder of the
+  signing key, Verdifax included: Rekor records the later time, and
+  moving `clock_epoch` to match changes the record's own sealed date,
+  so the record can no longer claim its original time.
+
+Records sealed before table version 3 have no sealed window. The
+verifier still authenticates who logged them and when, and reports the
+gap between the anchoring time and the run's clock, but cannot fail
+them on it: for those records a re-log by the key holder would show
+only as a larger gap. The reviewer's tests are kept in `round8_test.go`
+and a sweep over every field of an intact record finds none that can
+change without breaking it.
+
 **Also checks, since v0.10.0:** that each logged entry body names the
 leaf the bundle claims for it. The Merkle proof covers the hashedrekord
 entry body, not the bundle's `leaf_hash`, so the verifier now requires
@@ -243,7 +287,13 @@ reach the anchored verdict. Bundles served by the Verdifax API carry the
 body; older stored bundles are backfilled on read wherever the stored
 manifest holds it.
 
-**Does not prove:** that the underlying execution actually happened on
+**Does not prove:** that Verdifax did not seal a record with false
+inputs in the first place, or re-log a changed record later. Pinning
+shows a Verdifax key logged the record; the sealed window shows when.
+A record re-logged by Verdifax inside the window it seals, or re-logged
+later with a moved clock, verifies, and only a party holding the
+original record (or watching the public log, where both entries stay
+forever) can tell. Nor does it prove that the underlying execution actually happened on
 Verdifax-operated hardware. Anchoring establishes that a bundle existed
 and was publicly committed at a point in time; it does not establish
 that the computation behind it was honest. An orchestrator that
@@ -255,7 +305,71 @@ attestation, which is currently a scaffold value; see
 The `log_entry_id` field remains searchable on `search.sigstore.dev` if
 you would rather confirm the entry by hand than trust this binary.
 
+## Log-signing keys
+
+Every public-log entry Verdifax makes is a Rekor `hashedrekord` signed
+with one of these ECDSA P-256 keys. The fingerprint is the hex SHA-256
+of the key's DER SubjectPublicKeyInfo. The verifier embeds both
+(`entryauth.go`) and checks the fingerprints when it starts.
+
+**Key 1**, the production orchestrator at `api.verdifax.com`. It has
+signed every public Verdifax entry from the first (2026-05-13) on and
+has never been rotated. Custody: the private key is a file on the
+production API server's volume, not in a hardware security module.
+Accepted at any time.
+
+    fingerprint 0822255b6c085f394088d1ce4142dc927941789be75faf084d163059551000b7
+    -----BEGIN PUBLIC KEY-----
+    MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEsgyMROAY9glbF1VAFeKzSG7xN2Vg
+    pIA8djKUggfjIOOLQ25gtyrQNUk2JLbDvOM015SmWZyoB8cPG0LdO/0SSA==
+    -----END PUBLIC KEY-----
+
+**Key 2**, generated on the AWS SEV-SNP instance that produced the
+October 2026 hardware evidence run. It signed that run's single entry
+(2026-10-03T15:00:47Z) and existed only on that instance, which was
+destroyed after the run. Accepted only within one hour of that entry,
+so it cannot vouch for anything logged later.
+
+    fingerprint 16349c23103f9bd5fd59f0be45e199540e430ab02587e497f96856817d47fe0a
+    -----BEGIN PUBLIC KEY-----
+    MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtn//E+NR9JsyD5ssGshpIceKCMBo
+    SjGPIXP3UGH1hTsdwx+uYHNJ5a0b6nsdiIf+Z0a4L5LWvfEQF1p8kev6Sw==
+    -----END PUBLIC KEY-----
+
+A new key will be added here, with the date it took effect, before any
+entry it signs; a retired key keeps its entries verifiable and is given
+an end date.
+
 ## Release notes
+
+### v0.12.0: who logged an entry, and when
+
+Pins the Verdifax log-signing keys, verifies every entry's signature and
+Rekor's signed entry timestamp, requires a run's two entries to share
+one signer with the record entry no older than the run entry, and adds
+pre-anchor table version 3 and the version-7 leaf with a sealed
+anchoring window, as described under
+[What this verifier proves](#what-this-verifier-proves-and-doesnt-prove).
+The JSON report gains `entry_authentication` (`signer_fingerprint`,
+`signer_name`, `run_anchored_at`, `record_anchored_at`, `clock_epoch`,
+`anchor_gap_seconds`, `window_sealed`, `anchoring_window_seconds`,
+`reason`), and the human report gains `Logged by`, `Logged at` and
+`Anchoring window` lines.
+
+Every public Verdifax record verified under v0.11.0 keeps its verdict
+under v0.12.0: all 48 entries of the 46 public records on
+`api.verdifax.com` are signed by key 1 with valid signed entry
+timestamps. One published record did not: the hardware evidence bundle
+on verdifax.com stored the entry's shard position (2953123752) where the
+global entry number (3075028014) belongs, so its signed entry timestamp
+could not verify. A repaired copy, with only `rekor_anchor.log_entry_id`
+and `rekor_anchor.signed_entry_timestamp` taken from the public log, is
+in `testdata/round8/` and verifies.
+
+Upgrade before relying on any record: v0.11.0 and earlier accept a
+record re-logged under any key, and do not know table version 3, so
+they report every genuine leaf v7 record as FAILED (the table has 35
+rows where they expect 34).
 
 ### v0.11.0: deleting the complete-record anchor is detectable
 

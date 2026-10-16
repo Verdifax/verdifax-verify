@@ -74,7 +74,10 @@ func verifyPreAnchor(b *artifacts.AuditBundle) PreAnchorCheck {
 	// row sits, so a misplaced row fails here instead of passing as v1.
 	form := artifacts.PreAnchorTableForm(b.PreAnchor)
 	names := artifacts.PreAnchorNames
-	if form == artifacts.PreAnchorFormV2 {
+	switch form {
+	case artifacts.PreAnchorFormV3:
+		names = artifacts.PreAnchorNamesV3
+	case artifacts.PreAnchorFormV2:
 		names = artifacts.PreAnchorNamesV2
 	}
 	if len(b.PreAnchor) != len(names) {
@@ -98,6 +101,17 @@ func verifyPreAnchor(b *artifacts.AuditBundle) PreAnchorCheck {
 	if v, ok := table[artifacts.CompleteRecordAnchorRow]; ok && v != artifacts.CompleteRecordAnchorRequired {
 		fail("%s is %q, the only defined value is %q",
 			artifacts.CompleteRecordAnchorRow, safePrefix(v), artifacts.CompleteRecordAnchorRequired)
+	}
+
+	// The window row must be a whole number of seconds the verifier
+	// can enforce. A value it cannot read is not a looser window; it
+	// is a table this verifier does not know, and it fails.
+	if v, ok := table[artifacts.AnchoringWindowRow]; ok {
+		// Error model: the parse error becomes the reported failure;
+		// this binary has no logger.
+		if _, windowErr := parseAnchoringWindow(v); windowErr != nil {
+			fail("%s is %q: %v", artifacts.AnchoringWindowRow, safePrefix(v), windowErr)
+		}
 	}
 
 	// 2. ANCHOR (digest level; the leaf itself is leafbinding's job).
@@ -183,6 +197,9 @@ func safePrefix(s string) string {
 
 func printPreAnchor(c PreAnchorCheck) {
 	switch {
+	case c.Performed && c.Match && c.Form == artifacts.PreAnchorFormV3:
+		fmt.Printf("  Pre-anchor table: %d values anchored and consistent with the record,\n", c.Rows)
+		fmt.Println("                    including the complete-record requirement and the anchoring window (table v3)")
 	case c.Performed && c.Match && c.Form == artifacts.PreAnchorFormV2:
 		fmt.Printf("  Pre-anchor table: %d values anchored and consistent with the record,\n", c.Rows)
 		fmt.Println("                    including the requirement for a complete-record anchor (table v2)")

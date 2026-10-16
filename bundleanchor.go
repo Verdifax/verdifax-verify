@@ -129,6 +129,10 @@ func verifyBundleAnchor(b *artifacts.AuditBundle) BundleAnchorCheck {
 		InclusionPath: a.InclusionPath,
 		Checkpoint:    a.Checkpoint,
 		LogID:         a.LogID,
+
+		LogEntryID:           a.LogEntryID,
+		IntegratedTime:       a.IntegratedTime,
+		SignedEntryTimestamp: a.SignedEntryTimestamp,
 	})
 	if anchorErr != nil {
 		return fail("the second public-log entry does not verify: " + anchorErr.Error())
@@ -199,7 +203,7 @@ func verifyCompleteRecordRequirement(b *artifacts.AuditBundle, ba BundleAnchorCh
 func printCompleteRecordRequirement(c CompleteRecordRequirementCheck, tablePresent bool) {
 	switch {
 	case c.Sealed && c.Satisfied:
-		fmt.Println("  Anchor required:  sealed in the anchored table (leaf v6) and satisfied")
+		fmt.Println("  Anchor required:  sealed in the anchored table (leaf v6 or later) and satisfied")
 	case c.Sealed:
 		fmt.Printf("  Anchor required:  ✗ FAILED · %s\n", c.Reason)
 	case tablePresent:

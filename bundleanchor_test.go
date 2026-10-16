@@ -34,6 +34,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -73,6 +74,36 @@ func loadRound6(t *testing.T, name string) *artifacts.AuditBundle {
 type testLog struct {
 	key   *ecdsa.PrivateKey
 	logID string
+	// signer is the key the test producer logs entries with, standing
+	// in for the Verdifax log-signing key; install pins it.
+	signer *ecdsa.PrivateKey
+	// integratedTime is the time the log records for new entries
+	// (0 means a fixed default).
+	integratedTime int64
+}
+
+// testSigner derives a deterministic entry-signing key, so fixtures
+// stay verifiable across runs. TEST USE ONLY: the scalar is public.
+func testSigner(t *testing.T) *ecdsa.PrivateKey {
+	t.Helper()
+	seed := sha256.Sum256([]byte("verdifax-verify test entry signer, test use only"))
+	k, err := ecdsa.ParseRawPrivateKey(elliptic.P256(), seed[:])
+	if err != nil {
+		t.Fatalf("derive test signer: %v", err)
+	}
+	return k
+}
+
+// signerFingerprint is the hex SHA-256 of a key's DER SPKI, the form
+// pinnedEntrySigners is keyed by.
+func signerFingerprint(t *testing.T, k *ecdsa.PrivateKey) string {
+	t.Helper()
+	der, err := x509.MarshalPKIXPublicKey(&k.PublicKey)
+	if err != nil {
+		t.Fatalf("marshal signer: %v", err)
+	}
+	sum := sha256.Sum256(der)
+	return hex.EncodeToString(sum[:])
 }
 
 func newTestLog(t *testing.T) *testLog {
@@ -86,7 +117,7 @@ func newTestLog(t *testing.T) *testLog {
 		t.Fatalf("marshal log key: %v", err)
 	}
 	sum := sha256.Sum256(der)
-	return &testLog{key: k, logID: hex.EncodeToString(sum[:])}
+	return &testLog{key: k, logID: hex.EncodeToString(sum[:]), signer: testSigner(t)}
 }
 
 // install routes anchors naming this log's id to its key and every
@@ -100,7 +131,56 @@ func (l *testLog) install(t *testing.T) {
 		}
 		return rekorverify.VerifyAnchor(in)
 	}
-	t.Cleanup(func() { rekorAnchorVerifier = prev })
+	// Pin the test producer's key beside the published Verdifax keys,
+	// exactly as a published key is pinned.
+	prevSigners := pinnedEntrySigners
+	pinned := make(map[string]pinnedSigner, len(prevSigners)+1)
+	for fp, k := range prevSigners {
+		pinned[fp] = k
+	}
+	pinned[signerFingerprint(t, l.signer)] = pinnedSigner{Name: "test entry signer"}
+	pinnedEntrySigners = pinned
+	t.Cleanup(func() {
+		rekorAnchorVerifier = prev
+		pinnedEntrySigners = prevSigners
+	})
+}
+
+// signedHashedRekordBody is a hashedrekord body for leafHex whose
+// signature and public key belong to signer, as a real producer's do.
+func signedHashedRekordBody(t *testing.T, leafHex string, signer *ecdsa.PrivateKey) []byte {
+	t.Helper()
+	der, err := x509.MarshalPKIXPublicKey(&signer.PublicKey)
+	if err != nil {
+		t.Fatalf("marshal signer: %v", err)
+	}
+	pubPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})
+	digest, err := hex.DecodeString(leafHex)
+	if err != nil {
+		t.Fatalf("leaf hex: %v", err)
+	}
+	sig, err := ecdsa.SignASN1(rand.Reader, signer, digest)
+	if err != nil {
+		t.Fatalf("sign entry: %v", err)
+	}
+	return []byte(`{"apiVersion":"0.0.1","kind":"hashedrekord","spec":{"data":{"hash":` +
+		`{"algorithm":"sha256","value":"` + leafHex + `"}},"signature":{"content":"` +
+		base64.StdEncoding.EncodeToString(sig) + `","publicKey":{"content":"` +
+		base64.StdEncoding.EncodeToString(pubPEM) + `"}}}}`)
+}
+
+// signedEntryTimestamp is what a log returns as the SET: its signature
+// over the canonical (body, integratedTime, logID, global index).
+func (l *testLog) signedEntryTimestamp(t *testing.T, bodyB64 string, integratedTime int64, globalIndex string) string {
+	t.Helper()
+	payload := fmt.Sprintf(`{"body":%q,"integratedTime":%d,"logID":%q,"logIndex":%s}`,
+		bodyB64, integratedTime, l.logID, globalIndex)
+	sum := sha256.Sum256([]byte(payload))
+	sig, err := ecdsa.SignASN1(rand.Reader, l.key, sum[:])
+	if err != nil {
+		t.Fatalf("sign SET: %v", err)
+	}
+	return base64.StdEncoding.EncodeToString(sig)
 }
 
 func hashedRekordBody(leafHex string) []byte {
@@ -153,7 +233,7 @@ func merklePath(hs [][]byte, i int) [][]byte {
 // and returns a bundle_anchor carrying the proof and checkpoint.
 func (l *testLog) entry(t *testing.T, digest, leafHex string) *artifacts.BundleAnchor {
 	t.Helper()
-	body := hashedRekordBody(leafHex)
+	body := signedHashedRekordBody(t, leafHex, l.signer)
 	const index, size = 5, 7
 	leaves := make([][]byte, size)
 	for i := range leaves {
@@ -179,12 +259,18 @@ func (l *testLog) entry(t *testing.T, digest, leafHex string) *artifacts.BundleA
 	// from its code point so this source file carries no literal dash.
 	checkpoint := note + "\n" + string(rune(0x2014)) + " test-log " + base64.StdEncoding.EncodeToString(blob) + "\n"
 
+	const globalIndex = "123456789005" // deliberately not the shard position
+	bodyB64 := base64.StdEncoding.EncodeToString(body)
+	integrated := l.integratedTime
+	if integrated == 0 {
+		integrated = 1792159600
+	}
 	return &artifacts.BundleAnchor{
 		Kind:                 artifacts.BundleAnchorKind,
 		DigestForm:           artifacts.BundleAnchorDigestForm,
 		AnchoredDigest:       digest,
 		Backend:              "rekor",
-		LogEntryID:           "123456789005", // global index, deliberately not the shard position
+		LogEntryID:           globalIndex,
 		LogID:                l.logID,
 		LeafHashHex:          leafHex,
 		LogIndex:             index,
@@ -192,9 +278,9 @@ func (l *testLog) entry(t *testing.T, digest, leafHex string) *artifacts.BundleA
 		RootHashHex:          hex.EncodeToString(root),
 		InclusionPath:        path,
 		Checkpoint:           checkpoint,
-		SignedEntryTimestamp: "dGVzdC1zZXQ=",
-		IntegratedTime:       1792159600,
-		EntryBody:            base64.StdEncoding.EncodeToString(body),
+		SignedEntryTimestamp: l.signedEntryTimestamp(t, bodyB64, integrated, globalIndex),
+		IntegratedTime:       integrated,
+		EntryBody:            bodyB64,
 	}
 }
 
@@ -270,6 +356,11 @@ func TestRound6IntactRecordWithBundleAnchorIsComplete(t *testing.T) {
 	l := newTestLog(t)
 	l.install(t)
 	b := loadRound6(t, "run-237-intact.json")
+	// Both entries on the test log under one signer, as a producer
+	// makes them. (Run 237's real first entry is signed by Verdifax
+	// key 1, which the test producer cannot sign the second entry with;
+	// that mixed record must fail, see the next test.)
+	anchorRun(t, l, b)
 	anchorRecord(t, l, b)
 
 	r := verify(b)
@@ -304,6 +395,28 @@ func TestRound6IntactRecordWithBundleAnchorIsComplete(t *testing.T) {
 // Each forgery is replayed carrying the genuine anchor of the intact
 // record: the attacker can rewrite content but cannot re-log the
 // second entry.
+// TestRecordEntryFromAnotherSignerFails is round seven's attack in its
+// simplest form: the run's real first entry, signed by Verdifax key 1,
+// next to a record entry logged by a different key. Before v0.12.0 it
+// verified as COMPLETE RECORD ANCHORED.
+func TestRecordEntryFromAnotherSignerFails(t *testing.T) {
+	l := newTestLog(t)
+	l.install(t)
+	b := loadRound6(t, "run-237-intact.json")
+	anchorRecord(t, l, b)
+
+	r := verify(b)
+	if !r.BundleAnchor.Match {
+		t.Fatalf("the second entry itself is a valid log entry: %+v", r.BundleAnchor)
+	}
+	if r.EntryAuth.Match || !strings.Contains(r.EntryAuth.Reason, "not by") {
+		t.Fatalf("entries with different signers must fail: %+v", r.EntryAuth)
+	}
+	if r.AllPassed || !exitShouldFail(r, false, true) {
+		t.Fatalf("mixed-signer record must FAIL, even with --allow-unanchored: tier=%s", r.VerdictTier)
+	}
+}
+
 func TestRound6EveryRewriteFailsOnceBundleAnchorIsPresent(t *testing.T) {
 	l := newTestLog(t)
 	l.install(t)

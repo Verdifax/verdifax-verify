@@ -64,7 +64,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.11.0"
+const Version = "0.12.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -122,10 +122,14 @@ type Report struct {
 	// whether the record's anchored values require a complete-record
 	// anchor, and whether that requirement holds.
 	CompleteRecordRequirement CompleteRecordRequirementCheck `json:"complete_record_requirement"`
-	CrossChecks               []string                       `json:"cross_check_failures,omitempty"`
-	AllPassed                 bool                           `json:"all_passed"`
-	Anchored                  bool                           `json:"anchored"`
-	VerdictTier               string                         `json:"verdict_tier"`
+	// EntryAuth is who logged the run's public-log entries and when
+	// (v0.12.0): pinned signer, signed entry timestamps, and the sealed
+	// anchoring window on table v3 records.
+	EntryAuth   EntryAuthCheck `json:"entry_authentication"`
+	CrossChecks []string       `json:"cross_check_failures,omitempty"`
+	AllPassed   bool           `json:"all_passed"`
+	Anchored    bool           `json:"anchored"`
+	VerdictTier string         `json:"verdict_tier"`
 	// RecordCoverage says how much of the record the public log binds:
 	// "complete_record_anchored", "partial_descriptive_sections_bundle_sealed",
 	// "partial_pre_v5_identity_only", "not_anchored" or "failed".
@@ -647,6 +651,7 @@ func verify(b *artifacts.AuditBundle) *Report {
 	r.CrossChecks = verifyCrossGeneration(b)
 	r.BundleAnchor = verifyBundleAnchor(b)
 	r.CompleteRecordRequirement = verifyCompleteRecordRequirement(b, r.BundleAnchor)
+	r.EntryAuth = verifyEntryAuthentication(b, r)
 
 	// Roll-up.
 	allPassed := r.BundleHashOK
@@ -702,6 +707,12 @@ func verify(b *artifacts.AuditBundle) *Report {
 	// A complete-record anchor that is present but does not hold is a
 	// rewrite of the record after anchoring: a failure, never a note.
 	if r.BundleAnchor.Present && !r.BundleAnchor.Match {
+		allPassed = false
+	}
+	// An entry logged by a key that is not a pinned Verdifax key, two
+	// entries with different signers, or an entry outside the sealed
+	// anchoring window is a re-logged record: a failure, never a note.
+	if r.EntryAuth.Performed && !r.EntryAuth.Match {
 		allPassed = false
 	}
 	// A record whose own anchored values require a complete-record
@@ -764,6 +775,10 @@ func verifyRekorAnchor(a artifacts.RekorAnchor) RekorAnchorCheck {
 		InclusionPath: a.InclusionPath,
 		Checkpoint:    a.Checkpoint,
 		LogID:         a.LogID,
+
+		LogEntryID:           a.LogEntryID,
+		IntegratedTime:       a.IntegratedTime,
+		SignedEntryTimestamp: a.SignedEntryTimestamp,
 	})
 	if isNoEntryBody(err) {
 		// Not a forgery signal by itself, and not evidence either:
@@ -927,6 +942,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	printPreAnchor(r.PreAnchor)
 	printBundleAnchor(r.BundleAnchor)
 	printCompleteRecordRequirement(r.CompleteRecordRequirement, len(b.PreAnchor) > 0)
+	printEntryAuth(r.EntryAuth)
 	for _, f := range r.CrossChecks {
 		fmt.Printf("  Cross-check:      ✗ FAILED · %s\n", f)
 	}
