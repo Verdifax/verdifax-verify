@@ -3,14 +3,26 @@
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15320/badge)](https://www.bestpractices.dev/projects/15320)
 
 `verdifax-verify` is the standalone, independent verifier for Verdifax
-audit bundles. It reads a bundle JSON file (or stdin) and recomputes
-every canonical hash from the bundle's content, comparing against the
-recorded values to detect tampering.
+audit bundles. It reads a bundle JSON file (or stdin), recomputes every
+section hash, the bundle hash, the pre-anchor table digest and the
+anchored ledger leaf from the bundle's own content, and compares each
+against the recorded value to detect tampering. It also confirms that
+every section is bound to the same manifest hash. The manifest hash
+itself is not recomputed here: its preimage includes fields held only
+in the orchestrator's stored manifest, which the orchestrator re-derives
+server-side for authenticated callers at `GET /runs/{id}/verify`.
 
 It is the offline-verification path for Verdifax bundles: given just a
 bundle file, this binary decides whether the evidence is internally
-consistent. No network access, no Verdifax credentials, no trust in the
-Verdifax API server.
+consistent. Verification itself makes no network calls, needs no
+Verdifax credentials, and places no trust in the Verdifax API server:
+the Sigstore Rekor inclusion proof is checked offline against a Rekor
+public key embedded in the binary. The one network operation is
+optional input retrieval: passing an `http://` or `https://` URL instead
+of a file path makes the binary fetch the bundle with a single GET
+request (30 second timeout, 32 MiB cap) before verifying it exactly as
+it would a local file. Pass a file path or stdin to keep the whole run
+offline.
 
 ## License
 

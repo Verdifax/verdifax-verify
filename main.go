@@ -2,10 +2,17 @@
 // Verdifax audit bundles.
 //
 // It is the offline-verification path for Verdifax bundles: given just
-// a bundle JSON file, this binary recomputes every canonical hash from
-// the bundle's content and reports whether the recorded values match.
-// No network access, no Verdifax credentials, no trust in the API
-// server.
+// a bundle JSON file, this binary recomputes every section hash, the
+// bundle hash, the pre-anchor digest and the anchored leaf from the
+// bundle's content, confirms every section binds the same manifest
+// hash, and reports whether the recorded values match. The manifest
+// hash itself is not recomputed: its preimage lives in the
+// orchestrator's stored manifest.
+// Verification makes no network calls, needs no Verdifax credentials,
+// and places no trust in the API server; the Rekor inclusion proof is
+// checked against an embedded public key. The one network operation is
+// optional input retrieval: an http:// or https:// argument is fetched
+// with a single GET before being verified exactly like a local file.
 //
 // USAGE
 //
