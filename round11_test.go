@@ -164,4 +164,41 @@ func TestR10ReceiptLeafV2Vector(t *testing.T) {
 	if got != "fdc0e06c5f59ef0fbd5d8ef61d27e4805f9f7d546e9c1f081b5896e4738b871c" {
 		t.Fatalf("v2 receipt leaf changed: %s", got)
 	}
+	pre := artifacts.ReceiptLeafPreimageV2("deny_receipt", "env-90be9af2753ff202",
+		"bf176dddad8587ccf2955accbc4cf9cbcef84bbf8c50492077e50c4f7b4d4256", 241)
+	if pre != "verdifax.ledger.receipt.v2.deny_receipt.env-90be9af2753ff202."+
+		"bf176dddad8587ccf2955accbc4cf9cbcef84bbf8c50492077e50c4f7b4d4256.241" {
+		t.Fatalf("v2 receipt leaf preimage changed: %s", pre)
+	}
+	if artifacts.ValidateReceiptLeafFieldsV2("deny_receipt", "env-1", strings.Repeat("a", 64), 0) == nil {
+		t.Fatal("a v2 leaf needs a positive run id")
+	}
+}
+
+// Run 242 is the first production receipt anchored under receipt
+// anchor v2 (2026-10-16), logged by Verdifax log-signing key 1. It
+// verifies against the real pinned key with its run number bound, and
+// fails when the run number is changed or the anchor is deleted.
+func TestR10ProductionReceiptRun242V2(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "round10", "deny-receipt-run242-production-v2.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	load := func() *artifacts.ReceiptDocument {
+		d, decodeErr := artifacts.DecodeReceiptStrict(raw)
+		if decodeErr != nil {
+			t.Fatalf("the run 242 receipt document must decode strictly: %v", decodeErr)
+		}
+		return d
+	}
+	r := mustReceiptTier(t, "run 242 receipt", "VERIFIED_ANCHORED", load())
+	if !r.RunIDBound || !r.AnchorRequired || r.RunID != 242 {
+		t.Fatalf("run 242 must verify with its run number bound and anchor_required: %+v", r)
+	}
+	relabelled := load()
+	relabelled.RunID = 241
+	mustReceiptTier(t, "run 242 relabelled as run 241", "FAILED", relabelled)
+	stripped := load()
+	stripped.ReceiptAnchor = nil
+	mustReceiptTier(t, "run 242 with its anchor deleted", "FAILED", stripped)
 }
