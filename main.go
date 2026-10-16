@@ -43,6 +43,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -65,7 +66,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.13.0"
+const Version = "0.13.1"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -176,7 +177,7 @@ func main() {
 	if isReceiptDocument(data) {
 		doc, docErr := artifacts.DecodeReceiptStrict(data)
 		if errors.Is(docErr, artifacts.ErrNotStrictJSON) {
-			reportAmbiguousBundle(docErr, *jsonOutput)
+			reportAmbiguousJSON(docErr, "receipt", *jsonOutput)
 			os.Exit(1)
 		}
 		if docErr != nil {
@@ -199,7 +200,7 @@ func main() {
 		// An ambiguous bundle is a failed verification, not unreadable
 		// input: other readers would see different values than this
 		// tool checks. Report it as FAILED, exit 1, like any forgery.
-		reportAmbiguousBundle(err, *jsonOutput)
+		reportAmbiguousJSON(err, "bundle", *jsonOutput)
 		os.Exit(1)
 	}
 	if err != nil {
@@ -548,10 +549,12 @@ func readInput() ([]byte, error) {
 
 // isReceiptDocument reports whether the input's top level names a
 // receipt the way the Verdifax API serves one. Keys are compared
-// exactly; the strict decoder then judges the whole document.
+// exactly, and only the first JSON value is read, so data after it is
+// refused by the strict decoder of the right kind rather than routing
+// the input elsewhere; the strict decoder then judges the whole document.
 func isReceiptDocument(data []byte) bool {
 	var top map[string]json.RawMessage
-	if json.Unmarshal(data, &top) != nil {
+	if json.NewDecoder(bytes.NewReader(data)).Decode(&top) != nil {
 		return false
 	}
 	if _, isBundle := top["manifest_hash"]; isBundle {
@@ -1286,9 +1289,10 @@ func rekorIndexText(s EvidenceSummary) string {
 	return "log entry " + s.RekorLogEntryID + " (shard index " + shard + ")"
 }
 
-// reportAmbiguousBundle prints the FAILED verdict for a bundle refused
-// by strict decoding, in the requested output form.
-func reportAmbiguousBundle(err error, jsonOut bool) {
+// reportAmbiguousJSON prints the FAILED verdict for a bundle or receipt
+// document refused by strict decoding, in the requested output form.
+// what is "bundle" or "receipt", so the message names what was read.
+func reportAmbiguousJSON(err error, what string, jsonOut bool) {
 	if jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
@@ -1303,7 +1307,11 @@ func reportAmbiguousBundle(err error, jsonOut bool) {
 		})
 		return
 	}
-	fmt.Println("  Bundle JSON:      ✗ FAILED · " + strings.TrimPrefix(err.Error(), "invalid bundle JSON: "))
-	fmt.Println("VERDICT: ✗ FAILED, the bundle's JSON is ambiguous or carries unmodeled fields, so")
+	label := "  Bundle JSON:      "
+	if what == "receipt" {
+		label = "  Receipt JSON:     "
+	}
+	fmt.Println(label + "✗ FAILED · " + strings.TrimPrefix(err.Error(), "invalid bundle JSON: "))
+	fmt.Println("VERDICT: ✗ FAILED, the " + what + "'s JSON is ambiguous or carries unmodeled fields, so")
 	fmt.Println("         other readers would see values this tool did not check.")
 }

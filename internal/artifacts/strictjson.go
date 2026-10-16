@@ -44,7 +44,7 @@ import (
 )
 
 // ErrNotStrictJSON wraps every refusal, so callers can name it.
-var ErrNotStrictJSON = errors.New("bundle JSON is ambiguous or carries fields this verifier does not model")
+var ErrNotStrictJSON = errors.New("JSON is ambiguous or carries fields this verifier does not model")
 
 // DecodeBundleStrict decodes data into an AuditBundle only if every
 // object key is unambiguous and modeled; see the package comment above.

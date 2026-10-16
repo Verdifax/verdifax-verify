@@ -403,7 +403,7 @@ func EntryBodyNamesLeaf(body []byte, leafHashHex string) error {
 			e.Spec.Data.Hash.Algorithm)
 	}
 	if e.Spec.Data.Hash.Value == "" || !strings.EqualFold(e.Spec.Data.Hash.Value, leafHashHex) {
-		return fmt.Errorf("rekorverify: entry_body records leaf %s, but the bundle claims leaf %s; "+
+		return fmt.Errorf("rekorverify: entry_body records leaf %s, but the record claims leaf %s; "+
 			"the logged entry is not this leaf", e.Spec.Data.Hash.Value, leafHashHex)
 	}
 	return nil

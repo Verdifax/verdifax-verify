@@ -381,6 +381,16 @@ an end date.
 
 ## Release notes
 
+### v0.13.1: receipt messages name the receipt
+
+Wording only; no verdict changes. A receipt document refused by strict
+decoding is now reported as a receipt ("Receipt JSON"), not as a
+bundle; a receipt followed by trailing data is refused for that data
+instead of being read as a bundle with an unmodeled key; and a
+public-log leaf mismatch says "the record claims" rather than "the
+bundle claims". Adds the first production receipt anchored on the
+public log (run 241, 2026-10-16, log-signing key 1) as a test vector.
+
 ### v0.13.0: receipts, and pinned number spelling
 
 Checks refused and halted runs' receipt documents and their public-log

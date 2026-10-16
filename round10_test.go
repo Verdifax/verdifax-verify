@@ -190,3 +190,41 @@ func TestR9NonCanonicalNumbersAreRefused(t *testing.T) {
 		t.Fatalf("the genuine record must decode: %v", err)
 	}
 }
+
+// Run 241 is the first production receipt anchored on the public log
+// (2026-10-16), logged by Verdifax log-signing key 1. It verifies
+// against the real pinned key, with no test log installed.
+func TestR9ProductionReceiptRun241VerifiesAndAnchors(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "round10", "deny-receipt-run241-production.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !isReceiptDocument(raw) {
+		t.Fatal("the run 241 receipt document must route to receipt verification")
+	}
+	d, err := artifacts.DecodeReceiptStrict(raw)
+	if err != nil {
+		t.Fatalf("the run 241 receipt document must decode strictly: %v", err)
+	}
+	r := mustReceiptTier(t, "run 241 receipt", "VERIFIED_ANCHORED", d)
+	if receiptExitShouldFail(r, false) || r.Summary["fired_rule_id"] != "mcd-llm-001" {
+		t.Fatalf("run 241 receipt must pass and report its rule: %+v", r)
+	}
+}
+
+// Data after a receipt document still routes it as a receipt, so the
+// refusal names the trailing data rather than an unmodeled bundle key.
+func TestR9TrailingDataOnReceiptIsRefusedAsReceipt(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "round10", "deny-receipt-run241-production.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := append(append([]byte{}, raw...), []byte(` {"deny_receipt":{}}`)...)
+	if !isReceiptDocument(edited) {
+		t.Fatal("a receipt document followed by trailing data must still route as a receipt")
+	}
+	_, decodeErr := artifacts.DecodeReceiptStrict(edited)
+	if !errors.Is(decodeErr, artifacts.ErrNotStrictJSON) || !strings.Contains(decodeErr.Error(), "after the document's closing brace") {
+		t.Fatalf("trailing data must be refused and named, got %v", decodeErr)
+	}
+}
