@@ -482,6 +482,13 @@ type AuditBundle struct {
 	// BundleHash seals the audit bundle itself (independent of the
 	// manifest hash).
 	BundleHash string `json:"bundle_hash"`
+
+	// BundleAnchor is the run's second public-log entry, anchoring the
+	// complete sealed record (see bundle_anchor.go for the recipe).
+	// Absent (nil) on records sealed before it shipped and on runs
+	// whose second submission failed; verifiers then report that the
+	// descriptive sections are bundle-sealed, not anchored.
+	BundleAnchor *BundleAnchor `json:"bundle_anchor,omitempty"`
 }
 
 // FormalVerification is the audit-bundle record of the machine-checked

@@ -1,0 +1,849 @@
+{
+ "kind": "verdifax.audit_bundle.v1",
+ "schema_version": "v1",
+ "run_id": 237,
+ "status": "ok",
+ "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+ "generated_at": "2026-10-16T14:05:02Z",
+ "payload": {
+  "kind": "verdifax.artifact.payload.v1",
+  "payload_id": "payload-b4bf97c0936d6fe9",
+  "content_hash": "b4bf97c0936d6fe9804fa2233907a3c21f9581aeac2c17d7d0546d02da6bd34b",
+  "content_length": 441,
+  "origin_type": "api",
+  "schema_version": "v1",
+  "hash": "cdd8fed4e8a4a9b7eaf59075485d37d459a0b2480ade0c39b800a9e124aa40fc"
+ },
+ "envelope": {
+  "kind": "verdifax.artifact.envelope.v1",
+  "envelope_id": "env-b4bf97c0936d6fe9",
+  "payload_hash": "b4bf97c0936d6fe9804fa2233907a3c21f9581aeac2c17d7d0546d02da6bd34b",
+  "program_id": "c56563c83c92d7634c809097772a59e7d0ef7f616429e2d3da84a3871945960d",
+  "route_id": "buyer-demo-complete-run-2026-05-13",
+  "registry_record_hash": "c0a945520c3d903b4e67d8a58536af78ffd6519c2a0d1c648548cce3f52dc342",
+  "timestamp": "2026-10-16T14:05:02Z",
+  "hash": "18f12b54dd77b981e9f1eb5c816da0f54883a9926b63dd0542b2c6d9974ef488",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "envelope_hash",
+   "sealed_hash": "3a5e021411feb5d2468342fc1d5544c8c8a685b1bab2443f8b310ce965e0e254"
+  }
+ },
+ "transport": {
+  "kind": "verdifax.artifact.transport.v1",
+  "envelope_id": "env-b4bf97c0936d6fe9",
+  "envelope_hash": "3a5e021411feb5d2468342fc1d5544c8c8a685b1bab2443f8b310ce965e0e254",
+  "sequence_id": "seq-00000000000000000002",
+  "route": [
+   "DOG",
+   "DTL",
+   "DKEC",
+   "AER",
+   "ZKSP",
+   "PHASE4",
+   "LEDGER",
+   "REGISTRY",
+   "DLA"
+  ],
+  "hash": "a067e3db28663cd6ef5bf5906a9d27c0c37c57d0ba44cba7a9637b579d086223",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "transport_hash",
+   "sealed_hash": "88e24971edded54057d7560e12b2d2c0374cdc1e8451ad78946f76111b53114b"
+  }
+ },
+ "epa": {
+  "kind": "verdifax.artifact.epa.v1",
+  "kernel_id": "verdifax-orchestrator",
+  "kernel_version": "0.1.1",
+  "policy_hash": "879651939988f228aea8b75b38c89f49a4895b60f3858b37973d9c03a93cb365",
+  "environment_snapshot": {
+   "time": "2026-10-16T14:05:02Z",
+   "region": "fly:iad",
+   "os": "linux",
+   "go_version": "go1.27.1"
+  },
+  "attested_context": {
+   "attested": true,
+   "actor_id": "robert@verdifax.com",
+   "actor_role": "founder",
+   "authorization_policy": "founder-self-demo-2026-05-13",
+   "model_provider": "Anthropic",
+   "model_name": "claude-opus-4-6",
+   "model_version": "claude-opus-4-6",
+   "model_temperature": 1,
+   "prompt_hash": "722493340767584da9d83a3adf425d145937a8497b6242e9e883e192bf41bae6",
+   "decision_kind": "credit_decision",
+   "decision_result": "approve",
+   "decision_note": "Caller-side credit-decision model invocation, submitted to Verdifax for cryptographic attestation. AIVP will independently re-govern the AI output via the live Anthropic Claude API and seal the resulting PIA hash into the manifest."
+  },
+  "hash": "b26d58f94cebaf9c0deab9664f3a222d15b3d24af870a3c76328ffeca411768d",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "epa_hash",
+   "sealed_hash": "1fb4faecc52a64aaf209f97d9703b0ede8abd46ab0bb6b37885c1d4208262d5e"
+  }
+ },
+ "efa": {
+  "kind": "verdifax.artifact.efa.v1",
+  "steps": [
+   {
+    "step_index": 0,
+    "kernel": "DSE",
+    "execution_id": "2d3b8889990f88a548c16d19aa9bc273a79670dafed93e8d3556b603c00787c2",
+    "status": "ok"
+   },
+   {
+    "step_index": 1,
+    "kernel": "TOK",
+    "execution_id": "be62c39141d76ddf935f0267302d211d8b28138bafda075fc5679744b0e1c79e",
+    "status": "ok"
+   },
+   {
+    "step_index": 2,
+    "kernel": "DSC",
+    "execution_id": "5b7ed18ff510502c682aae5de0ee3c9fd49a006fce26924eb2fcefebc328a432",
+    "status": "ok"
+   },
+   {
+    "step_index": 3,
+    "kernel": "NREP",
+    "execution_id": "01adf356f5134c478de4acc6444a53f2d7be598bc629b7010c172b9e0a78ef67",
+    "status": "ok"
+   },
+   {
+    "step_index": 4,
+    "kernel": "AIVP",
+    "execution_id": "76a416ee6afdbfc4dd99ec45623730e04c8b00b97637d3020228b9991eb77e41",
+    "status": "ok"
+   },
+   {
+    "step_index": 5,
+    "kernel": "DCAE",
+    "execution_id": "c53fb2bf5bd1b61fdabfa494b92397728f51b1ce22e49db62c117ae4328a7af1",
+    "status": "ok"
+   }
+  ],
+  "deterministic": true,
+  "fail_closed": false,
+  "hash": "ff1f15f59d48d7dec177974fe66659a1b93c2358d88355932f563fc2aa80f2e8",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "efa_hash",
+   "sealed_hash": "fd399ca0eaaeb641046ac6abf8829abc65dc1d9e578acff5735c8e30ea485629"
+  }
+ },
+ "aer": {
+  "kind": "verdifax.artifact.aer.v1",
+  "envelope_id": "env-b4bf97c0936d6fe9",
+  "sequence_id": "seq-00000000000000000002",
+  "execution_ids": [
+   "2d3b8889990f88a548c16d19aa9bc273a79670dafed93e8d3556b603c00787c2",
+   "be62c39141d76ddf935f0267302d211d8b28138bafda075fc5679744b0e1c79e",
+   "5b7ed18ff510502c682aae5de0ee3c9fd49a006fce26924eb2fcefebc328a432",
+   "01adf356f5134c478de4acc6444a53f2d7be598bc629b7010c172b9e0a78ef67",
+   "76a416ee6afdbfc4dd99ec45623730e04c8b00b97637d3020228b9991eb77e41",
+   "c53fb2bf5bd1b61fdabfa494b92397728f51b1ce22e49db62c117ae4328a7af1"
+  ],
+  "final_state": "committed",
+  "decision": {
+   "source": "caller_attested",
+   "kind": "credit_decision",
+   "result": "approve",
+   "note": "Caller-side credit-decision model invocation, submitted to Verdifax for cryptographic attestation. AIVP will independently re-govern the AI output via the live Anthropic Claude API and seal the resulting PIA hash into the manifest."
+  },
+  "hash": "53643673fb0d971e62a765cef24a41802673ae03c1321059193ef81ff10c35e3",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "aer_hash",
+   "sealed_hash": "e94e498477e82c8651382335957bafc26e047abe18338ca101e1a55cae7cc381"
+  }
+ },
+ "transcript": {
+  "kind": "verdifax.artifact.transcript.v1",
+  "proof_hash_input": "e94e498477e82c8651382335957bafc26e047abe18338ca101e1a55cae7cc381",
+  "transcript_hash": "ba79c6e59647819665ca5663e5e75777da1032a1ead7b0776e75b498830b6c76",
+  "scaffold": {
+   "is_scaffold": true,
+   "activated_by": "phase 6 (real ZK prover, winterfell)",
+   "note": "Transcript is currently the deterministic R1CS hash facade. Real Fiat-Shamir transcript bytes are emitted once the winterfell prover is wired (see ZK_PROVER_EVALUATION.md)."
+  },
+  "hash": "cf42ef247ca551a2e9c0f6ef429679f1f080e94f7ed2d11ccb6362b2902fbba5",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "transcript_hash",
+   "sealed_hash": "ba79c6e59647819665ca5663e5e75777da1032a1ead7b0776e75b498830b6c76"
+  }
+ },
+ "hardware_attestation": {
+  "kind": "verdifax.artifact.hw_attestation.v1",
+  "attestation_mode": "policy_scaffold",
+  "enclave_measurement": "8db0886cec50a09343409bcd40fafc551c637dff0f2685f3a0229d2a169ea461",
+  "firmware_class": "self-attested-deterministic",
+  "secure_boot_state": "unverified",
+  "execution_environment": "containerized-fly-machine",
+  "pcr_selection": "sha256:0,1,2,3,4,5,6,7",
+  "tier4_blockers": [
+   "REAL_TEE_QUOTE_NOT_BOUND",
+   "PLATFORM_CERTIFICATE_CHAIN_NOT_VERIFIED",
+   "HARDWARE_BOUND_MODE_NOT_ENABLED_CURRENT_HORIZON"
+  ],
+  "scaffold": {
+   "is_scaffold": true,
+   "activated_by": "phase 7 (live cloud, TPM2 / SEV-SNP)",
+   "note": "Real attested hardware lands when the orchestrator is deployed on a SEV-SNP / vTPM2 cloud instance per PHASE5_HARDWARE_REQUIREMENTS.md. Until then this artifact is honest about being a policy scaffold."
+  },
+  "hash": "5f5d4b2eb7795a4431aaec6537b6af77c0480f20f0bcc9b030b2fbe003bdc3de",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "hardware_attestation_hash",
+   "sealed_hash": "8db0886cec50a09343409bcd40fafc551c637dff0f2685f3a0229d2a169ea461"
+  }
+ },
+ "leakage_bundle": {
+  "kind": "verdifax.artifact.leakage.v1",
+  "constant_time_compliant": true,
+  "timing_variance_observed": false,
+  "mitigations": [
+   "constant_time_execution",
+   "deterministic_kernel_scheduling"
+  ],
+  "scaffold": {
+   "is_scaffold": true,
+   "activated_by": "constant-time booleans derived from per-run measurement",
+   "note": "Both booleans are design declarations of the deterministic scheduler, not per-run measurements. Per-stage wall-clock timing is measured on every run and sealed separately in the runtime timing section; these booleans are not derived from it."
+  },
+  "hash": "5a127113f1aa5243030fd199167dc34a687fcfa5f7a805cc309bfb4d9d7b2f8d",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "leakage_bundle_hash",
+   "sealed_hash": "d241f1dde4533b7faf26ae95a9696a861561af0ed33cff1cffc8ff9d78ae3bc4"
+  }
+ },
+ "zksp_binding": {
+  "kind": "verdifax.artifact.zksp_binding.v1",
+  "proving_system": "DETERMINISTIC_R1CS_TRANSITIONAL_PROVER",
+  "verification_status": "SCAFFOLD_R1CS_HASH_FACADE",
+  "binds_to": [
+   "envelope_id",
+   "aer_hash",
+   "program_id",
+   "registry_record_hash"
+  ],
+  "scaffold": {
+   "is_scaffold": true,
+   "activated_by": "phase 6 (real ZK prover, winterfell)",
+   "note": "Verification status reflects the transitional R1CS hash facade. Real STARK proof bytes land when winterfell is wired."
+  },
+  "hash": "316240a5bbebb998c0e500e9d5094bb36dd5422c530e1db8fd52237884bdefd0",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "zksp_binding_hash",
+   "sealed_hash": "3f7a1dbd391f4e1cfbc0a9276baf3d1da5d163b6e4e8ac2348828e25fb7a827c"
+  }
+ },
+ "migration_token": {
+  "kind": "verdifax.artifact.migration_token.v1",
+  "from_version": "v1",
+  "to_version": "v1",
+  "state_hash": "28f88da49e18ea806f2cdd995feaeb0ce54026cbf29f988da67db0715bdbfc6e",
+  "hash": "386044a5af0c13e0ffc1af95ab3505195aff8faaa4878b38bba56f38240270de",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "migration_token_hash",
+   "sealed_hash": "28f88da49e18ea806f2cdd995feaeb0ce54026cbf29f988da67db0715bdbfc6e"
+  }
+ },
+ "replay_fingerprint": {
+  "kind": "verdifax.artifact.replay.v1",
+  "deterministic_inputs": [
+   "payload_hash",
+   "program_id",
+   "route_id",
+   "registry_record_hash"
+  ],
+  "expected_output_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+  "hash": "7edea7d5ce87389ec337d29341990c34a1bb7e28836a0261ea3db0aca2728221",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "replay_fingerprint",
+   "sealed_hash": "56821169e5b699c318680f3ec793abf667ed9c1c7abecaa890c60ace35c16f75"
+  }
+ },
+ "pote_proof": {
+  "kind": "verdifax.artifact.pote.v2",
+  "proof_type": "proof_of_transparent_execution",
+  "execution_trace_hash": "e94e498477e82c8651382335957bafc26e047abe18338ca101e1a55cae7cc381",
+  "log_entry_id": "3280459113",
+  "ledger_backend": "rekor",
+  "integrated_time": 1792159501,
+  "signed_entry_timestamp": "MEQCIFFGfH7O5vXzvnEOYqBqFLIOHY5gfjnLQs+eLVDO2ZDxAiAIcBr9dr+TLhzj7j5d1tMhyUAs1ySYIGZmoo6Zxb0J5g==",
+  "ledger_checkpoint": "rekor.sigstore.dev - 1193050959916656506\n3158554904\nQ15kckuFGnD/idfGNuwb3cYxzvkOlsqYe52vGhVDKh0=\n\n— rekor.sigstore.dev wNI9ajBEAiAWXZUo7UuNUOH0BYHufs90/+NJNR8AeHEIHt22/YJ4fAIgALDw8nRvzA8hDbW7cx3pQuE0wBTkTWXQiuHvVtlVTrQ=\n",
+  "scaffold": {
+   "is_scaffold": false
+  },
+  "hash": "1c6d0dd79148f2a93a1e7360c5c9ba38e0ae494874dcad322641a01a5fd508e3",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "pote_proof_hash",
+   "sealed_hash": "f13fe2eff1b853e62b113f94d71947050d0bf59163348cab07d0399154edc279"
+  }
+ },
+ "final_vfa": {
+  "kind": "verdifax.artifact.final_vfa.v1",
+  "envelope_hash": "3a5e021411feb5d2468342fc1d5544c8c8a685b1bab2443f8b310ce965e0e254",
+  "transport_hash": "88e24971edded54057d7560e12b2d2c0374cdc1e8451ad78946f76111b53114b",
+  "epa_hash": "1fb4faecc52a64aaf209f97d9703b0ede8abd46ab0bb6b37885c1d4208262d5e",
+  "efa_hash": "fd399ca0eaaeb641046ac6abf8829abc65dc1d9e578acff5735c8e30ea485629",
+  "aer_hash": "e94e498477e82c8651382335957bafc26e047abe18338ca101e1a55cae7cc381",
+  "transcript_hash": "ba79c6e59647819665ca5663e5e75777da1032a1ead7b0776e75b498830b6c76",
+  "hardware_attestation_hash": "8db0886cec50a09343409bcd40fafc551c637dff0f2685f3a0229d2a169ea461",
+  "leakage_bundle_hash": "d241f1dde4533b7faf26ae95a9696a861561af0ed33cff1cffc8ff9d78ae3bc4",
+  "zksp_binding_hash": "3f7a1dbd391f4e1cfbc0a9276baf3d1da5d163b6e4e8ac2348828e25fb7a827c",
+  "migration_token_hash": "28f88da49e18ea806f2cdd995feaeb0ce54026cbf29f988da67db0715bdbfc6e",
+  "replay_fingerprint": "56821169e5b699c318680f3ec793abf667ed9c1c7abecaa890c60ace35c16f75",
+  "pote_proof_hash": "f13fe2eff1b853e62b113f94d71947050d0bf59163348cab07d0399154edc279",
+  "independent_verified": true,
+  "hash": "8ae21fbaa1b612d1f2fd07d1853b6a3c59d31dc023b42cf7b0429bc369884a61",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "final_vfa_hash",
+   "sealed_hash": "60b3f7464fe7e86a4dd00c95f309c43552f4dea2ef08656ac99040cbf37dea45"
+  }
+ },
+ "request_substance": {
+  "kind": "verdifax.request_substance.v1",
+  "prompt": {
+   "hash": "722493340767584da9d83a3adf425d145937a8497b6242e9e883e192bf41bae6",
+   "template_id": "credit_decision_v1",
+   "template_version": "2026.05.13",
+   "user_hash": "722493340767584da9d83a3adf425d145937a8497b6242e9e883e192bf41bae6",
+   "token_count": 78,
+   "content_encoding": "utf-8"
+  },
+  "output": {
+   "hash": "10de1b0312b54ce012bfa958534c72953a3a0dafad6610dfbb3af6aba390a7c5",
+   "token_count": 125,
+   "finish_reason": "stop",
+   "streaming_closed": true
+  },
+  "cost": {
+   "input_tokens": 78,
+   "output_tokens": 125,
+   "total_tokens": 203,
+   "estimated_cost_usd": 0.011,
+   "billing_tier": "standard"
+  },
+  "latency": {
+   "total_ms": 21959
+  },
+  "origin": {
+   "source_ip_hash": "0a373848588cb2e331e930c55d9f40165751f3f2037d6273bacab624d578a66d",
+   "user_agent_hash": "8f42af6f304383bbe22bc11b9f1c9ce77bb37478b15b0b0d93224e249f36e68e",
+   "geo_country": "US",
+   "geo_region": "VA"
+  },
+  "authentication": {
+   "method": "api_key",
+   "api_key_id": 2,
+   "api_key_name": "founder-bootstrap-2026-05",
+   "mfa_satisfied": false,
+   "mfa_method": "none"
+  },
+  "hash": "6c96d8e78f98db587e0ca520ff58fc56d27e8b6f86c5a63feb64639aa82c13c2",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "request_substance",
+   "sealed_hash": "6c96d8e78f98db587e0ca520ff58fc56d27e8b6f86c5a63feb64639aa82c13c2"
+  }
+ },
+ "authorization_chain": {
+  "kind": "verdifax.authorization_chain.v1",
+  "approvers": [
+   {
+    "order": 1,
+    "actor_id": "chief-risk-officer@examplebank.com",
+    "actor_role": "CRO",
+    "approved_at": "2026-10-16T14:04:39Z",
+    "approved_request_hash": "c56563c83c92d7634c809097772a59e7d0ef7f616429e2d3da84a3871945960d",
+    "signature_kind": "external",
+    "comment": "Reviewed and approved."
+   }
+  ],
+  "human_in_loop": {
+   "required": true,
+   "performed": true,
+   "review_mode": "advisory"
+  },
+  "risk": {
+   "score": 0,
+   "class": "low",
+   "scoring_method": "manual",
+   "factors": [
+    "controlled_demonstration",
+    "no_real_world_effect"
+   ]
+  },
+  "segregation_of_duties": {
+   "required": false,
+   "satisfied": true,
+   "note": "Solo-founder demonstration run; SoD not applicable."
+  },
+  "hash": "5f1a614324bd67e3f0c40699f36019a4da9b0649c7755fd5006f697d71347f4d",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "authorization_chain",
+   "sealed_hash": "c66008933baf1c7b0e7f6053112d7d2c9dced115ffe4b0338e67be9b059bebe7"
+  }
+ },
+ "regulatory_scaffolding": {
+  "kind": "verdifax.regulatory_scaffolding.v1",
+  "policy_snapshot": {
+   "policy_id": "",
+   "policy_version": "",
+   "policy_hash": ""
+  },
+  "data_classification": {
+   "commercial": [
+    "confidential",
+    "PII",
+    "financial"
+   ]
+  },
+  "data_residency": {
+   "processing_region": "fly:iad",
+   "model_hosting_region": "anthropic-us",
+   "storage_region": "fly:iad",
+   "sovereignty": [
+    "US"
+   ]
+  },
+  "retention_policy": {
+   "retention_days": 0,
+   "legal_hold": false,
+   "deletion_eligible": false,
+   "gdpr_right_to_erase": true
+  },
+  "frameworks": [
+   {
+    "framework": "EU_AI_ACT",
+    "risk_class": "high",
+    "control_ids": [
+     "Annex III 5(b)",
+     "Art.12",
+     "Art.26(6)"
+    ]
+   },
+   {
+    "framework": "GDPR",
+    "control_ids": [
+     "Art.22"
+    ]
+   },
+   {
+    "framework": "ECOA_REG_B",
+    "control_ids": [
+     "12 CFR 1002.9"
+    ]
+   },
+   {
+    "framework": "FCRA",
+    "control_ids": [
+     "15 U.S.C. 1681m"
+    ]
+   },
+   {
+    "framework": "NIST_AI_RMF",
+    "control_ids": [
+     "MEASURE 2.8",
+     "MANAGE 4.1"
+    ]
+   }
+  ],
+  "right_to_explanation": "Synthetic demonstration scenario; no real data subject is affected. The approval recommendation cites 18 months of on-time payments, a debt-to-income ratio of 0.31 against a policy threshold of 0.43, and a requested credit line within the pre-qualified tier. When this run's audit PDF is rendered, the orchestrator compiles a LegalEvidenceArtifact from the run's sealed manifest fields; it is not stored in the audit bundle, and the open-source verifier does not recompute it.",
+  "hash": "40041df6e67cd4858b9c624d776067249e4c696b1dc7f6d7c710d5e712369e96",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "regulatory_scaffolding",
+   "sealed_hash": "40041df6e67cd4858b9c624d776067249e4c696b1dc7f6d7c710d5e712369e96"
+  }
+ },
+ "causal_graph": {
+  "kind": "verdifax.causal_graph.v1",
+  "affected_entities": [
+   {
+    "kind": "demonstration_run",
+    "id_hash": "c56563c83c92d7634c809097772a59e7d0ef7f616429e2d3da84a3871945960d",
+    "description": "Self-referential buyer-demo run; no real-world entity affected.",
+    "jurisdiction_country": "US"
+   }
+  ],
+  "confidence_score": 1,
+  "out_of_distribution": false,
+  "hash": "5b6328ee7402b6dcd48c75b24a329983421b27368f741d30c385e1546a28adec",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "causal_graph",
+   "sealed_hash": "5b6328ee7402b6dcd48c75b24a329983421b27368f741d30c385e1546a28adec"
+  }
+ },
+ "system_provenance": {
+  "kind": "verdifax.system_provenance.v1",
+  "orchestrator_version": "0.3.0-dev",
+  "orchestrator_git_sha": "0ceefd25e7699cb839dcda9247698e3e8a5cbd0d",
+  "build_provenance": {
+   "slsa_level": 0,
+   "builder_id": "local",
+   "source_repo": "github.com/Verdifax/verdifax-orchestrator",
+   "source_commit_sha": "0ceefd25e7699cb839dcda9247698e3e8a5cbd0d"
+  },
+  "kernel_versions": [
+   {
+    "kernel": "DSE",
+    "version": "v1.3.2"
+   },
+   {
+    "kernel": "TOK",
+    "version": "v1.0.0"
+   },
+   {
+    "kernel": "DSC",
+    "version": "v1.0.0"
+   },
+   {
+    "kernel": "NREP",
+    "version": "v1.0.0"
+   },
+   {
+    "kernel": "AIVP",
+    "version": "v1.0.0"
+   },
+   {
+    "kernel": "DCAE",
+    "version": "v1.0.0"
+   }
+  ],
+  "environment": {
+   "cloud": "fly",
+   "region": "fly:iad",
+   "instance_id": "185e296f022458",
+   "os": "linux",
+   "arch": "amd64",
+   "go_version": "go1.27.1",
+   "hostname": "185e296f022458"
+  },
+  "hash": "6f4da7380594870a88f2162c24da3f7b2e7e2fd1232ebfd5ff2e63759fe0ec7e",
+  "seal": {
+   "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+   "seal_field": "system_provenance",
+   "sealed_hash": "6f4da7380594870a88f2162c24da3f7b2e7e2fd1232ebfd5ff2e63759fe0ec7e"
+  }
+ },
+ "reproducibility_context": {
+  "declared": true,
+  "runtime_name": "go",
+  "runtime_version": "1.27.1",
+  "git_commit_sha": "0ceefd25e7699cb839dcda9247698e3e8a5cbd0d",
+  "random_seeds": [
+   "none declared by the caller; the orchestrator itself mints a per-run nonce and admission clock that enter the manifest"
+  ],
+  "platform": "linux/amd64 (Fly.io iad region)",
+  "hash": "bc27aae7bbaf87fa1d5b3b60bac2c9f6496f85d4871a5af73c603295fae048b9"
+ },
+ "rekor_anchor": {
+  "backend": "rekor",
+  "log_entry_id": "3280459113",
+  "log_id": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+  "leaf_hash": "7e5459d532e8939a3fca75b00e2130ec6be9ecdfd8a79cb80d00c8b0527f7f66",
+  "input_nonce": "1792159480084764760",
+  "entry_body": "eyJhcGlWZXJzaW9uIjoiMC4wLjEiLCJraW5kIjoiaGFzaGVkcmVrb3JkIiwic3BlYyI6eyJkYXRhIjp7Imhhc2giOnsiYWxnb3JpdGhtIjoic2hhMjU2IiwidmFsdWUiOiI3ZTU0NTlkNTMyZTg5MzlhM2ZjYTc1YjAwZTIxMzBlYzZiZTllY2RmZDhhNzljYjgwZDAwYzhiMDUyN2Y3ZjY2In19LCJzaWduYXR1cmUiOnsiY29udGVudCI6Ik1FUUNJRmtXU2kxd0YzUjFYRWVUWGxodXVGU04zRnh1dmphVVpBVWdBNFo5NVA3S0FpQVdtYjY2Yjl1NndKU01pczZDbVNJWmlNckhSTExQcC9DckJtbkJmdUM0bnc9PSIsInB1YmxpY0tleSI6eyJjb250ZW50IjoiTFMwdExTMUNSVWRKVGlCUVZVSk1TVU1nUzBWWkxTMHRMUzBLVFVacmQwVjNXVWhMYjFwSmVtb3dRMEZSV1VsTGIxcEplbW93UkVGUlkwUlJaMEZGYzJkNVRWSlBRVms1WjJ4aVJqRldRVVpsUzNwVFJ6ZDRUakpXWndwd1NVRTRaR3BMVldkblptcEpUMDlNVVRJMVozUjVjbEZPVldzeVNreGlSSFpQVFRBeE5WTnRWMXA1YjBJNFkxQkhNRXhrVHk4d1UxTkJQVDBLTFMwdExTMUZUa1FnVUZWQ1RFbERJRXRGV1MwdExTMHRDZz09In19fX0=",
+  "log_index": 3158554851,
+  "tree_size": 3158554904,
+  "root_hash": "435e64724b851a70ff89d7c636ec1bddc631cef90e96ca987b9daf1a15432a1d",
+  "inclusion_path": [
+   "73d7401a9921bc348da88bba9f0cf5c0b1547a3006f297d0a2a4106f27e9d008",
+   "3e140038f7e1081646c3d5ea575049f12acd541e6b22cbe6c3e2e930e24fd79d",
+   "9250c94ce6e22553ade9af46b34da8e14f71fea4b4d7242d69cd057972ea86e5",
+   "bf6cefd7cec3ab091028e064094dc6d5ace002dd94a6b0e888f6a161e5748280",
+   "ef2146fd8e307556a9d768f312e3d057aef065f110bb6fee113e5b8e79a154c2",
+   "9400425918e8d2774f4c475fdfe406327c4af250514a9b9192c9de9117434863",
+   "84221ac56f395633c26121c7fafa029e30473f278a047a8239a1244554f5fbdc",
+   "1e5be67ae545d45f2be6333c49b391df405ecae264b56d76ae741cf34ed2e68d",
+   "37d593cb1abe4cf4ce28aafe0692942822cdd729bfd99f9839281c6bec3ffc29",
+   "ba5c64e8b8868d4a27a996e9c78e1477d1a57d44d1a08e1bda42d9af4bc85fff",
+   "74ff17dedc9a16ee24603711ee176325a429b0f90f6c0b30f05d44437dfbe6b1",
+   "4f78ed623d36548ae746d1a48c3dbda99da910d0ce9469d0790ad277254150dd",
+   "6700b6bfe747b3a2370507c8aa1092d5bf183782c7c56276fef4446a247dd9c4",
+   "3fc08fd152224978d07cc057dcd3aefa439aee03f51bd4290d19cb8077e8d2e4",
+   "b14e4a20467e8f5f1dc0923452e788b8179b97df5b26cfa5374691f03cf29bc4",
+   "8909b915abcdf2cefba4ea487fd99c9113d56f812abbdb50036803af459e7b9a",
+   "aa54d6343cc44674c14157071d75d53e38943f44ac8a41b17dcc55960a95143a",
+   "820f46340a4d91edfeccd865e2db16b6623270216b38c081de5cace97b9240d4",
+   "36539c96576628f035b4c288b24a87030b900d81e9df5630a4af8e38cacc71c7",
+   "ab1cc76a7033cf9ed20dd9897b407b6c92bbd8d4c805bc043060412af0ce44ec",
+   "c47fc30ac78b1ebf5e2a8613f2ab0e4592bbcd5744198587b95b6c56b0fde706"
+  ],
+  "checkpoint": "rekor.sigstore.dev - 1193050959916656506\n3158554904\nQ15kckuFGnD/idfGNuwb3cYxzvkOlsqYe52vGhVDKh0=\n\n— rekor.sigstore.dev wNI9ajBEAiAWXZUo7UuNUOH0BYHufs90/+NJNR8AeHEIHt22/YJ4fAIgALDw8nRvzA8hDbW7cx3pQuE0wBTkTWXQiuHvVtlVTrQ=\n",
+  "signed_entry_timestamp": "MEQCIFFGfH7O5vXzvnEOYqBqFLIOHY5gfjnLQs+eLVDO2ZDxAiAIcBr9dr+TLhzj7j5d1tMhyUAs1ySYIGZmoo6Zxb0J5g==",
+  "integrated_time": 1792159501
+ },
+ "aivp_t4": {
+  "outcome": "release",
+  "pia_hash": "76a416ee6afdbfc4dd99ec45623730e04c8b00b97637d3020228b9991eb77e41",
+  "adapter_id": "live-claude-api",
+  "ai_output_hash": "10de1b0312b54ce012bfa958534c72953a3a0dafad6610dfbb3af6aba390a7c5",
+  "decision": "release",
+  "halt_receipt_hash": ""
+ },
+ "nrep": {
+  "actor_id": "api-key-2",
+  "public_key": "ofCHViNebXh4hW9fHjJWaE0mA2PWWGP/bXQpH3EmrFs=",
+  "signature": "m1qfoU3l+Qunqv8lqsR/e/IJikuTcOplBdEEjAqlBTjNdwzjFMzcybmf5QhwL65gNPgDX8JUWoNmEkndw4ucBg==",
+  "signed_at": "2026-10-16T14:04:40.08473032Z"
+ },
+ "formal_verification": {
+  "kind": "verdifax.formal_verification.v1",
+  "repo": "github.com/Verdifax/lean-verdifax",
+  "commit_sha": "5ff588907baeb7dad78d1c69bd6b6ac494e1d879",
+  "toolchain": "leanprover/lean4:v4.8.0",
+  "modules": [
+   "Verdifax.Canonical",
+   "Verdifax.Pipeline",
+   "Verdifax.Determinism",
+   "Verdifax.R1CS",
+   "Verdifax.AxiomAudit"
+  ],
+  "theorems": [
+   "Verdifax.encode_deterministic",
+   "Verdifax.encode_injective",
+   "Verdifax.encode_version_binding",
+   "Verdifax.hash_deterministic",
+   "Verdifax.hash_injective",
+   "Verdifax.hash_version_binding",
+   "Verdifax.pipeline_determinism",
+   "Verdifax.run_completed_sound",
+   "Verdifax.run_halted_sound",
+   "Verdifax.run_denied_sound",
+   "Verdifax.manifest_binding",
+   "Verdifax.R1CS.satSystem_append"
+  ],
+  "axiom_footprint": "kernel-checked; encoding, hash-layer, and R1CS theorems depend on no axioms; pipeline theorems depend only on propext, Classical.choice, Quot.sound; CI rejects unproven placeholders and ad-hoc axioms",
+  "scope": "Kernel-checked theorems about a Lean model of the pipeline: canonical-encoding determinism and injectivity, hash-layer lifting under an explicit collision-freedom assumption, policy-gate soundness, budget-halt token preservation, and manifest binding (equal sealed manifests force identical admitted inputs and outcomes). Model-level verification only: byte-format fidelity of the model to the production Go implementation is disclosed roadmap. No zero-knowledge property is claimed; the ZK prover remains a disclosed scaffold.",
+  "manifest_hash": "1c4dc3e981591777c0c4621c8662aada1d4f7123a12d78d42a2dedf6cd93f113",
+  "hash": "9746d12073dc3e26d32d729d5341b9fa8423be949e5d397cdba06b4b2a5b4134"
+ },
+ "nrep_section_hash": "bb8da8f2a0a4b18eb139eaa8574d9d44082db63ab3e5a85f7cf35346ee2ef2a5",
+ "scaffold_flags_hash": "fd6b4df097819fa7c548767b6af2d10a307905350a2ab65ffdc37528d72e94dd",
+ "runtime_timing_hash": "f63b1bcfa13dd96756955cb92427f697f270fd8045137ab039cdf6587d2f13fb",
+ "runtime_timing": [
+  {
+   "stage": "dog",
+   "duration_nanos": 42430
+  },
+  {
+   "stage": "pepg",
+   "duration_nanos": 851010
+  },
+  {
+   "stage": "program",
+   "duration_nanos": 950
+  },
+  {
+   "stage": "dtl",
+   "duration_nanos": 1568990
+  },
+  {
+   "stage": "dkec",
+   "duration_nanos": 71190
+  },
+  {
+   "stage": "ccv",
+   "duration_nanos": 1290
+  },
+  {
+   "stage": "macc",
+   "duration_nanos": 593590
+  },
+  {
+   "stage": "aivp_t4",
+   "duration_nanos": 20677366524
+  },
+  {
+   "stage": "hardware_aer",
+   "duration_nanos": 46030
+  },
+  {
+   "stage": "tok_dsc",
+   "duration_nanos": 21070
+  },
+  {
+   "stage": "nrep",
+   "duration_nanos": 1359040
+  },
+  {
+   "stage": "zksp",
+   "duration_nanos": 6460
+  },
+  {
+   "stage": "phase4",
+   "duration_nanos": 6870
+  }
+ ],
+ "pre_anchor": [
+  {
+   "name": "program_id",
+   "value": "c56563c83c92d7634c809097772a59e7d0ef7f616429e2d3da84a3871945960d"
+  },
+  {
+   "name": "route_id",
+   "value": "buyer-demo-complete-run-2026-05-13"
+  },
+  {
+   "name": "registry_record_hash",
+   "value": "c0a945520c3d903b4e67d8a58536af78ffd6519c2a0d1c648548cce3f52dc342"
+  },
+  {
+   "name": "clock_epoch",
+   "value": "2026-10-16T14:04:40.08473032Z"
+  },
+  {
+   "name": "attested_digest",
+   "value": "c49160dd4bffeef5aa2d71b87410004b6e366040f9786d489857f9275b7d572f"
+  },
+  {
+   "name": "input_hash",
+   "value": "b4bf97c0936d6fe9804fa2233907a3c21f9581aeac2c17d7d0546d02da6bd34b"
+  },
+  {
+   "name": "envelope_id",
+   "value": "env-b4bf97c0936d6fe9"
+  },
+  {
+   "name": "envelope_hash",
+   "value": "3a5e021411feb5d2468342fc1d5544c8c8a685b1bab2443f8b310ce965e0e254"
+  },
+  {
+   "name": "transport_hash",
+   "value": "88e24971edded54057d7560e12b2d2c0374cdc1e8451ad78946f76111b53114b"
+  },
+  {
+   "name": "epa_hash",
+   "value": "1fb4faecc52a64aaf209f97d9703b0ede8abd46ab0bb6b37885c1d4208262d5e"
+  },
+  {
+   "name": "efa_hash",
+   "value": "fd399ca0eaaeb641046ac6abf8829abc65dc1d9e578acff5735c8e30ea485629"
+  },
+  {
+   "name": "aer_hash",
+   "value": "e94e498477e82c8651382335957bafc26e047abe18338ca101e1a55cae7cc381"
+  },
+  {
+   "name": "execution_ids",
+   "value": "2d3b8889990f88a548c16d19aa9bc273a79670dafed93e8d3556b603c00787c2,be62c39141d76ddf935f0267302d211d8b28138bafda075fc5679744b0e1c79e,5b7ed18ff510502c682aae5de0ee3c9fd49a006fce26924eb2fcefebc328a432,01adf356f5134c478de4acc6444a53f2d7be598bc629b7010c172b9e0a78ef67,76a416ee6afdbfc4dd99ec45623730e04c8b00b97637d3020228b9991eb77e41,c53fb2bf5bd1b61fdabfa494b92397728f51b1ce22e49db62c117ae4328a7af1"
+  },
+  {
+   "name": "pepg_outcome",
+   "value": "allow"
+  },
+  {
+   "name": "allow_token_hash",
+   "value": "36a2dc9f539b47ec7eb847676cb5c3d07b99ebb7cafe3c9b90804b655dac526e"
+  },
+  {
+   "name": "deny_receipt_hash",
+   "value": ""
+  },
+  {
+   "name": "aivp_outcome",
+   "value": "release"
+  },
+  {
+   "name": "aivp_adapter_id",
+   "value": "live-claude-api"
+  },
+  {
+   "name": "aivp_pia_hash",
+   "value": "76a416ee6afdbfc4dd99ec45623730e04c8b00b97637d3020228b9991eb77e41"
+  },
+  {
+   "name": "aivp_ai_output_hash",
+   "value": "10de1b0312b54ce012bfa958534c72953a3a0dafad6610dfbb3af6aba390a7c5"
+  },
+  {
+   "name": "aivp_halt_receipt_hash",
+   "value": ""
+  },
+  {
+   "name": "transcript_hash",
+   "value": "ba79c6e59647819665ca5663e5e75777da1032a1ead7b0776e75b498830b6c76"
+  },
+  {
+   "name": "hardware_attestation_hash",
+   "value": "8db0886cec50a09343409bcd40fafc551c637dff0f2685f3a0229d2a169ea461"
+  },
+  {
+   "name": "leakage_bundle_hash",
+   "value": "d241f1dde4533b7faf26ae95a9696a861561af0ed33cff1cffc8ff9d78ae3bc4"
+  },
+  {
+   "name": "zksp_binding_hash",
+   "value": "3f7a1dbd391f4e1cfbc0a9276baf3d1da5d163b6e4e8ac2348828e25fb7a827c"
+  },
+  {
+   "name": "formal_verifier_status",
+   "value": "SCAFFOLD_R1CS_HASH_FACADE"
+  },
+  {
+   "name": "migration_token_hash",
+   "value": "28f88da49e18ea806f2cdd995feaeb0ce54026cbf29f988da67db0715bdbfc6e"
+  },
+  {
+   "name": "replay_fingerprint",
+   "value": "56821169e5b699c318680f3ec793abf667ed9c1c7abecaa890c60ace35c16f75"
+  },
+  {
+   "name": "nrep_actor_id",
+   "value": "api-key-2"
+  },
+  {
+   "name": "nrep_public_key",
+   "value": "ofCHViNebXh4hW9fHjJWaE0mA2PWWGP/bXQpH3EmrFs="
+  },
+  {
+   "name": "nrep_signature",
+   "value": "m1qfoU3l+Qunqv8lqsR/e/IJikuTcOplBdEEjAqlBTjNdwzjFMzcybmf5QhwL65gNPgDX8JUWoNmEkndw4ucBg=="
+  },
+  {
+   "name": "nrep_signed_at",
+   "value": "2026-10-16T14:04:40.08473032Z"
+  },
+  {
+   "name": "scaffold_flags_hash",
+   "value": "fd6b4df097819fa7c548767b6af2d10a307905350a2ab65ffdc37528d72e94dd"
+  }
+ ],
+ "pre_anchor_digest": "59d7faafa3490f27ba8318f5a5213215f5a84b7b557f2fbdc8adead2f577c8e6",
+ "attested_digest": "c49160dd4bffeef5aa2d71b87410004b6e366040f9786d489857f9275b7d572f",
+ "execution_record": {
+  "kind": "verdifax.execution_record.v1",
+  "formula": "aer.v1",
+  "input_hash": "b4bf97c0936d6fe9804fa2233907a3c21f9581aeac2c17d7d0546d02da6bd34b",
+  "transport_hash": "88e24971edded54057d7560e12b2d2c0374cdc1e8451ad78946f76111b53114b",
+  "execution_control_hash": "df72f697138341be7d6eb6ac799c9cf96f33eb3338a372838a62753c0673a2ba",
+  "program_hash": "c0a945520c3d903b4e67d8a58536af78ffd6519c2a0d1c648548cce3f52dc342",
+  "kernel_output_ids": [
+   "2d3b8889990f88a548c16d19aa9bc273a79670dafed93e8d3556b603c00787c2",
+   "be62c39141d76ddf935f0267302d211d8b28138bafda075fc5679744b0e1c79e",
+   "5b7ed18ff510502c682aae5de0ee3c9fd49a006fce26924eb2fcefebc328a432",
+   "01adf356f5134c478de4acc6444a53f2d7be598bc629b7010c172b9e0a78ef67",
+   "76a416ee6afdbfc4dd99ec45623730e04c8b00b97637d3020228b9991eb77e41",
+   "c53fb2bf5bd1b61fdabfa494b92397728f51b1ce22e49db62c117ae4328a7af1"
+  ],
+  "hardware_attestation_hash": "24bb55af849ee40add8ef25953f68099983f032cd5678ed5fee411dc0ab2eae5",
+  "hardware_attested": false,
+  "aer_hash": "e94e498477e82c8651382335957bafc26e047abe18338ca101e1a55cae7cc381",
+  "proof_hash": "3a5516da74331394426d779931731b8021cfc75810e35bf4e3284fc52611688c"
+ },
+ "bundle_hash": "7a62c160b64f34de15e4fa1d99cedae61d369c1b29ddfc75aea039e3e9323617"
+}

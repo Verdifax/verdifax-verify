@@ -7,7 +7,13 @@ audit bundles. It reads a bundle JSON file (or stdin), recomputes every
 section hash, the bundle hash, the pre-anchor table digest and the
 anchored ledger leaf from the bundle's own content, and compares each
 against the recorded value to detect tampering. It also confirms that
-every section is bound to the same manifest hash. The manifest hash
+every section is bound to the same manifest hash. The run's public-log
+anchor binds its identity values and, for version-5 bundles, a 33-value
+pre-anchor table. From v0.10.0 a bundle may also carry a complete-record
+anchor (`bundle_anchor`), a second public-log entry that binds every
+section of the record; bundles without one have their descriptive
+sections sealed inside the bundle only. See
+[What this verifier proves](#what-this-verifier-proves-and-doesnt-prove). The manifest hash
 itself is not recomputed here: its preimage includes fields held only
 in the orchestrator's stored manifest, which the orchestrator re-derives
 server-side for authenticated callers at `GET /runs/{id}/verify`.
@@ -80,9 +86,12 @@ scaffold flag is set. High-trust environments should always use
 
 ## What this verifier proves and doesn't prove
 
-**Proves:** the bundle is internally consistent, every recorded hash
-matches its canonical preimage, and any post-hoc modification to a
-field invalidates the hash.
+**Proves:** the bundle is internally consistent: every recorded hash
+matches its canonical preimage, so editing a field without also
+recomputing the hashes over it fails verification. An editor who
+rewrites the whole bundle can recompute every section hash and the
+bundle hash; only the values bound to the public-log anchor, described
+below, resist that.
 
 **Also proves, since 2026-09-08:** that the Sigstore Rekor entry the
 bundle names is *this run's* entry and not someone else's. The verifier
@@ -132,6 +141,73 @@ timings and digest together is outside what a bundle-level seal can
 catch. Pre-v3 bundles report every one of these states explicitly
 instead of pretending.
 
+**Also proves, since v0.9.0:** that the 33 values in a version-5
+bundle's pre-anchor table are the ones that were anchored. The v5 ledger
+leaf binds the run's identity values (`envelope_id`, `aer_hash`,
+`zksp_binding_hash`, `input_nonce`) and the digest of that table. The
+table holds the program and route identifiers, the clock epoch, the
+payload hash, the sealed pipeline artifact hashes, the policy-gate
+outcome, the AIVP governance fields, the digest of the caller-attested
+block (actor, model and attested decision), the actor section and the
+scaffold flags, and the verifier checks every entry a section displays
+against that section. Bundles sealed before leaf v5 carry no table, and
+the verifier reports their anchor coverage as partial. v0.9.0 printed
+`FULL PRE-ANCHOR COVERAGE` for a complete v5 table; that wording read as
+whole-record coverage, which it was not, and v0.10.0 no longer prints it.
+
+**Not bound to the anchor in a v5 bundle without `bundle_anchor`:** the
+descriptive sections. The
+AER section's decision record (`aer.decision`), `request_substance`,
+`authorization_chain`, `causal_graph` (including `effect_log`),
+`regulatory_scaffolding`, `system_provenance` (including the SLSA
+level), the reproducibility context and the `formal_verification`
+record are sealed only by section hashes and the bundle hash inside the
+bundle. An external review on 2026-10-16 rewrote each of them,
+recomputed those hashes, and v0.9.0 still reported VERIFIED AND
+ANCHORED with exit code 0. In a bundle without a complete-record anchor
+those sections therefore show the bundle is internally consistent, not
+that a party able to rewrite the whole bundle has not changed them, and
+v0.10.0 says so in the verdict: `VERIFIED AND ANCHORED, PARTIAL
+COVERAGE`, naming the descriptive sections as bundle-sealed, NOT
+anchored. The six round-six forgeries are kept in `testdata/round6/` and
+receive exactly that verdict.
+
+**Also proves, since v0.10.0:** that a bundle carrying `bundle_anchor`
+is, section for section, the record that was anchored. After the bundle
+is fully built, the orchestrator submits a second Rekor entry whose leaf
+is `sha256("verdifax.ledger.bundle.v1" + "." + envelope_id + "." +
+anchored_record_digest)`. The anchored record digest is a null-separated
+SHA-256, under the domain `verdifax.bundle.anchor.v1`, over thirteen
+named values: the bundle hash and the hash of every part of the record
+the bundle hash does not cover (the pre-anchor table, the actor section,
+the AIVP section, the formal-verification record, the execution record,
+the runtime timings, the SEV-SNP evidence, the PoTE ledger fields, the
+scaffold notes, the seal references, the section fields their own hashes
+omit, and the run metadata). The verifier recomputes every one of them
+from the bundle's contents, rebuilds the leaf, and checks the second
+entry offline exactly as it checks the first. The frozen recipe is in
+`internal/artifacts/bundle_anchor.go`, and a golden vector in
+`internal/artifacts/testdata/` pins the expected values. When both
+entries verify, the verdict reads `VERIFIED AND ANCHORED, COMPLETE
+RECORD ANCHORED`. A `bundle_anchor` that is present but does not hold
+fails the verification, exit code 1. The only proofs outside the digest
+are `rekor_anchor` and `bundle_anchor` themselves. A bundle whose
+`bundle_anchor` was stripped cannot be told apart from one sealed before
+the anchor shipped. It receives the partial verdict, never the complete
+one, so a relying party that requires complete coverage must require
+that exact verdict.
+
+**Also checks, since v0.10.0:** that each logged entry body names the
+leaf the bundle claims for it. The Merkle proof covers the hashedrekord
+entry body, not the bundle's `leaf_hash`, so the verifier now requires
+the body to be a `hashedrekord` whose `spec.data.hash` is sha256 and
+equal to `leaf_hash`, for both `rekor_anchor` and `bundle_anchor`. An
+anchor with no `entry_body` cannot be bound to its proof at all and is
+reported as NOT VERIFIABLE, never as anchored, so the bundle cannot
+reach the anchored verdict. Bundles served by the Verdifax API carry the
+body; older stored bundles are backfilled on read wherever the stored
+manifest holds it.
+
 **Does not prove:** that the underlying execution actually happened on
 Verdifax-operated hardware. Anchoring establishes that a bundle existed
 and was publicly committed at a point in time; it does not establish
@@ -143,6 +219,36 @@ attestation, which is currently a scaffold value; see
 
 The `log_entry_id` field remains searchable on `search.sigstore.dev` if
 you would rather confirm the entry by hand than trust this binary.
+
+## Release notes
+
+### v0.10.0: complete-record anchor, and a closed leaf-binding gap
+
+Adds the complete-record anchor check and the honest partial verdict
+described under
+[What this verifier proves](#what-this-verifier-proves-and-doesnt-prove),
+and recomputes the `reproducibility_context` section hash, which earlier
+releases left unchecked even though the bundle hash covers it.
+
+It also closes a verification gap present in v0.1.4 through v0.9.0. From
+v0.1.4 (2026-05-29) the Rekor check computed the Merkle leaf from the
+anchor's `entry_body`, as it must, but no release ever compared that body
+to the bundle's `leaf_hash`. Every check that rebuilds the leaf from the
+bundle's own contents (the run binding from v0.5.0, the v3 actor and
+scaffold seal from v0.8.0, the v5 pre-anchor table from v0.9.0) compared
+its result against `leaf_hash`, a value the log never saw. A party able to
+rewrite a bundle could therefore change any value those checks protect,
+recompute the leaf, write it into `leaf_hash`, and keep the genuine
+body, proof and checkpoint; the bundle still verified as anchored. This
+was found on 2026-10-16 while reproducing the round-six review, and it
+was demonstrated against live run 237 by rewriting an anchored
+pre-anchor value: v0.9.0 printed `VERIFIED AND ANCHORED, FULL PRE-ANCHOR
+COVERAGE`. That forged bundle is kept as
+`testdata/round6/L1_leaf_hash_swapped_genuine_entry_body.json` and fails
+under v0.10.0. Releases v0.1.0 through v0.1.3 did not read `entry_body`; they
+walked the proof from `leaf_hash` itself, so this gap did not arise in
+them. Re-verify any bundle
+you accepted with an earlier release using v0.10.0.
 
 ## Release verification (Cosign and SLSA provenance)
 

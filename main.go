@@ -3,9 +3,12 @@
 //
 // It is the offline-verification path for Verdifax bundles: given just
 // a bundle JSON file, this binary recomputes every section hash, the
-// bundle hash, the pre-anchor digest and the anchored leaf from the
-// bundle's content, confirms every section binds the same manifest
-// hash, and reports whether the recorded values match. The manifest
+// bundle hash, the pre-anchor digest, the anchored leaf, and (from
+// v0.10.0) the anchored record digest and bundle leaf of the
+// complete-record anchor from the bundle's content, confirms that each
+// logged entry body names the leaf it is claimed for, confirms every
+// section binds the same manifest hash, and reports whether the
+// recorded values match. The manifest
 // hash itself is not recomputed: its preimage lives in the
 // orchestrator's stored manifest.
 // Verification makes no network calls, needs no Verdifax credentials,
@@ -59,7 +62,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.9.0"
+const Version = "0.10.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -90,6 +93,10 @@ type RekorAnchorCheck struct {
 	LogIndex  int64  `json:"log_index"`
 	Match     bool   `json:"match"`
 	Reason    string `json:"reason,omitempty"`
+	// Unverifiable is true for a rekor-backend anchor that carries no
+	// entry body: nothing binds its leaf to the Merkle proof, so it is
+	// reported as not anchored (Performed=false) rather than verified.
+	Unverifiable bool `json:"unverifiable,omitempty"`
 }
 
 // Report is the structured verdict emitted by --json mode.
@@ -107,12 +114,18 @@ type Report struct {
 	NrepSignature NrepCheck        `json:"nrep_signature"`
 	RuntimeTiming TimingCheck      `json:"runtime_timing"`
 	PreAnchor     PreAnchorCheck   `json:"pre_anchor"`
-	CrossChecks   []string         `json:"cross_check_failures,omitempty"`
-	AllPassed     bool             `json:"all_passed"`
-	Anchored      bool             `json:"anchored"`
-	VerdictTier   string           `json:"verdict_tier"`
-	HasScaffold   bool             `json:"has_scaffold"`
-	ScaffoldList  []string         `json:"scaffold_list,omitempty"`
+	// BundleAnchor is the complete-record anchor (v0.10.0).
+	BundleAnchor BundleAnchorCheck `json:"bundle_anchor"`
+	CrossChecks  []string          `json:"cross_check_failures,omitempty"`
+	AllPassed    bool              `json:"all_passed"`
+	Anchored     bool              `json:"anchored"`
+	VerdictTier  string            `json:"verdict_tier"`
+	// RecordCoverage says how much of the record the public log binds:
+	// "complete_record_anchored", "partial_descriptive_sections_bundle_sealed",
+	// "partial_pre_v5_identity_only", "not_anchored" or "failed".
+	RecordCoverage string   `json:"record_coverage"`
+	HasScaffold    bool     `json:"has_scaffold"`
+	ScaffoldList   []string `json:"scaffold_list,omitempty"`
 }
 
 func main() {
@@ -199,7 +212,10 @@ type EvidenceSummary struct {
 	ScaffoldList   []string `json:"scaffold_list,omitempty"`
 	RekorAnchored  bool     `json:"rekor_anchored"`
 	RekorLogIndex  int64    `json:"rekor_log_index,omitempty"`
-	RekorVerified  string   `json:"rekor_verified"` // "verified" | "failed" | "not_anchored"
+	// RekorLogEntryID is the global index search.sigstore.dev resolves;
+	// RekorLogIndex is the shard-local position the inclusion proof uses.
+	RekorLogEntryID string `json:"rekor_log_entry_id,omitempty"`
+	RekorVerified   string `json:"rekor_verified"` // "verified" | "failed" | "not_verifiable" | "not_anchored"
 
 	// LeafBound answers the question rekor_verified does NOT answer:
 	// whether the anchored entry belongs to this run. "bound" | "foreign"
@@ -212,7 +228,14 @@ type EvidenceSummary struct {
 	// in both the public and the private verifier, which meant the
 	// strongest check either tool performs was invisible to any tooling
 	// reading the machine output.
-	LeafBound       string `json:"leaf_bound"`
+	LeafBound string `json:"leaf_bound"`
+	// RecordAnchor is the complete-record anchor state (v0.10.0):
+	// "complete" when the second public-log entry verifies over this
+	// record, "failed" when present but not holding, "not_public" when
+	// present on a non-public backend, "absent" otherwise (descriptive
+	// sections bundle-sealed, not anchored).
+	RecordAnchor    string `json:"record_anchor"`
+	RecordCoverage  string `json:"record_coverage"`
 	PoteHashVersion string `json:"pote_hash_version"`
 	// FormalVerification summarizes the bundle's formal-verification
 	// binding: "bound" with repo and commit when the record is present
@@ -250,9 +273,15 @@ func buildEvidenceSummary(b *artifacts.AuditBundle, r *Report, strictWanted bool
 	case r.RekorAnchor.Performed && r.RekorAnchor.Match:
 		s.RekorVerified = "verified"
 		s.RekorLogIndex = b.RekorAnchor.LogIndex
+		s.RekorLogEntryID = b.RekorAnchor.LogEntryID
 	case r.RekorAnchor.Performed && !r.RekorAnchor.Match:
 		s.RekorVerified = "failed"
 		s.RekorLogIndex = b.RekorAnchor.LogIndex
+		s.RekorLogEntryID = b.RekorAnchor.LogEntryID
+	case r.RekorAnchor.Unverifiable:
+		s.RekorVerified = "not_verifiable"
+		s.RekorLogIndex = b.RekorAnchor.LogIndex
+		s.RekorLogEntryID = b.RekorAnchor.LogEntryID
 	default:
 		s.RekorVerified = "not_anchored"
 	}
@@ -264,6 +293,17 @@ func buildEvidenceSummary(b *artifacts.AuditBundle, r *Report, strictWanted bool
 	default:
 		s.LeafBound = "not_checked"
 	}
+	switch c := r.BundleAnchor; {
+	case !c.Present:
+		s.RecordAnchor = "absent"
+	case !c.Match:
+		s.RecordAnchor = "failed"
+	case !c.Performed:
+		s.RecordAnchor = "not_public"
+	default:
+		s.RecordAnchor = "complete"
+	}
+	s.RecordCoverage = r.RecordCoverage
 	switch b.PoteProof.Kind {
 	case "verdifax.artifact.pote.v2":
 		s.PoteHashVersion = "v2 (binds Rekor temporal claim)"
@@ -321,9 +361,11 @@ func printEvidenceSummary(s EvidenceSummary) {
 	}
 	switch s.RekorVerified {
 	case "verified":
-		fmt.Printf("  Rekor anchor:     verified · log index %d\n", s.RekorLogIndex)
+		fmt.Printf("  Rekor anchor:     verified · %s\n", rekorIndexText(s))
 	case "failed":
-		fmt.Printf("  Rekor anchor:     FAILED · log index %d\n", s.RekorLogIndex)
+		fmt.Printf("  Rekor anchor:     FAILED · %s\n", rekorIndexText(s))
+	case "not_verifiable":
+		fmt.Printf("  Rekor anchor:     NOT VERIFIABLE · no entry_body binds the leaf to the proof\n")
 	default:
 		fmt.Printf("  Rekor anchor:     not anchored (mock-ledger run)\n")
 	}
@@ -337,6 +379,16 @@ func printEvidenceSummary(s EvidenceSummary) {
 		fmt.Printf("  Anchored leaf:    NOT this run's\n")
 	default:
 		fmt.Printf("  Anchored leaf:    not checked (no public-log claim)\n")
+	}
+	switch s.RecordAnchor {
+	case "complete":
+		fmt.Printf("  Record anchor:    complete record anchored (second entry)\n")
+	case "failed":
+		fmt.Printf("  Record anchor:    FAILED · record changed after anchoring or entry invalid\n")
+	case "not_public":
+		fmt.Printf("  Record anchor:    present, not on a public log\n")
+	default:
+		fmt.Printf("  Record anchor:    absent · descriptive sections bundle-sealed, not anchored\n")
 	}
 	fmt.Printf("  PoTE hash:        %s\n", s.PoteHashVersion)
 	fmt.Printf("  Formal verify:    %s\n", s.FormalVerification)
@@ -461,6 +513,10 @@ func verify(b *artifacts.AuditBundle) *Report {
 		mk("regulatory_scaffolding", b.RegulatoryScaffolding.Hash, artifacts.RecomputeRegulatoryScaffoldingHash(b.RegulatoryScaffolding), false),
 		mk("causal_graph", b.CausalGraph.Hash, artifacts.RecomputeCausalGraphHash(b.CausalGraph), false),
 		mk("system_provenance", b.SystemProvenance.Hash, artifacts.RecomputeSystemProvenanceHash(b.SystemProvenance), false),
+		// Category 6 is inside bundle_hash but went unrecomputed
+		// until v0.10.0, so its stored hash vouched for content no
+		// check read.
+		mk("reproducibility_context", b.ReproducibilityContext.Hash, artifacts.RecomputeReproducibilityContextHash(b.ReproducibilityContext), false),
 	}
 
 	// Bundle
@@ -558,6 +614,7 @@ func verify(b *artifacts.AuditBundle) *Report {
 	r.RuntimeTiming = verifyRuntimeTiming(b)
 	r.PreAnchor = verifyPreAnchor(b)
 	r.CrossChecks = verifyCrossGeneration(b)
+	r.BundleAnchor = verifyBundleAnchor(b)
 
 	// Roll-up.
 	allPassed := r.BundleHashOK
@@ -610,6 +667,11 @@ func verify(b *artifacts.AuditBundle) *Report {
 	if len(r.CrossChecks) > 0 {
 		allPassed = false
 	}
+	// A complete-record anchor that is present but does not hold is a
+	// rewrite of the record after anchoring: a failure, never a note.
+	if r.BundleAnchor.Present && !r.BundleAnchor.Match {
+		allPassed = false
+	}
 	r.AllPassed = allPassed
 
 	// Verdict tiering (v0.8.1), the answer to the demonstrated
@@ -634,6 +696,7 @@ func verify(b *artifacts.AuditBundle) *Report {
 	default:
 		r.VerdictTier = "SELF_CONSISTENT_NOT_ANCHORED"
 	}
+	r.RecordCoverage = recordCoverage(r)
 	return r
 }
 
@@ -652,7 +715,7 @@ func verifyRekorAnchor(a artifacts.RekorAnchor) RekorAnchorCheck {
 	if a.Backend != "rekor" {
 		return RekorAnchorCheck{Performed: false, Backend: a.Backend}
 	}
-	err := rekorverify.VerifyAnchor(rekorverify.AnchorInput{
+	err := rekorAnchorVerifier(rekorverify.AnchorInput{
 		LeafHashHex:   a.LeafHashHex,
 		EntryBody:     a.EntryBody,
 		LogIndex:      a.LogIndex,
@@ -662,6 +725,19 @@ func verifyRekorAnchor(a artifacts.RekorAnchor) RekorAnchorCheck {
 		Checkpoint:    a.Checkpoint,
 		LogID:         a.LogID,
 	})
+	if isNoEntryBody(err) {
+		// Not a forgery signal by itself, and not evidence either:
+		// without the body nothing binds leaf_hash to the proof, so
+		// the anchor is reported as not verifiable and the bundle
+		// cannot reach the anchored tier.
+		return RekorAnchorCheck{
+			Performed:    false,
+			Backend:      a.Backend,
+			LogIndex:     a.LogIndex,
+			Unverifiable: true,
+			Reason:       err.Error(),
+		}
+	}
 	if err != nil {
 		return RekorAnchorCheck{
 			Performed: true,
@@ -809,12 +885,19 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	printNrepCheck(r.NrepSignature)
 	printTimingCheck(r.RuntimeTiming)
 	printPreAnchor(r.PreAnchor)
+	printBundleAnchor(r.BundleAnchor)
 	for _, f := range r.CrossChecks {
 		fmt.Printf("  Cross-check:      ✗ FAILED · %s\n", f)
 	}
 	fmt.Println()
 
 	switch {
+	case r.AllPassed && !r.Anchored && r.RekorAnchor.Unverifiable:
+		fmt.Println("VERDICT: ⚠ SELF-CONSISTENT ONLY, NOT ANCHORED.")
+		fmt.Println("  Every hash recomputes, and the bundle claims a Rekor anchor, but it")
+		fmt.Println("  carries no entry_body, so nothing binds its leaf hash to the inclusion")
+		fmt.Println("  proof and the anchor cannot be verified offline. Every hash in it could")
+		fmt.Println("  have been rewritten together. Exit code fails without --allow-unanchored.")
 	case r.AllPassed && !r.Anchored:
 		fmt.Println("VERDICT: ⚠ SELF-CONSISTENT ONLY, NOT ANCHORED.")
 		fmt.Println("  Every hash recomputes, but this bundle claims no public-log anchor,")
@@ -823,25 +906,53 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 		fmt.Println("  Production seals are always anchored: treat an unanchored bundle as")
 		fmt.Println("  a dev artifact or a stripped anchor. Exit code fails without")
 		fmt.Println("  --allow-unanchored.")
-	case r.AllPassed && !r.HasScaffold && r.PreAnchor.Performed:
-		fmt.Println("VERDICT: ✓ VERIFIED AND ANCHORED, FULL PRE-ANCHOR COVERAGE, no scaffold values flagged.")
-	case r.AllPassed && r.HasScaffold && r.PreAnchor.Performed:
-		fmt.Println("VERDICT: ✓ VERIFIED AND ANCHORED, FULL PRE-ANCHOR COVERAGE (with scaffold flags)")
-	case r.AllPassed && !r.HasScaffold:
-		fmt.Println("VERDICT: ✓ VERIFIED AND ANCHORED (PARTIAL COVERAGE: pre-v5 record; the anchor binds the run identity, not every field)")
-	case r.AllPassed && r.HasScaffold:
-		fmt.Println("VERDICT: ✓ VERIFIED AND ANCHORED (PARTIAL COVERAGE: pre-v5 record; the anchor binds the run identity, not every field; with scaffold flags)")
-		fmt.Println("  Scaffold artifacts (closing paths at docs.verdifax.com/concepts/scaffold-gaps/):")
-		for _, s := range r.ScaffoldList {
-			fmt.Println("    ·", s)
+	case completeRecordAnchored(r):
+		fmt.Printf("VERDICT: ✓ VERIFIED AND ANCHORED, COMPLETE RECORD ANCHORED%s\n", scaffoldSuffix(r))
+		fmt.Println("  The run identity and pre-anchor table are bound by the first public-log")
+		fmt.Println("  entry and every section of the record by the second.")
+		printScaffoldList(r)
+	case r.AllPassed && r.PreAnchor.Performed:
+		fmt.Printf("VERDICT: ✓ VERIFIED AND ANCHORED, PARTIAL COVERAGE%s\n", scaffoldSuffix(r))
+		fmt.Println("  The run identity and the pre-anchor table are anchored. The descriptive")
+		fmt.Println("  sections (decision record, request substance, authorization chain,")
+		fmt.Println("  causal graph, system provenance and the rest) are bundle-sealed, NOT")
+		fmt.Println("  anchored: this record has no verified complete-record anchor, so those")
+		fmt.Println("  sections could have been rewritten together with their hashes.")
+		printScaffoldList(r)
+	case r.AllPassed:
+		note := ""
+		if r.HasScaffold {
+			note = "; with scaffold flags"
 		}
-		fmt.Println("  These are honestly self-declared by the orchestrator. Use --strict to fail on them.")
+		fmt.Printf("VERDICT: ✓ VERIFIED AND ANCHORED (PARTIAL COVERAGE: pre-v5 record; the anchor binds the run identity, not every field%s)\n", note)
+		printScaffoldList(r)
 	default:
 		fmt.Println("VERDICT: ✗ FAILED, at least one hash did not recompute correctly.")
 		fmt.Println("  This bundle has been tampered with, or was produced by a tool that is")
 		fmt.Println("  out of sync with this verifier's schema. Investigate before relying on it.")
 	}
 	fmt.Println()
+}
+
+// scaffoldSuffix is the verdict-line tail naming scaffold state.
+func scaffoldSuffix(r *Report) string {
+	if r.HasScaffold {
+		return " (with scaffold flags)"
+	}
+	return ", no scaffold values flagged."
+}
+
+// printScaffoldList names the scaffold-flagged artifacts under any
+// passing verdict that has them.
+func printScaffoldList(r *Report) {
+	if !r.HasScaffold {
+		return
+	}
+	fmt.Println("  Scaffold artifacts (closing paths at docs.verdifax.com/concepts/scaffold-gaps/):")
+	for _, s := range r.ScaffoldList {
+		fmt.Println("    ·", s)
+	}
+	fmt.Println("  These are honestly self-declared by the orchestrator. Use --strict to fail on them.")
 }
 
 func printCheck(c HashCheck) {
@@ -878,6 +989,13 @@ func truncate(s string, n int) string {
 //   - Performed=true, Match=false: at least one check (Merkle proof
 //     or signed checkpoint) failed. Reason names which.
 func printRekorAnchor(a RekorAnchorCheck, logEntryID string) {
+	if a.Unverifiable {
+		fmt.Println("  ·  rekor anchor NOT VERIFIABLE offline: the bundle carries no entry_body")
+		fmt.Println("     Without the logged entry body nothing binds the claimed leaf hash")
+		fmt.Println("     to the inclusion proof, so this anchor is not counted. Fetch the")
+		fmt.Println("     bundle from the API, which backfills entry_body, and verify again.")
+		return
+	}
 	if !a.Performed {
 		backend := a.Backend
 		if backend == "" {
@@ -1009,4 +1127,14 @@ func fetchBundleHTTP(rawURL string) ([]byte, error) {
 		return nil, fmt.Errorf("bundle exceeds %d byte size limit", maxBundleBytes)
 	}
 	return body, nil
+}
+
+// rekorIndexText names the global index (what search.sigstore.dev and
+// the audit PDF cite) first, and the shard position only when it differs.
+func rekorIndexText(s EvidenceSummary) string {
+	shard := strconv.FormatInt(s.RekorLogIndex, 10)
+	if s.RekorLogEntryID == "" || s.RekorLogEntryID == shard {
+		return "log index " + shard
+	}
+	return "log entry " + s.RekorLogEntryID + " (shard index " + shard + ")"
 }

@@ -61,6 +61,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -85,10 +86,18 @@ type AnchorInput struct {
 	// EntryBody is the base64-encoded canonical JSON of the Rekor
 	// hashedrekord entry. The RFC 6962 Merkle leaf hash used to walk
 	// the inclusion proof is SHA-256(0x00 || base64decode(EntryBody)),
-	// per c2sp.org/static-ct §3.1 and RFC 6962 §2.1. When set, the
-	// verifier uses this to recompute the root; when empty, the
-	// verifier falls back to LeafHashHex (which only works for legacy
-	// bundles whose orchestrator pre-prefixed the leaf hash).
+	// per c2sp.org/static-ct §3.1 and RFC 6962 §2.1.
+	//
+	// REQUIRED since v0.10.0, and the body must name LeafHashHex. The
+	// Merkle proof covers the BODY, not LeafHashHex, so the body is
+	// the only thing that ties the claimed leaf hash to the log.
+	// Through v0.9.0 nothing compared the two: a bundle could keep a
+	// genuine body, proof and checkpoint while claiming any leaf hash
+	// it liked, and every check that recomputes the leaf from the
+	// bundle's own contents then compared against a value the log
+	// never saw. An empty body now returns ErrNoEntryBody (the caller
+	// reports the anchor as not verifiable, never as anchored), and a
+	// body that is not a sha256 hashedrekord over LeafHashHex fails.
 	EntryBody string
 
 	// LogIndex is the 0-based position of the leaf in the Rekor tree.
@@ -129,35 +138,68 @@ type AnchorInput struct {
 // surface exactly which check failed (most common diagnostic
 // scenarios are stale public key, tampered proof, or wrong log_id).
 func VerifyAnchor(in AnchorInput) error {
+	// Library error model: every failure is returned to the caller,
+	// which reports it verbatim; this package has no logger.
+	rekorPubKey, keyErr := loadRekorPublicKey()
+	if keyErr != nil {
+		// Input problems still report first, so a malformed anchor
+		// reads as malformed rather than as a key problem.
+		if verr := validateInput(in); verr != nil {
+			return fmt.Errorf("rekorverify: invalid input: %w", verr)
+		}
+		return fmt.Errorf("rekorverify: load embedded rekor pubkey: %w", keyErr)
+	}
+	return VerifyAnchorWithKey(in, rekorPubKey)
+}
+
+// ErrNoEntryBody reports an anchor that carries no hashedrekord entry
+// body. Without the body nothing binds the claimed leaf hash to the
+// Merkle leaf the proof walks, so the anchor cannot be verified
+// offline; callers must report it as not anchored, never as verified.
+var ErrNoEntryBody = errors.New("rekorverify: anchor carries no entry_body, so the claimed " +
+	"leaf hash cannot be bound to the Merkle leaf the inclusion proof covers")
+
+// VerifyAnchorWithKey is VerifyAnchor against an explicit log key.
+// Production code calls VerifyAnchor, which always uses the embedded
+// Rekor key; this form exists so tests can exercise the complete
+// path (body binding, Merkle walk, signed checkpoint, log id) against
+// a log they control, without any way to swap the embedded key.
+func VerifyAnchorWithKey(in AnchorInput, rekorPubKey *ecdsa.PublicKey) error {
 	// 1. Sanity-check the input structure before doing any crypto.
 	if err := validateInput(in); err != nil {
 		return fmt.Errorf("rekorverify: invalid input: %w", err)
 	}
+	if rekorPubKey == nil {
+		return errors.New("rekorverify: nil log public key")
+	}
 
 	// 2. Compute the RFC 6962 Merkle leaf hash. Rekor's tree-leaf hash
 	// is SHA-256(0x00 || canonical_body), NOT the data.hash.value the
-	// hashedrekord entry references. When EntryBody is present (the
-	// canonical-body bytes Rekor returned at submit time, base64-
-	// encoded), use it directly. Fall back to LeafHashHex only for
-	// legacy bundles produced before EntryBody plumbing landed.
-	var leafHash []byte
-	if in.EntryBody != "" {
-		bodyBytes, err := base64.StdEncoding.DecodeString(in.EntryBody)
-		if err != nil {
-			return fmt.Errorf("rekorverify: entry_body base64 decode: %w", err)
-		}
-		// RFC 6962 §2.1 leaf hash: SHA-256(0x00 || body).
-		h := sha256.New()
-		h.Write([]byte{0x00})
-		h.Write(bodyBytes)
-		leafHash = h.Sum(nil)
-	} else {
-		var err error
-		leafHash, err = hex.DecodeString(in.LeafHashHex)
-		if err != nil || (len(leafHash) != sha256.Size && len(leafHash) != 64) {
-			return fmt.Errorf("rekorverify: leaf hash must be 64-char hex SHA-256 or 128-char hex SHA-512")
-		}
+	// hashedrekord entry references. EntryBody is the canonical-body
+	// bytes Rekor returned at submit time, base64-encoded.
+	//
+	// The body is also what binds LeafHashHex to the log: it must be a
+	// sha256 hashedrekord whose data.hash.value IS LeafHashHex. There
+	// is no fallback for a missing body. The pre-v0.10.0 fallback used
+	// LeafHashHex itself as the Merkle leaf, which no genuine Rekor
+	// entry ever satisfies (Rekor's tree leaf is the hash of the body)
+	// and which drops RFC 6962's 0x00 leaf domain separation.
+	if in.EntryBody == "" {
+		return ErrNoEntryBody
 	}
+	bodyBytes, decodeErr := base64.StdEncoding.DecodeString(in.EntryBody)
+	if decodeErr != nil {
+		return fmt.Errorf("rekorverify: entry_body base64 decode: %w", decodeErr)
+	}
+	if err := EntryBodyNamesLeaf(bodyBytes, in.LeafHashHex); err != nil {
+		return err
+	}
+	// RFC 6962 §2.1 leaf hash: SHA-256(0x00 || body).
+	h := sha256.New()
+	h.Write([]byte{0x00})
+	h.Write(bodyBytes)
+	leafHash := h.Sum(nil)
+
 	claimedRoot, err := hex.DecodeString(in.RootHashHex)
 	if err != nil || len(claimedRoot) != sha256.Size {
 		return fmt.Errorf("rekorverify: root hash must be 64-char hex SHA-256")
@@ -186,10 +228,6 @@ func VerifyAnchor(in AnchorInput) error {
 	// under Rekor's public key. This is what stops an attacker who
 	// crafted a fake leaf+path+root from convincing a verifier that
 	// Rekor agreed with the (root, tree_size), only Rekor can sign.
-	rekorPubKey, err := loadRekorPublicKey()
-	if err != nil {
-		return fmt.Errorf("rekorverify: load embedded rekor pubkey: %w", err)
-	}
 	if err := verifySignedCheckpoint(in.Checkpoint, in.RootHashHex, in.TreeSize, rekorPubKey); err != nil {
 		return fmt.Errorf("rekorverify: signed checkpoint: %w", err)
 	}
@@ -207,6 +245,44 @@ func VerifyAnchor(in AnchorInput) error {
 			in.LogID, expectedLogID)
 	}
 
+	return nil
+}
+
+// hashedRekordBody is the subset of a hashedrekord v0.0.1 entry body
+// the binding check reads. Typed on purpose: the body is canonical
+// JSON produced by Rekor, and nothing here round-trips it.
+type hashedRekordBody struct {
+	Kind string `json:"kind"`
+	Spec struct {
+		Data struct {
+			Hash struct {
+				Algorithm string `json:"algorithm"`
+				Value     string `json:"value"`
+			} `json:"hash"`
+		} `json:"data"`
+	} `json:"spec"`
+}
+
+// EntryBodyNamesLeaf confirms a decoded Rekor entry body is a sha256
+// hashedrekord whose data.hash.value equals leafHashHex (hex compared
+// case-insensitively). This is the check that ties the bundle's
+// claimed leaf hash to the entry the Merkle proof actually covers.
+func EntryBodyNamesLeaf(body []byte, leafHashHex string) error {
+	var e hashedRekordBody
+	if err := json.Unmarshal(body, &e); err != nil {
+		return fmt.Errorf("rekorverify: entry_body is not a JSON Rekor entry: %w", err)
+	}
+	if e.Kind != "hashedrekord" {
+		return fmt.Errorf("rekorverify: entry_body kind is %q, expected hashedrekord", e.Kind)
+	}
+	if e.Spec.Data.Hash.Algorithm != "sha256" {
+		return fmt.Errorf("rekorverify: entry_body hash algorithm is %q, expected sha256",
+			e.Spec.Data.Hash.Algorithm)
+	}
+	if e.Spec.Data.Hash.Value == "" || !strings.EqualFold(e.Spec.Data.Hash.Value, leafHashHex) {
+		return fmt.Errorf("rekorverify: entry_body records leaf %s, but the bundle claims leaf %s; "+
+			"the logged entry is not this leaf", e.Spec.Data.Hash.Value, leafHashHex)
+	}
 	return nil
 }
 
