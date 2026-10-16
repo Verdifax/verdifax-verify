@@ -18,7 +18,12 @@ package artifacts
 //   - two keys in one object that are equal under Unicode case folding
 //     (which includes exact duplicates), and
 //   - any key that is not byte-for-byte the JSON name of a field this
-//     verifier models at that position.
+//     verifier models at that position, and
+//   - any number not written in its canonical form (v0.13.0): the
+//     spelling encoding/json produces for that value, which is also the
+//     RFC 8785 spelling for every number Verdifax emits. "0.011" passes;
+//     "0.0110000000000000001", "1.0", "1e3" and "011" do not, so the
+//     exact bytes are pinned, not only the values.
 //
 // So every value any reader can see is a value this verifier checked.
 // Map-typed fields keep free-form keys but still refuse fold-equal
@@ -32,6 +37,8 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -57,6 +64,24 @@ func DecodeBundleStrict(data []byte) (*AuditBundle, error) {
 	return &b, nil
 }
 
+// DecodeReceiptStrict decodes a receipt document under the same rules
+// as DecodeBundleStrict.
+func DecodeReceiptStrict(data []byte) (*ReceiptDocument, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	if walkErr := walkStrict(dec, reflect.TypeOf(ReceiptDocument{}), "$"); walkErr != nil {
+		return nil, fmt.Errorf("%w: %v", ErrNotStrictJSON, walkErr)
+	}
+	if _, trailingErr := dec.Token(); trailingErr != io.EOF {
+		return nil, fmt.Errorf("%w: data after the document's closing brace", ErrNotStrictJSON)
+	}
+	var d ReceiptDocument
+	if unmarshalErr := json.Unmarshal(data, &d); unmarshalErr != nil {
+		return nil, unmarshalErr
+	}
+	return &d, nil
+}
+
 var unmarshalerType = reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()
 
 // opaque reports whether values of t are decoded by something other
@@ -78,7 +103,10 @@ func walkStrict(dec *json.Decoder, t reflect.Type, path string) error {
 	}
 	delim, isDelim := tok.(json.Delim)
 	if !isDelim {
-		return nil // scalar: nothing to disambiguate
+		if num, isNum := tok.(json.Number); isNum {
+			return checkCanonicalNumber(num, path)
+		}
+		return nil // string, bool or null: nothing to disambiguate
 	}
 	switch delim {
 	case '[':
@@ -184,3 +212,43 @@ func jsonFields(t reflect.Type) map[string]reflect.Type {
 	fieldCache.Store(t, out)
 	return out
 }
+
+// checkCanonicalNumber refuses a number whose text is not the canonical
+// spelling of its value. Error model: the reason is returned to the
+// caller, which reports it; this package has no logger.
+func checkCanonicalNumber(num json.Number, path string) error {
+	text := num.String()
+	// Whole numbers: the canonical spelling is the plain decimal digits,
+	// read exactly (no float rounding), so large integers such as an
+	// input_nonce stored as a number keep their exact value.
+	if integerLiteral.MatchString(text) {
+		if text == "-0" {
+			return fmt.Errorf("%s is written %q; its canonical form is \"0\"", path, text)
+		}
+		if _, intErr := strconv.ParseInt(text, 10, 64); intErr != nil {
+			if _, uintErr := strconv.ParseUint(text, 10, 64); uintErr != nil {
+				return fmt.Errorf("%s: integer %q is out of the 64-bit range", path, text)
+			}
+		}
+		return nil
+	}
+	// Fractions and exponents: the canonical spelling is the one
+	// encoding/json produces for the float64 value.
+	value, parseErr := strconv.ParseFloat(text, 64)
+	if parseErr != nil {
+		return fmt.Errorf("%s: number %q does not parse: %v", path, text, parseErr)
+	}
+	canonical, encodeErr := json.Marshal(value)
+	if encodeErr != nil {
+		return fmt.Errorf("%s: number %q cannot be encoded: %v", path, text, encodeErr)
+	}
+	if string(canonical) != text {
+		return fmt.Errorf("%s is written %q; its canonical form is %q, so the bytes are not the ones sealed",
+			path, text, canonical)
+	}
+	return nil
+}
+
+// integerLiteral matches a JSON integer with no leading zeros, sign
+// only for negatives, and no fraction or exponent.
+var integerLiteral = regexp.MustCompile(`^-?(0|[1-9][0-9]*)$`)

@@ -65,7 +65,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.12.1"
+const Version = "0.13.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -165,7 +165,36 @@ func main() {
 		return
 	}
 
-	bundle, err := readBundle()
+	// Error model of this binary: a CLI with no logger; an unreadable
+	// input is reported on stderr with exit code 2.
+	data, inputErr := readInput()
+	if inputErr != nil {
+		fmt.Fprintln(os.Stderr, "verdifax-verify:", inputErr)
+		os.Exit(2)
+	}
+	// A refused or halted run's receipt document (v0.13.0).
+	if isReceiptDocument(data) {
+		doc, docErr := artifacts.DecodeReceiptStrict(data)
+		if errors.Is(docErr, artifacts.ErrNotStrictJSON) {
+			reportAmbiguousBundle(docErr, *jsonOutput)
+			os.Exit(1)
+		}
+		if docErr != nil {
+			fmt.Fprintln(os.Stderr, "verdifax-verify: invalid receipt JSON:", docErr)
+			os.Exit(2)
+		}
+		rr := verifyReceiptDocument(doc)
+		if *jsonOutput {
+			emitReceiptJSON(rr)
+		} else {
+			printReceiptReport(rr)
+		}
+		if receiptExitShouldFail(rr, *allowUnanchored) {
+			os.Exit(1)
+		}
+		return
+	}
+	bundle, err := decodeBundle(data)
 	if errors.Is(err, artifacts.ErrNotStrictJSON) {
 		// An ambiguous bundle is a failed verification, not unreadable
 		// input: other readers would see different values than this
@@ -494,31 +523,49 @@ EXIT
   2  could not parse the bundle`)
 }
 
-func readBundle() (*artifacts.AuditBundle, error) {
-	var data []byte
-	var err error
+// readInput returns the raw bytes of the file, URL or stdin argument.
+func readInput() ([]byte, error) {
 	if flag.NArg() > 0 {
 		arg := flag.Arg(0)
 		if isHTTPURL(arg) {
-			data, err = fetchBundleHTTP(arg)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			data, err = os.ReadFile(arg)
-			if err != nil {
-				return nil, fmt.Errorf("read failed: %w", err)
-			}
+			return fetchBundleHTTP(arg)
 		}
-	} else {
-		data, err = io.ReadAll(os.Stdin)
-		if err != nil {
-			return nil, fmt.Errorf("stdin read failed: %w", err)
+		data, readErr := os.ReadFile(arg)
+		if readErr != nil {
+			return nil, fmt.Errorf("read failed: %w", readErr)
 		}
-		if len(data) == 0 {
-			return nil, fmt.Errorf("no bundle provided (pass a file path, an https:// URL, or pipe to stdin; --help for usage)")
+		return data, nil
+	}
+	data, readErr := io.ReadAll(os.Stdin)
+	if readErr != nil {
+		return nil, fmt.Errorf("stdin read failed: %w", readErr)
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("no bundle provided (pass a file path, an https:// URL, or pipe to stdin; --help for usage)")
+	}
+	return data, nil
+}
+
+// isReceiptDocument reports whether the input's top level names a
+// receipt the way the Verdifax API serves one. Keys are compared
+// exactly; the strict decoder then judges the whole document.
+func isReceiptDocument(data []byte) bool {
+	var top map[string]json.RawMessage
+	if json.Unmarshal(data, &top) != nil {
+		return false
+	}
+	if _, isBundle := top["manifest_hash"]; isBundle {
+		return false
+	}
+	for _, kind := range artifacts.ReceiptKinds {
+		if _, ok := top[kind]; ok {
+			return true
 		}
 	}
+	return false
+}
+
+func decodeBundle(data []byte) (*artifacts.AuditBundle, error) {
 	// Strict decoding (v0.12.1): a key that is ambiguous across JSON
 	// readers, or not modeled here, is refused before any hash is
 	// computed, so the record this tool verifies is the record every
@@ -528,7 +575,7 @@ func readBundle() (*artifacts.AuditBundle, error) {
 		return nil, fmt.Errorf("invalid bundle JSON: %w", decodeErr)
 	}
 	if b.Kind == "" || b.ManifestHash == "" {
-		return nil, fmt.Errorf("not a Verdifax audit bundle (missing kind or manifest_hash)")
+		return nil, fmt.Errorf("not a Verdifax audit bundle or receipt document (missing kind or manifest_hash)")
 	}
 	return b, nil
 }

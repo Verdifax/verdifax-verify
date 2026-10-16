@@ -295,6 +295,26 @@ human report now also prints the decision-bearing values it checked
 (`Record says`), and the JSON report carries them as `record_values`,
 so a reader can compare them with any other view of the record.
 
+**Also checks, since v0.13.0:** a refused or halted run's receipt.
+Such a run produces a sealed receipt (deny, CCV halt, MACC halt, AIVP-T4
+halt or attestation gap) instead of an audit bundle. Pass the receipt
+document the Verdifax API serves (`GET /runs/{id}/deny-receipt` and its
+siblings) and the verifier recomputes the receipt's hash from its own
+fields and checks its `receipt_anchor`: a public-log entry whose leaf is
+`sha256(join(".", "verdifax.ledger.receipt.v1", kind, envelope_id,
+receipt_hash))`, verified exactly as a run's entries are (inclusion
+proof, signed checkpoint, entry body, signed entry timestamp, pinned
+Verdifax log-signing key within its period), and required to have been
+logged within 600 seconds after the receipt's own clock. A receipt
+without an anchor, or anchored only off the public log, is
+`RECEIPT SELF-CONSISTENT ONLY, NOT ANCHORED`: its hash recomputing shows
+only that its fields agree with each other, and it fails unless
+`--allow-unanchored` is passed. Receipts issued before receipt anchoring
+shipped carry no anchor. The same strict decoding applies, and since
+v0.13.0 every number must be written in its canonical form (the exact
+decimal digits for whole numbers, the shortest round-trip form for
+fractions), so the bytes are pinned, not only the values.
+
 **Also checks, since v0.10.0:** that each logged entry body names the
 leaf the bundle claims for it. The Merkle proof covers the hashedrekord
 entry body, not the bundle's `leaf_hash`, so the verifier now requires
@@ -360,6 +380,16 @@ entry it signs; a retired key keeps its entries verifiable and is given
 an end date.
 
 ## Release notes
+
+### v0.13.0: receipts, and pinned number spelling
+
+Checks refused and halted runs' receipt documents and their public-log
+anchors (`receipt_anchor`, recipe `verdifax.ledger.receipt.v1`, window
+600 seconds), with `--json` output carrying `receipt_hash_ok`,
+`record_values`, `anchored`, `signer_fingerprint`, `anchored_at` and
+`anchor_gap_seconds`. This replaces the private receipt checker the
+documentation used to name. Numbers must now be written in their
+canonical form; every public Verdifax record keeps its verdict.
 
 ### v0.12.1: one record, whoever reads it
 

@@ -1,0 +1,32 @@
+{
+  "deny_receipt": {
+    "decision_reason_code": "MCD_SIGNATURE_MATCH",
+    "deny_clock": "2026-10-16T21:34:03.75179Z",
+    "envelope_id": "env-a202ee6e402bb4a0",
+    "evaluation_hash": "1cfb2fe4024ebc5a1801b65be41c4a0094cfa5907c540fed4437b0906aa1e00b",
+    "evaluator_version": "pepg-0.1.0-api-test",
+    "fired_rule_id": "mcd-llm-001",
+    "mcd_finding_hash": "9ef595522424e1688e08f8999147c68d1a459628949c98a706e88835e08aeffc",
+    "policy_hash": "4586c48e0e63f3a035036ea9c02edb6b7159d2612880825b82dc0b98b55e3ee3",
+    "version": "vfa.deny_receipt.v1",
+    "hash": "07140ddb96adcc8841b0553b4d76eb310bff5e9898e1a92a4ac50bfa85f07ffa"
+  },
+  "ok": true,
+  "receipt_anchor": {
+    "kind": "verdifax.receipt_anchor.v1",
+    "receipt_kind": "deny_receipt",
+    "receipt_hash": "07140ddb96adcc8841b0553b4d76eb310bff5e9898e1a92a4ac50bfa85f07ffa",
+    "backend": "mock",
+    "log_entry_id": "mock-816c2bc34edc8c3f",
+    "log_id": "",
+    "leaf_hash": "136eb38b907f555ffc961005e38b6eb154419ad4c5f5719f76bbcd6faf8e48d9",
+    "log_index": 0,
+    "tree_size": 0,
+    "root_hash": "",
+    "inclusion_path": null,
+    "checkpoint": "",
+    "signed_entry_timestamp": "",
+    "integrated_time": 0
+  },
+  "run_id": 1
+}
