@@ -21,6 +21,14 @@ package main
 //     block (recomputed from epa.attested_context), the payload, the
 //     scaffold flags, and every sealed section hash.
 //
+// Table v2 (leaf v6, verifier v0.11.0) is the frozen v1 list plus one
+// row, complete_record_anchor = "required", digested under its own
+// domain. The shape check selects the frozen list by the presence of
+// that row, the row's value must be exactly "required", and the leaf
+// check binds the v2 digest into the v6 leaf; bundleanchor.go then
+// fails a record whose anchored table requires a complete-record
+// anchor it does not carry.
+//
 // Cross-generation checks that apply to EVERY bundle, old or new:
 // payload.content_hash must equal the execution record's disclosed
 // input_hash (the reviewer's payload-swap died here), and the zksp
@@ -35,11 +43,15 @@ import (
 
 // PreAnchorCheck reports the table enforcement verdict.
 type PreAnchorCheck struct {
-	Performed bool     `json:"performed"`
-	Match     bool     `json:"match"`
-	Rows      int      `json:"rows,omitempty"`
-	Failures  []string `json:"failures,omitempty"`
-	Reason    string   `json:"reason,omitempty"`
+	Performed bool `json:"performed"`
+	Match     bool `json:"match"`
+	// Form is the table form judged: verdifax.preanchor.v1 (leaf v5)
+	// or verdifax.preanchor.v2 (leaf v6, which seals the requirement
+	// for a complete-record anchor). Empty when no table is present.
+	Form     string   `json:"table_form,omitempty"`
+	Rows     int      `json:"rows,omitempty"`
+	Failures []string `json:"failures,omitempty"`
+	Reason   string   `json:"reason,omitempty"`
 }
 
 // verifyPreAnchor enforces the three properties. The leaf-binding
@@ -57,11 +69,18 @@ func verifyPreAnchor(b *artifacts.AuditBundle) PreAnchorCheck {
 		failures = append(failures, fmt.Sprintf(format, args...))
 	}
 
-	// 1. SHAPE.
-	if len(b.PreAnchor) != len(artifacts.PreAnchorNames) {
-		fail("table has %d rows, frozen order requires %d", len(b.PreAnchor), len(artifacts.PreAnchorNames))
+	// 1. SHAPE, against the frozen list of the table's own form. A
+	// table carrying the requirement row is judged as v2 wherever the
+	// row sits, so a misplaced row fails here instead of passing as v1.
+	form := artifacts.PreAnchorTableForm(b.PreAnchor)
+	names := artifacts.PreAnchorNames
+	if form == artifacts.PreAnchorFormV2 {
+		names = artifacts.PreAnchorNamesV2
+	}
+	if len(b.PreAnchor) != len(names) {
+		fail("table has %d rows, frozen order requires %d", len(b.PreAnchor), len(names))
 	} else {
-		for i, name := range artifacts.PreAnchorNames {
+		for i, name := range names {
 			if b.PreAnchor[i].Name != name {
 				fail("row %d is %q, frozen order requires %q", i, b.PreAnchor[i].Name, name)
 			}
@@ -73,9 +92,17 @@ func verifyPreAnchor(b *artifacts.AuditBundle) PreAnchorCheck {
 		table[e.Name] = e.Value
 	}
 
+	// The requirement row has exactly one defined value. Any other
+	// value is not a weaker requirement; it is a table this verifier
+	// does not know, and it fails rather than being read as "optional".
+	if v, ok := table[artifacts.CompleteRecordAnchorRow]; ok && v != artifacts.CompleteRecordAnchorRequired {
+		fail("%s is %q, the only defined value is %q",
+			artifacts.CompleteRecordAnchorRow, safePrefix(v), artifacts.CompleteRecordAnchorRequired)
+	}
+
 	// 2. ANCHOR (digest level; the leaf itself is leafbinding's job).
 	if len(failures) == 0 {
-		recomputed := artifacts.ComputePreAnchorDigestFromTable(b.PreAnchor)
+		recomputed := artifacts.ComputePreAnchorDigestForTable(b.PreAnchor)
 		if recomputed != b.PreAnchorDigest {
 			fail("table digest %s does not match the stored pre_anchor_digest %s",
 				recomputed[:16], safePrefix(b.PreAnchorDigest))
@@ -126,7 +153,7 @@ func verifyPreAnchor(b *artifacts.AuditBundle) PreAnchorCheck {
 			b.LeakageBundle.Scaffold.IsScaffold),
 		"the four scaffold flags (recomputed digest)")
 
-	out := PreAnchorCheck{Performed: true, Rows: len(b.PreAnchor), Failures: failures}
+	out := PreAnchorCheck{Performed: true, Form: form, Rows: len(b.PreAnchor), Failures: failures}
 	out.Match = len(failures) == 0
 	if !out.Match {
 		out.Reason = "the record's contents disagree with its anchored pre-anchor table"
@@ -156,6 +183,9 @@ func safePrefix(s string) string {
 
 func printPreAnchor(c PreAnchorCheck) {
 	switch {
+	case c.Performed && c.Match && c.Form == artifacts.PreAnchorFormV2:
+		fmt.Printf("  Pre-anchor table: %d values anchored and consistent with the record,\n", c.Rows)
+		fmt.Println("                    including the requirement for a complete-record anchor (table v2)")
 	case c.Performed && c.Match:
 		fmt.Printf("  Pre-anchor table: %d values anchored and consistent with the record\n", c.Rows)
 	case c.Performed && !c.Match:

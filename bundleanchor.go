@@ -23,9 +23,15 @@ package main
 // signed root, and the checkpoint must verify under the embedded Rekor
 // key.
 //
-// A record without bundle_anchor (sealed before it shipped, or whose
-// second submission failed) is reported honestly as partial coverage:
-// its descriptive sections are bundle-sealed, not anchored.
+// A v5 record without bundle_anchor (sealed before it shipped, or
+// whose second submission failed) is reported honestly as partial
+// coverage: its descriptive sections are bundle-sealed, not anchored.
+//
+// From v0.11.0 a record sealed with the v6 leaf states, inside the
+// pre-anchor values its first entry anchors, that a complete-record
+// anchor is required (verifyCompleteRecordRequirement below). For such
+// a record a missing or failing bundle_anchor is a FAILURE, never the
+// partial verdict, so deleting the second entry is detectable.
 
 import (
 	"errors"
@@ -129,6 +135,76 @@ func verifyBundleAnchor(b *artifacts.AuditBundle) BundleAnchorCheck {
 	}
 	out.Match = true
 	return out
+}
+
+// CompleteRecordRequirementCheck reports the leaf v6 guarantee: whether
+// the record's own anchored values require a complete-record anchor,
+// and whether the record carries one that holds.
+type CompleteRecordRequirementCheck struct {
+	// Sealed is true when the pre-anchor table, which the first
+	// public-log entry anchors, carries complete_record_anchor.
+	Sealed bool `json:"sealed"`
+	// Satisfied is true when Sealed and the bundle_anchor is present,
+	// holds over this record, and (for a run anchored on the public
+	// log) is itself a verified public-log entry.
+	Satisfied bool   `json:"satisfied"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+// verifyCompleteRecordRequirement turns a deleted complete-record
+// anchor from an undetectable downgrade into a failure, for records
+// whose anchored table says one must exist.
+//
+// Why the table and not some other field: a forger who strips
+// bundle_anchor can rewrite anything that is not anchored, including
+// any flag claiming the record once had one. The requirement row sits
+// inside the v2 table, whose digest is bound into the v6 leaf of the
+// FIRST public-log entry, so removing or changing it breaks that entry
+// (leafbinding.go), and keeping it makes the missing anchor fail here.
+//
+// Why a public-log run needs a public-log record anchor: otherwise the
+// strip attack becomes a swap attack, replacing the genuine Rekor
+// bundle_anchor with a self-consistent one claiming a mock backend,
+// which recomputes from any rewritten record. A run whose own anchor
+// is not on the public log is at most SELF-CONSISTENT anyway, so a
+// present, consistent record anchor of any backend satisfies it.
+func verifyCompleteRecordRequirement(b *artifacts.AuditBundle, ba BundleAnchorCheck) CompleteRecordRequirementCheck {
+	if !artifacts.TableRequiresCompleteRecordAnchor(b.PreAnchor) {
+		reason := "no pre-anchor table (pre-v5 record): no requirement is sealed"
+		if len(b.PreAnchor) > 0 {
+			reason = "the anchored table predates leaf v6 and states no requirement, " +
+				"so a deleted complete-record anchor cannot be detected for this record"
+		}
+		return CompleteRecordRequirementCheck{Sealed: false, Reason: reason}
+	}
+	out := CompleteRecordRequirementCheck{Sealed: true}
+	switch {
+	case !ba.Present:
+		out.Reason = "the record's own anchored values require a complete-record anchor, " +
+			"and it is missing: bundle_anchor was deleted or never made, so the " +
+			"descriptive sections may have been rewritten"
+	case !ba.Match:
+		out.Reason = "the record's own anchored values require a complete-record anchor, " +
+			"and the one it carries does not hold: " + ba.Reason
+	case b.RekorAnchor.Backend == "rekor" && !ba.Performed:
+		out.Reason = fmt.Sprintf("the record's own anchored values require a complete-record "+
+			"anchor on the public log that anchors this run, and its bundle_anchor is on "+
+			"backend %q instead", ba.Backend)
+	default:
+		out.Satisfied = true
+	}
+	return out
+}
+
+func printCompleteRecordRequirement(c CompleteRecordRequirementCheck, tablePresent bool) {
+	switch {
+	case c.Sealed && c.Satisfied:
+		fmt.Println("  Anchor required:  sealed in the anchored table (leaf v6) and satisfied")
+	case c.Sealed:
+		fmt.Printf("  Anchor required:  ✗ FAILED · %s\n", c.Reason)
+	case tablePresent:
+		fmt.Println("  Anchor required:  not sealed (pre-v6 record; a deleted record anchor is not detectable)")
+	}
 }
 
 // completeRecordAnchored is the strongest claim this tool makes: the

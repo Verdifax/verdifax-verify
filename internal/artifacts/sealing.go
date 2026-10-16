@@ -127,3 +127,101 @@ func nullJoinHashParts(parts []string) string {
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(sum[:])
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Pre-anchor table v2 (leaf v6): byte-identical port of the producing
+// side. Round seven showed that deleting bundle_anchor from a v5
+// record downgrades it to the honest partial verdict an older record
+// earns, so a forger who rewrites the descriptive sections and strips
+// the second entry still exits 0. A v6 record closes that by stating,
+// inside the values its FIRST public-log entry already anchors, that a
+// complete-record anchor must exist: the v2 table is the frozen v1
+// list plus one row, complete_record_anchor = "required". Removing or
+// changing that row changes the table digest, the rebuilt v6 leaf
+// stops matching the logged entry, and the record FAILS; leaving it in
+// place makes a missing or failing bundle_anchor a FAILURE.
+//
+// The v1 recipe above is untouched: v5 records keep their exact
+// verdicts, and the guarantee cannot be added to them after the fact.
+//
+// The bundle anchor's own recipe (bundle_anchor.go, pair 2) is frozen
+// and digests the stored table with ComputePreAnchorDigestFromTable
+// for every table form. For a v2 table that pair is the v1-domain
+// digest over all 34 rows: a different number from pre_anchor_digest,
+// but just as binding, since it is an injective function of the same
+// rows.
+// ─────────────────────────────────────────────────────────────────────
+
+const (
+	// PreAnchorFormV1 names the v1 table (leaf v5).
+	PreAnchorFormV1 = "verdifax.preanchor.v1"
+	// PreAnchorFormV2 names the v2 table (leaf v6) and is its digest
+	// domain tag.
+	PreAnchorFormV2 = "verdifax.preanchor.v2"
+
+	// CompleteRecordAnchorRow is the row a v2 table adds.
+	CompleteRecordAnchorRow = "complete_record_anchor"
+	// CompleteRecordAnchorRequired is that row's only defined value.
+	CompleteRecordAnchorRequired = "required"
+)
+
+// PreAnchorNamesV2 is the frozen key order of the v2 table: the v1
+// list unchanged, then the requirement row. Spelled out rather than
+// derived so a later edit to the v1 list cannot silently move it.
+var PreAnchorNamesV2 = []string{
+	"program_id", "route_id", "registry_record_hash", "clock_epoch",
+	"attested_digest", "input_hash", "envelope_id", "envelope_hash",
+	"transport_hash", "epa_hash", "efa_hash", "aer_hash", "execution_ids",
+	"pepg_outcome", "allow_token_hash", "deny_receipt_hash",
+	"aivp_outcome", "aivp_adapter_id", "aivp_pia_hash",
+	"aivp_ai_output_hash", "aivp_halt_receipt_hash", "transcript_hash",
+	"hardware_attestation_hash", "leakage_bundle_hash", "zksp_binding_hash",
+	"formal_verifier_status", "migration_token_hash", "replay_fingerprint",
+	"nrep_actor_id", "nrep_public_key", "nrep_signature", "nrep_signed_at",
+	"scaffold_flags_hash",
+	CompleteRecordAnchorRow,
+}
+
+// ComputePreAnchorDigestV2FromTable digests a v2 table in its own
+// order under the v2 domain; callers must first confirm the order
+// matches PreAnchorNamesV2.
+func ComputePreAnchorDigestV2FromTable(table []PreAnchorEntry) string {
+	parts := make([]string, 0, len(table)*2+1)
+	parts = append(parts, PreAnchorFormV2)
+	for _, e := range table {
+		parts = append(parts, e.Name, e.Value)
+	}
+	return nullJoinHashParts(parts)
+}
+
+// TableRequiresCompleteRecordAnchor reports whether a stored table
+// carries the requirement row at any position, which is what selects
+// the v2 table form and the v6 leaf. Position and value are enforced
+// by the shape check; detection deliberately looks everywhere so a
+// misplaced row is judged as v2 (and fails) rather than as v1.
+func TableRequiresCompleteRecordAnchor(table []PreAnchorEntry) bool {
+	for _, e := range table {
+		if e.Name == CompleteRecordAnchorRow {
+			return true
+		}
+	}
+	return false
+}
+
+// PreAnchorTableForm returns the form of a stored table: v2 when it
+// carries the requirement row, v1 otherwise.
+func PreAnchorTableForm(table []PreAnchorEntry) string {
+	if TableRequiresCompleteRecordAnchor(table) {
+		return PreAnchorFormV2
+	}
+	return PreAnchorFormV1
+}
+
+// ComputePreAnchorDigestForTable digests a stored table under the
+// domain of its own form: the digest the anchored leaf binds.
+func ComputePreAnchorDigestForTable(table []PreAnchorEntry) string {
+	if TableRequiresCompleteRecordAnchor(table) {
+		return ComputePreAnchorDigestV2FromTable(table)
+	}
+	return ComputePreAnchorDigestFromTable(table)
+}

@@ -1,0 +1,148 @@
+{
+ "note": "Shared golden vector for pre-anchor table v2 and leaf v6. Inputs are live run 238's anchored values (a v5 record) with the requirement row appended; the expected values are synthetic, since no v6 record existed when this was pinned. Identical in verdifax-orchestrator internal/adapters/testdata and verdifax-verify testdata.",
+ "envelope_id": "env-b4bf97c0936d6fe9",
+ "aer_hash": "19a5a688795624ae3cfd482824c8672ee05a42db28eb64294e74ffe44b880830",
+ "zksp_binding_hash": "11258ab00fbb8e1065245c3f64681a1a6be2dfeee82dbe4e06f66a59fe64c7fc",
+ "input_nonce": "1792170397466960529",
+ "pre_anchor": [
+  {
+   "name": "program_id",
+   "value": "c56563c83c92d7634c809097772a59e7d0ef7f616429e2d3da84a3871945960d"
+  },
+  {
+   "name": "route_id",
+   "value": "buyer-demo-complete-run-2026-05-13"
+  },
+  {
+   "name": "registry_record_hash",
+   "value": "c0a945520c3d903b4e67d8a58536af78ffd6519c2a0d1c648548cce3f52dc342"
+  },
+  {
+   "name": "clock_epoch",
+   "value": "2026-10-16T17:06:37.466930409Z"
+  },
+  {
+   "name": "attested_digest",
+   "value": "c49160dd4bffeef5aa2d71b87410004b6e366040f9786d489857f9275b7d572f"
+  },
+  {
+   "name": "input_hash",
+   "value": "b4bf97c0936d6fe9804fa2233907a3c21f9581aeac2c17d7d0546d02da6bd34b"
+  },
+  {
+   "name": "envelope_id",
+   "value": "env-b4bf97c0936d6fe9"
+  },
+  {
+   "name": "envelope_hash",
+   "value": "3a5e021411feb5d2468342fc1d5544c8c8a685b1bab2443f8b310ce965e0e254"
+  },
+  {
+   "name": "transport_hash",
+   "value": "f2b751d819c55fd155ea4165c8087b98e10987b4f434304d463a5bec60a145fc"
+  },
+  {
+   "name": "epa_hash",
+   "value": "a1d7542692f2bcd468a02a574dae100f917ce809fd80628ebfb724eeec5a90a9"
+  },
+  {
+   "name": "efa_hash",
+   "value": "f333fc67e6cad2534f5421836b21a133e09e2b2256c5f1b158bc6ac0019680a7"
+  },
+  {
+   "name": "aer_hash",
+   "value": "19a5a688795624ae3cfd482824c8672ee05a42db28eb64294e74ffe44b880830"
+  },
+  {
+   "name": "execution_ids",
+   "value": "21aaf0eb6e0a265cae4d57041d9c0f421d402d01082aa9329a6b11933ed53f80,c9fac63659bbf14cbf847cff3cc563ac18bf7f3e58729d01fd9eb13a55081dcc,f89116a02a062a8b486f5f35f78f80e00c56424c9e349610d6ce7727ed46e665,01adf356f5134c478de4acc6444a53f2d7be598bc629b7010c172b9e0a78ef67,793d2fdc4fbede00ee91b25c8f6cbe71a5555db1610035ca8ee14bf52d0d6268,c53fb2bf5bd1b61fdabfa494b92397728f51b1ce22e49db62c117ae4328a7af1"
+  },
+  {
+   "name": "pepg_outcome",
+   "value": "allow"
+  },
+  {
+   "name": "allow_token_hash",
+   "value": "b7d2b2118708dea46ba418ab9af7d76516f6652ff127ba7ffc2dd2505e4cce32"
+  },
+  {
+   "name": "deny_receipt_hash",
+   "value": ""
+  },
+  {
+   "name": "aivp_outcome",
+   "value": "release"
+  },
+  {
+   "name": "aivp_adapter_id",
+   "value": "live-claude-api"
+  },
+  {
+   "name": "aivp_pia_hash",
+   "value": "793d2fdc4fbede00ee91b25c8f6cbe71a5555db1610035ca8ee14bf52d0d6268"
+  },
+  {
+   "name": "aivp_ai_output_hash",
+   "value": "10de1b0312b54ce012bfa958534c72953a3a0dafad6610dfbb3af6aba390a7c5"
+  },
+  {
+   "name": "aivp_halt_receipt_hash",
+   "value": ""
+  },
+  {
+   "name": "transcript_hash",
+   "value": "16ea58b0d031a2825747d7bc2436c233a922861b2e319c7a587b5757d217c570"
+  },
+  {
+   "name": "hardware_attestation_hash",
+   "value": "4a1cf47005ad73f50955c769ea3cdef387fb35c76d1fce34aab22de7f41b9f20"
+  },
+  {
+   "name": "leakage_bundle_hash",
+   "value": "ee6d27bc88e160ef029e0afa0d0be64c2b4eef5e615b9c769156676d4b1b144a"
+  },
+  {
+   "name": "zksp_binding_hash",
+   "value": "11258ab00fbb8e1065245c3f64681a1a6be2dfeee82dbe4e06f66a59fe64c7fc"
+  },
+  {
+   "name": "formal_verifier_status",
+   "value": "SCAFFOLD_R1CS_HASH_FACADE"
+  },
+  {
+   "name": "migration_token_hash",
+   "value": "2285e890071c1955802e18de13870ae4e31659b10e92c8983d0df3c1b1eb29f6"
+  },
+  {
+   "name": "replay_fingerprint",
+   "value": "0b088af9725485ad47a6ba6b8d1775f84a5713bd9830bc0011ab613d6fbf8fa6"
+  },
+  {
+   "name": "nrep_actor_id",
+   "value": "api-key-2"
+  },
+  {
+   "name": "nrep_public_key",
+   "value": "ofCHViNebXh4hW9fHjJWaE0mA2PWWGP/bXQpH3EmrFs="
+  },
+  {
+   "name": "nrep_signature",
+   "value": "kGcPH0AJDEa4gXRaPoQF8p8RyWAYcfwPO52XDEem2iFqfMPH4H7Vt6Ygg7puAo2MLLDXT5WtY40QQvKq1KBwDg=="
+  },
+  {
+   "name": "nrep_signed_at",
+   "value": "2026-10-16T17:06:37.466930409Z"
+  },
+  {
+   "name": "scaffold_flags_hash",
+   "value": "fd6b4df097819fa7c548767b6af2d10a307905350a2ab65ffdc37528d72e94dd"
+  },
+  {
+   "name": "complete_record_anchor",
+   "value": "required"
+  }
+ ],
+ "expected_pre_anchor_digest_v2": "6f5a5b4d8cdf36253b95f82c36b7d612c4942a1d1664994a3eb986398dbeb0f9",
+ "expected_leaf_preimage": "verdifax.ledger.input.v6.env-b4bf97c0936d6fe9.19a5a688795624ae3cfd482824c8672ee05a42db28eb64294e74ffe44b880830.11258ab00fbb8e1065245c3f64681a1a6be2dfeee82dbe4e06f66a59fe64c7fc.1792170397466960529.6f5a5b4d8cdf36253b95f82c36b7d612c4942a1d1664994a3eb986398dbeb0f9",
+ "expected_leaf_hash": "9216b749c8c9fcf4d3cd4146edd7a6278d51a5d8f7faa0f6de983d54e1ea0d68"
+}

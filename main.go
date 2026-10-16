@@ -5,7 +5,9 @@
 // a bundle JSON file, this binary recomputes every section hash, the
 // bundle hash, the pre-anchor digest, the anchored leaf, and (from
 // v0.10.0) the anchored record digest and bundle leaf of the
-// complete-record anchor from the bundle's content, confirms that each
+// complete-record anchor from the bundle's content (and, from v0.11.0,
+// fails a record sealed with the v6 leaf whose anchored values require
+// that complete-record anchor when it is missing), confirms that each
 // logged entry body names the leaf it is claimed for, confirms every
 // section binds the same manifest hash, and reports whether the
 // recorded values match. The manifest
@@ -62,7 +64,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.10.0"
+const Version = "0.11.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -116,16 +118,25 @@ type Report struct {
 	PreAnchor     PreAnchorCheck   `json:"pre_anchor"`
 	// BundleAnchor is the complete-record anchor (v0.10.0).
 	BundleAnchor BundleAnchorCheck `json:"bundle_anchor"`
-	CrossChecks  []string          `json:"cross_check_failures,omitempty"`
-	AllPassed    bool              `json:"all_passed"`
-	Anchored     bool              `json:"anchored"`
-	VerdictTier  string            `json:"verdict_tier"`
+	// CompleteRecordRequirement is the leaf v6 guarantee (v0.11.0):
+	// whether the record's anchored values require a complete-record
+	// anchor, and whether that requirement holds.
+	CompleteRecordRequirement CompleteRecordRequirementCheck `json:"complete_record_requirement"`
+	CrossChecks               []string                       `json:"cross_check_failures,omitempty"`
+	AllPassed                 bool                           `json:"all_passed"`
+	Anchored                  bool                           `json:"anchored"`
+	VerdictTier               string                         `json:"verdict_tier"`
 	// RecordCoverage says how much of the record the public log binds:
 	// "complete_record_anchored", "partial_descriptive_sections_bundle_sealed",
 	// "partial_pre_v5_identity_only", "not_anchored" or "failed".
 	RecordCoverage string   `json:"record_coverage"`
 	HasScaffold    bool     `json:"has_scaffold"`
 	ScaffoldList   []string `json:"scaffold_list,omitempty"`
+
+	// passedExceptRequirement is the roll-up before the complete-record
+	// requirement is applied, so the verdict can name the requirement
+	// as the reason when it is the only failure.
+	passedExceptRequirement bool
 }
 
 func main() {
@@ -234,9 +245,13 @@ type EvidenceSummary struct {
 	// record, "failed" when present but not holding, "not_public" when
 	// present on a non-public backend, "absent" otherwise (descriptive
 	// sections bundle-sealed, not anchored).
-	RecordAnchor    string `json:"record_anchor"`
-	RecordCoverage  string `json:"record_coverage"`
-	PoteHashVersion string `json:"pote_hash_version"`
+	RecordAnchor   string `json:"record_anchor"`
+	RecordCoverage string `json:"record_coverage"`
+	// RecordAnchorRequirement is "satisfied", "failed" or "not_sealed"
+	// (v0.11.0): whether the record's anchored values require a
+	// complete-record anchor and whether it holds.
+	RecordAnchorRequirement string `json:"record_anchor_requirement"`
+	PoteHashVersion         string `json:"pote_hash_version"`
 	// FormalVerification summarizes the bundle's formal-verification
 	// binding: "bound" with repo and commit when the record is present
 	// and belongs to this run, or "absent (no claim)" for bundles
@@ -304,6 +319,14 @@ func buildEvidenceSummary(b *artifacts.AuditBundle, r *Report, strictWanted bool
 		s.RecordAnchor = "complete"
 	}
 	s.RecordCoverage = r.RecordCoverage
+	switch c := r.CompleteRecordRequirement; {
+	case c.Sealed && c.Satisfied:
+		s.RecordAnchorRequirement = "satisfied"
+	case c.Sealed:
+		s.RecordAnchorRequirement = "failed"
+	default:
+		s.RecordAnchorRequirement = "not_sealed"
+	}
 	switch b.PoteProof.Kind {
 	case "verdifax.artifact.pote.v2":
 		s.PoteHashVersion = "v2 (binds Rekor temporal claim)"
@@ -389,6 +412,14 @@ func printEvidenceSummary(s EvidenceSummary) {
 		fmt.Printf("  Record anchor:    present, not on a public log\n")
 	default:
 		fmt.Printf("  Record anchor:    absent · descriptive sections bundle-sealed, not anchored\n")
+	}
+	switch s.RecordAnchorRequirement {
+	case "satisfied":
+		fmt.Printf("  Anchor required:  sealed (leaf v6) and satisfied\n")
+	case "failed":
+		fmt.Printf("  Anchor required:  FAILED · sealed (leaf v6), record anchor missing or invalid\n")
+	default:
+		fmt.Printf("  Anchor required:  not sealed (pre-v6 record; deletion not detectable)\n")
 	}
 	fmt.Printf("  PoTE hash:        %s\n", s.PoteHashVersion)
 	fmt.Printf("  Formal verify:    %s\n", s.FormalVerification)
@@ -615,6 +646,7 @@ func verify(b *artifacts.AuditBundle) *Report {
 	r.PreAnchor = verifyPreAnchor(b)
 	r.CrossChecks = verifyCrossGeneration(b)
 	r.BundleAnchor = verifyBundleAnchor(b)
+	r.CompleteRecordRequirement = verifyCompleteRecordRequirement(b, r.BundleAnchor)
 
 	// Roll-up.
 	allPassed := r.BundleHashOK
@@ -670,6 +702,14 @@ func verify(b *artifacts.AuditBundle) *Report {
 	// A complete-record anchor that is present but does not hold is a
 	// rewrite of the record after anchoring: a failure, never a note.
 	if r.BundleAnchor.Present && !r.BundleAnchor.Match {
+		allPassed = false
+	}
+	// A record whose own anchored values require a complete-record
+	// anchor, and that does not carry one which holds, is a record
+	// whose second entry was deleted or swapped: a failure, never the
+	// partial verdict an older record honestly earns.
+	r.passedExceptRequirement = allPassed
+	if r.CompleteRecordRequirement.Sealed && !r.CompleteRecordRequirement.Satisfied {
 		allPassed = false
 	}
 	r.AllPassed = allPassed
@@ -886,6 +926,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	printTimingCheck(r.RuntimeTiming)
 	printPreAnchor(r.PreAnchor)
 	printBundleAnchor(r.BundleAnchor)
+	printCompleteRecordRequirement(r.CompleteRecordRequirement, len(b.PreAnchor) > 0)
 	for _, f := range r.CrossChecks {
 		fmt.Printf("  Cross-check:      ✗ FAILED · %s\n", f)
 	}
@@ -926,6 +967,19 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 		}
 		fmt.Printf("VERDICT: ✓ VERIFIED AND ANCHORED (PARTIAL COVERAGE: pre-v5 record; the anchor binds the run identity, not every field%s)\n", note)
 		printScaffoldList(r)
+	case r.CompleteRecordRequirement.Sealed && !r.CompleteRecordRequirement.Satisfied &&
+		r.passedExceptRequirement:
+		if !r.BundleAnchor.Present {
+			fmt.Println("VERDICT: ✗ FAILED, this record's own anchored values require a complete-record")
+			fmt.Println("  anchor, and it is missing.")
+		} else {
+			fmt.Println("VERDICT: ✗ FAILED, this record's own anchored values require a complete-record")
+			fmt.Println("  anchor, and the one it carries does not satisfy that requirement.")
+		}
+		fmt.Println("  Records sealed with leaf v6 state, inside the values their first public-log")
+		fmt.Println("  entry anchors, that a second entry anchoring the complete record must exist.")
+		fmt.Println("  Without it, the descriptive sections could have been rewritten together with")
+		fmt.Println("  their hashes and the second entry deleted. Do not rely on this record.")
 	default:
 		fmt.Println("VERDICT: ✗ FAILED, at least one hash did not recompute correctly.")
 		fmt.Println("  This bundle has been tampered with, or was produced by a tool that is")

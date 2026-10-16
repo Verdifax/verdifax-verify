@@ -66,6 +66,7 @@ const (
 	leafDomainV2 = "verdifax.ledger.input.v2"
 	leafDomainV3 = "verdifax.ledger.input.v3"
 	leafDomainV5 = "verdifax.ledger.input.v5"
+	leafDomainV6 = "verdifax.ledger.input.v6"
 )
 
 // LeafBindingCheck records whether the anchored leaf is this run's.
@@ -167,6 +168,18 @@ func verifyLeafBinding(b *artifacts.AuditBundle) LeafBindingCheck {
 		form     string
 	)
 	switch {
+	case artifacts.TableRequiresCompleteRecordAnchor(b.PreAnchor):
+		// v6: the v5 shape under its own domain tag, embedding the
+		// digest of the v2 table, which states that a complete-record
+		// anchor is required. RECOMPUTED here from the table itself,
+		// so deleting or editing the requirement row changes the
+		// digest and the leaf, and the public-log entry no longer
+		// matches. Checked before v5 because a v2 table is also a
+		// non-empty table.
+		form = leafDomainV6
+		digest := artifacts.ComputePreAnchorDigestV2FromTable(b.PreAnchor)
+		preimage = joinLeafParts(leafDomainV6, envelopeID, aerHash, bindingHash,
+			strconv.FormatInt(int64(b.RekorAnchor.InputNonce), 10), digest)
 	case len(b.PreAnchor) > 0 || b.PreAnchorDigest != "":
 		// v5: the leaf embeds the digest of the pre-anchor table,
 		// RECOMPUTED here from the table itself; preanchor.go

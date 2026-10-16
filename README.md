@@ -12,7 +12,10 @@ anchor binds its identity values and, for version-5 bundles, a 33-value
 pre-anchor table. From v0.10.0 a bundle may also carry a complete-record
 anchor (`bundle_anchor`), a second public-log entry that binds every
 section of the record; bundles without one have their descriptive
-sections sealed inside the bundle only. See
+sections sealed inside the bundle only. From v0.11.0, records sealed with
+the version-6 leaf state inside their anchored values that a
+complete-record anchor must exist, so deleting it makes the record FAIL
+instead of reading as partial coverage. See
 [What this verifier proves](#what-this-verifier-proves-and-doesnt-prove). The manifest hash
 itself is not recomputed here: its preimage includes fields held only
 in the orchestrator's stored manifest, which the orchestrator re-derives
@@ -191,11 +194,43 @@ entry offline exactly as it checks the first. The frozen recipe is in
 entries verify, the verdict reads `VERIFIED AND ANCHORED, COMPLETE
 RECORD ANCHORED`. A `bundle_anchor` that is present but does not hold
 fails the verification, exit code 1. The only proofs outside the digest
-are `rekor_anchor` and `bundle_anchor` themselves. A bundle whose
-`bundle_anchor` was stripped cannot be told apart from one sealed before
-the anchor shipped. It receives the partial verdict, never the complete
-one, so a relying party that requires complete coverage must require
-that exact verdict.
+are `rekor_anchor` and `bundle_anchor` themselves. In a v5 record, a
+bundle whose `bundle_anchor` was stripped cannot be told apart from one
+sealed before the anchor shipped. It receives the partial verdict, never
+the complete one, so a relying party that requires complete coverage
+must require that exact verdict.
+
+**Also proves, since v0.11.0:** that a record sealed with the version-6
+leaf still carries the complete-record anchor it was sealed with. The
+round-seven review showed that deleting `bundle_anchor` from a v5 record
+(run 238) after rewriting its descriptive sections and recomputing
+their hashes earned `VERIFIED AND ANCHORED, PARTIAL COVERAGE` with exit
+code 0, the honest verdict for a record that never had the anchor.
+Records sealed with leaf v6 close that: their pre-anchor table is
+version 2, the frozen 33-name v1 list plus one row,
+`complete_record_anchor` = `required`, digested under the domain
+`verdifax.preanchor.v2`, and the run's first public-log entry binds that
+digest through the leaf
+`sha256(join(".", "verdifax.ledger.input.v6", envelope_id, aer_hash,
+zksp_binding_hash, input_nonce, pre_anchor_digest_v2))`. Removing or
+changing the requirement row breaks the first entry. Keeping it means
+the verifier requires a `bundle_anchor` that is present, holds over the
+record, and, for a run anchored on the public log, is itself a verified
+public-log entry. A missing, failing or non-public one is `FAILED` with
+exit code 1, whatever the flags, and the reason says the record's own
+anchored values require a complete-record anchor that is missing.
+
+This guarantee cannot be added after the fact. A v5 record, including
+run 238 and every earlier run, states no requirement, and nothing a
+verifier can do will make its deleted anchor detectable: those records
+keep exactly their v0.10.0 verdicts, and the human report adds the
+line `Anchor required:  not sealed (pre-v6 record; a deleted record anchor is not detectable)`.
+**Relying parties should require the verdict
+`VERIFIED AND ANCHORED, COMPLETE RECORD ANCHORED` for any record sealed
+after the deploy that introduced leaf v6**, and treat a partial verdict
+on such a record as a failure; the leaf form appears in the JSON report
+as `leaf_binding.preimage_form` and the requirement as
+`complete_record_requirement`.
 
 **Also checks, since v0.10.0:** that each logged entry body names the
 leaf the bundle claims for it. The Merkle proof covers the hashedrekord
@@ -221,6 +256,26 @@ The `log_entry_id` field remains searchable on `search.sigstore.dev` if
 you would rather confirm the entry by hand than trust this binary.
 
 ## Release notes
+
+### v0.11.0: deleting the complete-record anchor is detectable
+
+Adds pre-anchor table version 2 and the version-6 leaf, and fails any
+record whose anchored table requires a complete-record anchor it does
+not carry, as described under
+[What this verifier proves](#what-this-verifier-proves-and-doesnt-prove).
+The JSON report gains `complete_record_requirement` (`sealed`,
+`satisfied`, `reason`) and `pre_anchor.table_form`; the evidence
+summary gains `record_anchor_requirement`. Every v5 and older record
+receives exactly the verdict and exit code it received under v0.10.0;
+the six round-seven strip forgeries of run 238 are kept in
+`testdata/round7/` with that honest partial verdict, beside a synthetic
+v6 strip that fails.
+
+Upgrade before relying on new records: v0.10.0 and earlier do not know
+table version 2 and report every genuine leaf v6 record as FAILED (the
+table has 34 rows where they expect 33). That is a refusal, never a
+false pass, but it means a relying party on an older release cannot
+accept records sealed after the leaf v6 deploy.
 
 ### v0.10.0: complete-record anchor, and a closed leaf-binding gap
 
