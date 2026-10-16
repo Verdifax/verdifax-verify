@@ -64,6 +64,8 @@ type BundleAnchorCheck struct {
 	RecordedLeaf   string `json:"recorded_leaf_hash,omitempty"`
 	ComputedLeaf   string `json:"computed_leaf_hash,omitempty"`
 	Reason         string `json:"reason,omitempty"`
+	// StaleEntryNumber: see RekorAnchorCheck.
+	StaleEntryNumber bool `json:"stale_entry_number,omitempty"`
 }
 
 // verifyBundleAnchor recomputes the anchored record digest and the
@@ -135,6 +137,10 @@ func verifyBundleAnchor(b *artifacts.AuditBundle) BundleAnchorCheck {
 		SignedEntryTimestamp: a.SignedEntryTimestamp,
 	})
 	if anchorErr != nil {
+		if stale, isStale := staleIndexReason(anchorErr, a.LogEntryID, a.LogIndex); isStale {
+			out.StaleEntryNumber = true
+			return fail("the second public-log entry: " + stale)
+		}
 		return fail("the second public-log entry does not verify: " + anchorErr.Error())
 	}
 	out.Match = true

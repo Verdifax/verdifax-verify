@@ -45,6 +45,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -64,7 +65,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.12.0"
+const Version = "0.12.1"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -99,6 +100,9 @@ type RekorAnchorCheck struct {
 	// entry body: nothing binds its leaf to the Merkle proof, so it is
 	// reported as not anchored (Performed=false) rather than verified.
 	Unverifiable bool `json:"unverifiable,omitempty"`
+	// StaleEntryNumber is true when the failure is a copy that stores
+	// the shard position as its entry number (see staleIndexReason).
+	StaleEntryNumber bool `json:"stale_entry_number,omitempty"`
 }
 
 // Report is the structured verdict emitted by --json mode.
@@ -125,11 +129,13 @@ type Report struct {
 	// EntryAuth is who logged the run's public-log entries and when
 	// (v0.12.0): pinned signer, signed entry timestamps, and the sealed
 	// anchoring window on table v3 records.
-	EntryAuth   EntryAuthCheck `json:"entry_authentication"`
-	CrossChecks []string       `json:"cross_check_failures,omitempty"`
-	AllPassed   bool           `json:"all_passed"`
-	Anchored    bool           `json:"anchored"`
-	VerdictTier string         `json:"verdict_tier"`
+	EntryAuth EntryAuthCheck `json:"entry_authentication"`
+	// RecordValues are the decision-bearing values as checked (v0.12.1).
+	RecordValues RecordValues `json:"record_values"`
+	CrossChecks  []string     `json:"cross_check_failures,omitempty"`
+	AllPassed    bool         `json:"all_passed"`
+	Anchored     bool         `json:"anchored"`
+	VerdictTier  string       `json:"verdict_tier"`
 	// RecordCoverage says how much of the record the public log binds:
 	// "complete_record_anchored", "partial_descriptive_sections_bundle_sealed",
 	// "partial_pre_v5_identity_only", "not_anchored" or "failed".
@@ -160,6 +166,13 @@ func main() {
 	}
 
 	bundle, err := readBundle()
+	if errors.Is(err, artifacts.ErrNotStrictJSON) {
+		// An ambiguous bundle is a failed verification, not unreadable
+		// input: other readers would see different values than this
+		// tool checks. Report it as FAILED, exit 1, like any forgery.
+		reportAmbiguousBundle(err, *jsonOutput)
+		os.Exit(1)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "verdifax-verify:", err)
 		os.Exit(2)
@@ -506,14 +519,18 @@ func readBundle() (*artifacts.AuditBundle, error) {
 			return nil, fmt.Errorf("no bundle provided (pass a file path, an https:// URL, or pipe to stdin; --help for usage)")
 		}
 	}
-	var b artifacts.AuditBundle
-	if err := json.Unmarshal(data, &b); err != nil {
-		return nil, fmt.Errorf("invalid bundle JSON: %w", err)
+	// Strict decoding (v0.12.1): a key that is ambiguous across JSON
+	// readers, or not modeled here, is refused before any hash is
+	// computed, so the record this tool verifies is the record every
+	// other reader sees (round eight of the external review).
+	b, decodeErr := artifacts.DecodeBundleStrict(data)
+	if decodeErr != nil {
+		return nil, fmt.Errorf("invalid bundle JSON: %w", decodeErr)
 	}
 	if b.Kind == "" || b.ManifestHash == "" {
 		return nil, fmt.Errorf("not a Verdifax audit bundle (missing kind or manifest_hash)")
 	}
-	return &b, nil
+	return b, nil
 }
 
 func verify(b *artifacts.AuditBundle) *Report {
@@ -652,6 +669,7 @@ func verify(b *artifacts.AuditBundle) *Report {
 	r.BundleAnchor = verifyBundleAnchor(b)
 	r.CompleteRecordRequirement = verifyCompleteRecordRequirement(b, r.BundleAnchor)
 	r.EntryAuth = verifyEntryAuthentication(b, r)
+	r.RecordValues = recordValuesOf(b)
 
 	// Roll-up.
 	allPassed := r.BundleHashOK
@@ -794,12 +812,18 @@ func verifyRekorAnchor(a artifacts.RekorAnchor) RekorAnchorCheck {
 		}
 	}
 	if err != nil {
+		reason := err.Error()
+		stale, isStale := staleIndexReason(err, a.LogEntryID, a.LogIndex)
+		if isStale {
+			reason = stale
+		}
 		return RekorAnchorCheck{
-			Performed: true,
-			Backend:   a.Backend,
-			LogIndex:  a.LogIndex,
-			Match:     false,
-			Reason:    err.Error(),
+			Performed:        true,
+			Backend:          a.Backend,
+			LogIndex:         a.LogIndex,
+			Match:            false,
+			Reason:           reason,
+			StaleEntryNumber: isStale,
 		}
 	}
 	return RekorAnchorCheck{
@@ -943,6 +967,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	printBundleAnchor(r.BundleAnchor)
 	printCompleteRecordRequirement(r.CompleteRecordRequirement, len(b.PreAnchor) > 0)
 	printEntryAuth(r.EntryAuth)
+	printRecordValues(r.RecordValues)
 	for _, f := range r.CrossChecks {
 		fmt.Printf("  Cross-check:      ✗ FAILED · %s\n", f)
 	}
@@ -996,8 +1021,13 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 		fmt.Println("  entry anchors, that a second entry anchoring the complete record must exist.")
 		fmt.Println("  Without it, the descriptive sections could have been rewritten together with")
 		fmt.Println("  their hashes and the second entry deleted. Do not rely on this record.")
+	case r.RekorAnchor.StaleEntryNumber || r.BundleAnchor.StaleEntryNumber:
+		fmt.Println("VERDICT: ✗ FAILED, this copy carries an outdated entry number, so its")
+		fmt.Println("  public-log timestamp cannot be checked. Copies of some records downloaded")
+		fmt.Println("  before 2026-10-16 look like this: download the record again from its")
+		fmt.Println("  public link and verify that copy.")
 	default:
-		fmt.Println("VERDICT: ✗ FAILED, at least one hash did not recompute correctly.")
+		fmt.Println("VERDICT: ✗ FAILED, at least one check did not pass (the ✗ lines above say which).")
 		fmt.Println("  This bundle has been tampered with, or was produced by a tool that is")
 		fmt.Println("  out of sync with this verifier's schema. Investigate before relying on it.")
 	}
@@ -1207,4 +1237,26 @@ func rekorIndexText(s EvidenceSummary) string {
 		return "log index " + shard
 	}
 	return "log entry " + s.RekorLogEntryID + " (shard index " + shard + ")"
+}
+
+// reportAmbiguousBundle prints the FAILED verdict for a bundle refused
+// by strict decoding, in the requested output form.
+func reportAmbiguousBundle(err error, jsonOut bool) {
+	if jsonOut {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(map[string]any{
+			"tool":            "verdifax-verify",
+			"tool_version":    Version,
+			"all_passed":      false,
+			"anchored":        false,
+			"verdict_tier":    "FAILED",
+			"record_coverage": "failed",
+			"reason":          err.Error(),
+		})
+		return
+	}
+	fmt.Println("  Bundle JSON:      ✗ FAILED · " + strings.TrimPrefix(err.Error(), "invalid bundle JSON: "))
+	fmt.Println("VERDICT: ✗ FAILED, the bundle's JSON is ambiguous or carries unmodeled fields, so")
+	fmt.Println("         other readers would see values this tool did not check.")
 }

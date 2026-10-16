@@ -314,3 +314,20 @@ func printEntryAuth(c EntryAuthCheck) {
 		fmt.Println("                    holder would show only as a larger gap")
 	}
 }
+
+// staleIndexReason explains the one benign cause of a signed entry
+// timestamp mismatch: a copy stored before 2026-10-16, when some
+// records kept the entry's shard position where its global entry
+// number belongs. Those records were repaired from the public log;
+// an old download still carries the shard position. It stays a
+// failure (the copy cannot be authenticated), but the reason must not
+// read as tampering.
+func staleIndexReason(anchorErr error, logEntryID string, logIndex int64) (string, bool) {
+	if !errors.Is(anchorErr, rekorverify.ErrSignedEntryTimestampMismatch) ||
+		logEntryID != strconv.FormatInt(logIndex, 10) {
+		return "", false
+	}
+	return fmt.Sprintf("this copy stores the entry's shard position (%d) where its global entry number "+
+		"belongs, as copies of some records downloaded before 2026-10-16 do, so its signed timestamp "+
+		"cannot be checked; download the record again from its public link", logIndex), true
+}

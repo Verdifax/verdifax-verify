@@ -276,6 +276,25 @@ only as a larger gap. The reviewer's tests are kept in `round8_test.go`
 and a sweep over every field of an intact record finds none that can
 change without breaking it.
 
+**Also proves, since v0.12.1:** that the record this tool verified is
+the record every other JSON reader sees. Round eight of the external
+review (2026-10-16) showed that Go's `encoding/json`, which this tool
+uses, matches object keys case-insensitively (with Unicode folding)
+and lets the last match win, while jq, Python and JavaScript read keys
+exactly. A bundle could carry a forged value under the exact key and
+the original under a case variant after it, such as
+`"result":"deny","RESULT":"approve"`: v0.12.0 verified the original,
+every hash recomputed, and the record passed as `COMPLETE RECORD
+ANCHORED`, while every other viewer showed the forgery. No key, log
+entry or hash recomputation was needed. v0.12.1 decodes strictly
+(`internal/artifacts/strictjson.go`): it refuses any object with two
+keys equal under case folding, including exact duplicates, and any key
+that is not byte-for-byte a field this verifier models, before any hash
+is computed. Such a bundle receives `FAILED` with exit code 1. The
+human report now also prints the decision-bearing values it checked
+(`Record says`), and the JSON report carries them as `record_values`,
+so a reader can compare them with any other view of the record.
+
 **Also checks, since v0.10.0:** that each logged entry body names the
 leaf the bundle claims for it. The Merkle proof covers the hashedrekord
 entry body, not the bundle's `leaf_hash`, so the verifier now requires
@@ -341,6 +360,26 @@ entry it signs; a retired key keeps its entries verifiable and is given
 an end date.
 
 ## Release notes
+
+### v0.12.1: one record, whoever reads it
+
+Refuses bundles whose JSON is ambiguous across readers (keys equal
+under case folding, exact duplicate keys) or carries keys this verifier
+does not model, with `FAILED` and exit code 1, as described under
+[What this verifier proves](#what-this-verifier-proves-and-doesnt-prove).
+Every public Verdifax record decodes strictly and keeps its verdict.
+The report prints the checked decision values (`Record says`; JSON
+`record_values`).
+
+A copy of a record downloaded before 2026-10-16 that still stores the
+entry's shard position as its entry number now fails with a reason
+that says so and asks for a fresh download (`stale_entry_number` in the
+JSON report), instead of a message that reads as tampering. The default
+failure verdict now reads "at least one check did not pass" rather than
+naming hashes, since a failure can also be a signer, timestamp or
+window check.
+
+Upgrade from v0.12.0: it accepts the case-variant forgery.
 
 ### v0.12.0: who logged an entry, and when
 

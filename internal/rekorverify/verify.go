@@ -142,6 +142,12 @@ type AnchorInput struct {
 	SignedEntryTimestamp string
 }
 
+// ErrSignedEntryTimestampMismatch reports a signed entry timestamp
+// that does not verify over the anchor's body, time, log id and global
+// entry number.
+var ErrSignedEntryTimestampMismatch = errors.New("rekorverify: signed entry timestamp does not verify " +
+	"under the log key: the anchoring time, entry number or entry body is not what the log recorded")
+
 // ErrNoSignedEntryTimestamp reports an anchor without Rekor's signed
 // entry timestamp, so its anchoring time and global index are not
 // authenticated.
@@ -310,8 +316,7 @@ func verifySignedEntryTimestamp(in AnchorInput, logIDHex string, rekorPubKey *ec
 	}
 	digest := sha256.Sum256(payload)
 	if !ecdsa.VerifyASN1(rekorPubKey, digest[:], sig) {
-		return errors.New("rekorverify: signed entry timestamp does not verify under the log key: " +
-			"the anchoring time, entry number or entry body is not what the log recorded")
+		return ErrSignedEntryTimestampMismatch
 	}
 	return nil
 }
