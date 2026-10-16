@@ -24,6 +24,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -103,6 +104,45 @@ func ReceiptLeafPreimage(kind, envelopeID, receiptHash string) string {
 // ComputeReceiptLeafHash returns hex(sha256(ReceiptLeafPreimage(...))).
 func ComputeReceiptLeafHash(kind, envelopeID, receiptHash string) string {
 	sum := sha256.Sum256([]byte(ReceiptLeafPreimage(kind, envelopeID, receiptHash)))
+	return hex.EncodeToString(sum[:])
+}
+
+// Receipt anchor v2 (round ten of the external review). A v1 leaf binds
+// the receipt's kind, envelope_id and hash but not the run it belongs
+// to, so a genuine receipt document could be relabelled with another
+// run_id and still verify. The v2 leaf also binds the run_id the API
+// assigned, and every receipt anchored under v2 seals anchor_required
+// in its own hash, so deleting the anchor fails rather than
+// downgrades. The window is unchanged.
+const (
+	// ReceiptAnchorKindV2 is receipt_anchor.kind for a v2 anchor.
+	ReceiptAnchorKindV2 = "verdifax.receipt_anchor.v2"
+	// ReceiptLeafDomainV2 is the domain tag of the v2 receipt leaf.
+	ReceiptLeafDomainV2 = "verdifax.ledger.receipt.v2"
+)
+
+// ValidateReceiptLeafFieldsV2 applies the v1 checks and requires a
+// positive run_id.
+func ValidateReceiptLeafFieldsV2(kind, envelopeID, receiptHash string, runID int64) error {
+	if v1Err := ValidateReceiptLeafFields(kind, envelopeID, receiptHash); v1Err != nil {
+		return v1Err
+	}
+	if runID <= 0 {
+		return fmt.Errorf("receipt leaf: run_id must be positive, got %d", runID)
+	}
+	return nil
+}
+
+// ReceiptLeafPreimageV2 is join(".", ReceiptLeafDomainV2, kind,
+// envelopeID, receiptHash, decimal runID).
+func ReceiptLeafPreimageV2(kind, envelopeID, receiptHash string, runID int64) string {
+	return strings.Join([]string{ReceiptLeafDomainV2, kind, envelopeID, receiptHash,
+		strconv.FormatInt(runID, 10)}, ".")
+}
+
+// ComputeReceiptLeafHashV2 returns hex(sha256(ReceiptLeafPreimageV2(...))).
+func ComputeReceiptLeafHashV2(kind, envelopeID, receiptHash string, runID int64) string {
+	sum := sha256.Sum256([]byte(ReceiptLeafPreimageV2(kind, envelopeID, receiptHash, runID)))
 	return hex.EncodeToString(sum[:])
 }
 

@@ -25,6 +25,13 @@ type MACCHaltReceipt struct {
 	// cumulative budgets were breached.
 	AllowTokenHash string `json:"allow_token_hash"`
 
+	// AnchorRequired, present only when true, states that this receipt
+	// must carry a public-log receipt_anchor under receipt anchor v2.
+	// It is part of the hash, so deleting the anchor from
+	// such a receipt fails verification instead of downgrading it to
+	// self-consistent only. Receipts without it hash exactly as before.
+	AnchorRequired bool `json:"anchor_required,omitempty"`
+
 	// BudgetHash is the SHA-256 hex of the active MACCBudget's canonical
 	// preimage. Lets audits prove which cumulative budget configuration
 	// was in force at halt time.
@@ -92,6 +99,7 @@ type MACCHaltReceipt struct {
 func BuildMACCHaltReceiptHash(receipt *MACCHaltReceipt) (string, error) {
 	preimage := struct {
 		AllowTokenHash    string `json:"allow_token_hash"`
+		AnchorRequired    bool   `json:"anchor_required,omitempty"`
 		BudgetHash        string `json:"budget_hash"`
 		BudgetLimit       int64  `json:"budget_limit"`
 		ConstraintType    string `json:"constraint_type"`
@@ -105,6 +113,7 @@ func BuildMACCHaltReceiptHash(receipt *MACCHaltReceipt) (string, error) {
 		Version           string `json:"version"`
 		WindowStart       string `json:"window_start"`
 	}{
+		AnchorRequired:    receipt.AnchorRequired,
 		AllowTokenHash:    receipt.AllowTokenHash,
 		BudgetHash:        receipt.BudgetHash,
 		BudgetLimit:       receipt.BudgetLimit,

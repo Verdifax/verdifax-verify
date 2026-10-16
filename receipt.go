@@ -22,6 +22,15 @@ package main
 // A receipt without an anchor, or whose anchor is not on the public
 // log, is SELF-CONSISTENT ONLY, NOT ANCHORED: it fails unless
 // --allow-unanchored is passed, exactly as an unanchored bundle does.
+//
+// Receipt anchor v2 (v0.14.0, round ten of the external review). A v1
+// leaf does not bind the document's run_id, so the run number of a v1
+// receipt is printed as taken from the document, not checked. A v2
+// leaf also binds run_id, and a receipt anchored under v2 seals
+// anchor_required in its own hash: such a receipt with its anchor
+// deleted, replaced by a v1 or off-log anchor, FAILS. The document's
+// "ok" field is the API's response flag; it is not checked and is not
+// reported.
 
 import (
 	"encoding/json"
@@ -45,6 +54,11 @@ type ReceiptReport struct {
 	ReceiptClock string `json:"receipt_clock"`
 	ReceiptHash  string `json:"receipt_hash"`
 	HashOK       bool   `json:"receipt_hash_ok"`
+	// RunIDBound is true only when a verified v2 anchor binds run_id;
+	// otherwise run_id is the document's claim, not checked.
+	RunIDBound bool `json:"run_id_bound"`
+	// AnchorRequired is the receipt's sealed anchor_required value.
+	AnchorRequired bool `json:"anchor_required"`
 	// Summary is the receipt's decision-bearing fields as checked.
 	Summary          map[string]string `json:"record_values"`
 	AnchorPresent    bool              `json:"anchor_present"`
@@ -122,32 +136,55 @@ func verifyReceiptDocument(d *artifacts.ReceiptDocument) *ReceiptReport {
 		return fail("the receipt's hash does not recompute from its own fields: %v", f.hashErr)
 	}
 	rep.HashOK = true
+	required := anchorRequiredOf(d)
+	rep.AnchorRequired = required
 
 	a := d.ReceiptAnchor
 	if a == nil {
+		if required {
+			return fail("this receipt seals anchor_required, so it must carry a public-log receipt_anchor, " +
+				"and it carries none: the entry was removed, or anchoring failed when the receipt was issued")
+		}
 		rep.AllPassed, rep.VerdictTier = true, "SELF_CONSISTENT_NOT_ANCHORED"
 		rep.Reason = "the receipt carries no receipt_anchor, so nothing shows who issued it or when"
 		return rep
 	}
 	rep.AnchorPresent = true
 	rep.AnchorLogEntry = a.LogEntryID
+	v2 := a.Kind == artifacts.ReceiptAnchorKindV2
 	switch {
-	case a.Kind != artifacts.ReceiptAnchorKind:
-		return fail("receipt_anchor is kind %q; this verifier knows %q", a.Kind, artifacts.ReceiptAnchorKind)
+	case a.Kind != artifacts.ReceiptAnchorKind && !v2:
+		return fail("receipt_anchor is kind %q; this verifier knows %q and %q", a.Kind,
+			artifacts.ReceiptAnchorKind, artifacts.ReceiptAnchorKindV2)
+	case required && !v2:
+		return fail("this receipt seals anchor_required, which only a %s anchor satisfies; it carries %q",
+			artifacts.ReceiptAnchorKindV2, a.Kind)
 	case a.ReceiptKind != f.kind:
 		return fail("receipt_anchor names a %s, but this document carries a %s", a.ReceiptKind, f.kind)
 	case a.ReceiptHash != f.hash:
 		return fail("receipt_anchor names receipt hash %s, not this receipt's %s",
 			truncate(a.ReceiptHash, 16), truncate(f.hash, 16))
 	}
-	if leafErr := artifacts.ValidateReceiptLeafFields(f.kind, f.envelopeID, f.hash); leafErr != nil {
+	leafErr := artifacts.ValidateReceiptLeafFields(f.kind, f.envelopeID, f.hash)
+	want := artifacts.ComputeReceiptLeafHash(f.kind, f.envelopeID, f.hash)
+	bound := "kind, envelope_id and hash"
+	if v2 {
+		leafErr = artifacts.ValidateReceiptLeafFieldsV2(f.kind, f.envelopeID, f.hash, d.RunID)
+		want = artifacts.ComputeReceiptLeafHashV2(f.kind, f.envelopeID, f.hash, d.RunID)
+		bound = "kind, envelope_id, hash and run_id"
+	}
+	if leafErr != nil {
 		return fail("%v", leafErr)
 	}
-	if want := artifacts.ComputeReceiptLeafHash(f.kind, f.envelopeID, f.hash); !strings.EqualFold(a.LeafHashHex, want) {
-		return fail("the receipt leaf rebuilt from this receipt is %s, not the anchored %s",
-			truncate(want, 16), truncate(a.LeafHashHex, 16))
+	if !strings.EqualFold(a.LeafHashHex, want) {
+		return fail("the receipt leaf rebuilt from this document's %s is %s, not the anchored %s",
+			bound, truncate(want, 16), truncate(a.LeafHashHex, 16))
 	}
 	if a.Backend != "rekor" {
+		if required {
+			return fail("this receipt seals anchor_required, but its receipt_anchor backend is %q, "+
+				"not the public log", a.Backend)
+		}
 		rep.AllPassed, rep.VerdictTier = true, "SELF_CONSISTENT_NOT_ANCHORED"
 		rep.Reason = fmt.Sprintf("receipt_anchor backend is %q: consistent, but not on a public log", a.Backend)
 		return rep
@@ -195,7 +232,26 @@ func verifyReceiptDocument(d *artifacts.ReceiptDocument) *ReceiptReport {
 			rep.AnchoredAt, artifacts.ReceiptAnchoringWindowSeconds, f.clock)
 	}
 	rep.Anchored, rep.AllPassed, rep.VerdictTier = true, true, "VERIFIED_ANCHORED"
+	rep.RunIDBound = v2
 	return rep
+}
+
+// anchorRequiredOf returns the sealed anchor_required of the document's
+// one receipt (factsOf has already required exactly one).
+func anchorRequiredOf(d *artifacts.ReceiptDocument) bool {
+	switch {
+	case d.DenyReceipt != nil:
+		return d.DenyReceipt.AnchorRequired
+	case d.CCVHaltReceipt != nil:
+		return d.CCVHaltReceipt.AnchorRequired
+	case d.MACCHaltReceipt != nil:
+		return d.MACCHaltReceipt.AnchorRequired
+	case d.AivpT4HaltReceipt != nil:
+		return d.AivpT4HaltReceipt.AnchorRequired
+	case d.AttestationGapReceipt != nil:
+		return d.AttestationGapReceipt.AnchorRequired
+	}
+	return false
 }
 
 func receiptExitShouldFail(r *ReceiptReport, allowUnanchored bool) bool {
@@ -210,7 +266,12 @@ func receiptExitShouldFail(r *ReceiptReport, allowUnanchored bool) bool {
 
 func printReceiptReport(r *ReceiptReport) {
 	fmt.Println("Verdifax receipt verification")
-	fmt.Printf("  Receipt:          %s, run %d, envelope %s\n", r.ReceiptKind, r.RunID, r.EnvelopeID)
+	runNote := "from the document, not checked"
+	if r.RunIDBound {
+		runNote = "bound by the public-log entry"
+	}
+	fmt.Printf("  Receipt:          %s, envelope %s\n", r.ReceiptKind, r.EnvelopeID)
+	fmt.Printf("  Run:              %d (%s)\n", r.RunID, runNote)
 	fmt.Printf("  Receipt clock:    %s\n", r.ReceiptClock)
 	if r.HashOK {
 		fmt.Printf("  Receipt hash:     ✓ recomputes from the receipt's own fields (%s)\n", truncate(r.ReceiptHash, 16))

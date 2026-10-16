@@ -55,6 +55,13 @@ type AivpT4HaltReceipt struct {
 	// was not wired or skipped.
 	AllowTokenHash string `json:"allow_token_hash"`
 
+	// AnchorRequired, present only when true, states that this receipt
+	// must carry a public-log receipt_anchor under receipt anchor v2.
+	// It is part of the hash, so deleting the anchor from
+	// such a receipt fails verification instead of downgrading it to
+	// self-consistent only. Receipts without it hash exactly as before.
+	AnchorRequired bool `json:"anchor_required,omitempty"`
+
 	// DecisionKind identifies which negative outcome AIVP-T4 returned.
 	// One of: "deny", "halt", "defer". RELEASE outcomes don't produce
 	// a halt receipt (the run continues) so they're never represented
@@ -112,6 +119,7 @@ func BuildAivpT4HaltReceiptHash(receipt *AivpT4HaltReceipt) (string, error) {
 		AdapterID        string `json:"adapter_id"`
 		AiOutputHash     string `json:"ai_output_hash"`
 		AllowTokenHash   string `json:"allow_token_hash"`
+		AnchorRequired   bool   `json:"anchor_required,omitempty"`
 		DecisionKind     string `json:"decision_kind"`
 		DecisionReason   string `json:"decision_reason"`
 		EnvelopeID       string `json:"envelope_id"`
@@ -121,6 +129,7 @@ func BuildAivpT4HaltReceiptHash(receipt *AivpT4HaltReceipt) (string, error) {
 		PiaHash          string `json:"pia_hash"`
 		Version          string `json:"version"`
 	}{
+		AnchorRequired:   receipt.AnchorRequired,
 		AdapterID:        receipt.AdapterID,
 		AiOutputHash:     receipt.AiOutputHash,
 		AllowTokenHash:   receipt.AllowTokenHash,

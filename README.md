@@ -315,6 +315,25 @@ v0.13.0 every number must be written in its canonical form (the exact
 decimal digits for whole numbers, the shortest round-trip form for
 fractions), so the bytes are pinned, not only the values.
 
+**Receipt anchor v2, since v0.14.0:** a v1 receipt leaf binds the
+receipt's kind, envelope_id and hash but not the document's `run_id`,
+so a genuine v1 receipt can be relabelled with another run number and
+still verify. The report therefore prints a v1 receipt's run number as
+"from the document, not checked" and identifies the receipt by its
+envelope. A v2 anchor (`verdifax.receipt_anchor.v2`) has the leaf
+`sha256(join(".", "verdifax.ledger.receipt.v2", kind, envelope_id,
+receipt_hash, run_id))`, so the run number is bound, and every receipt
+anchored under v2 seals `anchor_required: true` in its own hash. Such a
+receipt fails if its anchor is deleted, replaced by a v1 anchor, or
+moved off the public log. The limit: deleting the anchor and also
+rewriting the receipt without `anchor_required`, with its hash
+recomputed, leaves nothing anchored to contradict it; that receipt is
+reported as self-consistent only and fails by default, but it is not
+identified as tampered. The document's `ok` field is the API's response
+flag; it is not checked and is not reported. Receipts issued with
+`anchor_required` need v0.14.0 or later, since earlier releases do not
+model that field.
+
 **Also checks, since v0.10.0:** that each logged entry body names the
 leaf the bundle claims for it. The Merkle proof covers the hashedrekord
 entry body, not the bundle's `leaf_hash`, so the verifier now requires
@@ -380,6 +399,17 @@ entry it signs; a retired key keeps its entries verifiable and is given
 an end date.
 
 ## Release notes
+
+### v0.14.0: receipt anchor v2, run numbers bound
+
+Answers round ten of the external review. A v1 receipt's run number
+was printed as part of its identity although no hash or log entry
+binds it; it is now printed as "from the document, not checked", and
+receipts lead with their envelope. Receipt anchor v2 binds the run
+number in the leaf, and receipts anchored under v2 seal
+`anchor_required`, so deleting, downgrading or moving their anchor
+fails. Existing receipts and records keep their verdicts; run 241
+verifies as before.
 
 ### v0.13.1: receipt messages name the receipt
 

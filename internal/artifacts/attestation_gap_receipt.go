@@ -29,6 +29,13 @@ import (
 // representation. Do not reorder fields without bumping the artifact
 // version (currently "vfa.attestation_gap_receipt.v1").
 type AttestationGapReceipt struct {
+	// AnchorRequired, present only when true, states that this receipt
+	// must carry a public-log receipt_anchor under receipt anchor v2.
+	// It is part of the hash, so deleting the anchor from
+	// such a receipt fails verification instead of downgrading it to
+	// self-consistent only. Receipts without it hash exactly as before.
+	AnchorRequired bool `json:"anchor_required,omitempty"`
+
 	// DecisionReasonCode is always psl.ReasonAttestationGap
 	// ("ATTESTATION_GAP") for this artifact. Carried as a field rather
 	// than implied by Version so the schema matches DenyReceipt for
@@ -124,6 +131,7 @@ func BuildAttestationGapReceiptHash(receipt *AttestationGapReceipt) (string, err
 	sort.Strings(required)
 
 	preimage := struct {
+		AnchorRequired     bool     `json:"anchor_required,omitempty"`
 		DecisionReasonCode string   `json:"decision_reason_code"`
 		EnvelopeID         string   `json:"envelope_id"`
 		EvaluatorVersion   string   `json:"evaluator_version"`
@@ -136,6 +144,7 @@ func BuildAttestationGapReceiptHash(receipt *AttestationGapReceipt) (string, err
 		RequiredFields     []string `json:"required_fields"`
 		Version            string   `json:"version"`
 	}{
+		AnchorRequired:     receipt.AnchorRequired,
 		DecisionReasonCode: receipt.DecisionReasonCode,
 		EnvelopeID:         receipt.EnvelopeID,
 		EvaluatorVersion:   receipt.EvaluatorVersion,

@@ -13,6 +13,13 @@ package artifacts
 // representation. Do not reorder fields without bumping the artifact
 // version (currently "vfa.deny_receipt.v1").
 type DenyReceipt struct {
+	// AnchorRequired, present only when true, states that this receipt
+	// must carry a public-log receipt_anchor under receipt anchor v2.
+	// It is part of the hash, so deleting the anchor from
+	// such a receipt fails verification instead of downgrading it to
+	// self-consistent only. Receipts without it hash exactly as before.
+	AnchorRequired bool `json:"anchor_required,omitempty"`
+
 	// DecisionReasonCode is one of the standardized reason codes from
 	// PEPG_PSL_SPEC_V0.md §11. Examples: "RULE_DENIED", "RULE_ALLOWED",
 	// "DEFAULT_EFFECT_APPLIED", "CLASSIFICATION_EXCEEDED",
@@ -66,6 +73,7 @@ type DenyReceipt struct {
 // deny_receipt_test.go with a frozen known-answer golden hash.
 func BuildDenyReceiptHash(receipt *DenyReceipt) (string, error) {
 	preimage := struct {
+		AnchorRequired     bool   `json:"anchor_required,omitempty"`
 		DecisionReasonCode string `json:"decision_reason_code"`
 		DenyClock          string `json:"deny_clock"`
 		EnvelopeID         string `json:"envelope_id"`
@@ -76,6 +84,7 @@ func BuildDenyReceiptHash(receipt *DenyReceipt) (string, error) {
 		PolicyHash         string `json:"policy_hash"`
 		Version            string `json:"version"`
 	}{
+		AnchorRequired:     receipt.AnchorRequired,
 		DecisionReasonCode: receipt.DecisionReasonCode,
 		DenyClock:          receipt.DenyClock,
 		EnvelopeID:         receipt.EnvelopeID,
