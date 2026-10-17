@@ -325,11 +325,18 @@ envelope. A v2 anchor (`verdifax.receipt_anchor.v2`) has the leaf
 receipt_hash, run_id))`, so the run number is bound, and every receipt
 anchored under v2 seals `anchor_required: true` in its own hash. Such a
 receipt fails if its anchor is deleted, replaced by a v1 anchor, or
-moved off the public log. The limit: deleting the anchor and also
-rewriting the receipt without `anchor_required`, with its hash
-recomputed, leaves nothing anchored to contradict it; that receipt is
-reported as self-consistent only and fails by default, but it is not
-identified as tampered. The document's `ok` field is the API's response
+moved off the public log. Since v0.14.1, a receipt dated at or after
+run 242's clock (2026-10-16T23:48:35.104252967Z), from when every
+receipt the Verdifax API issues seals `anchor_required`, fails if it
+lacks the field, unless the person checking it passes
+`--self-hosted-receipt` because they know it came from a test or
+self-hosted deployment that does not anchor receipts. The clock is
+inside the receipt's hash, so evading this rule means backdating the
+receipt. The limit: a receipt with its anchor and `anchor_required`
+deleted, its clock moved before that instant and its hash recomputed
+has nothing anchored left to contradict it; it is reported as
+self-consistent only and fails by default, but it is not identified as
+tampered, and it can no longer carry its real date. The document's `ok` field is the API's response
 flag; it is not checked and is not reported. Receipts issued with
 `anchor_required` need v0.14.0 or later, since earlier releases do not
 model that field.
@@ -399,6 +406,17 @@ entry it signs; a retired key keeps its entries verifiable and is given
 an end date.
 
 ## Release notes
+
+### v0.14.1: receipts dated from run 242 must seal anchor_required
+
+Answers round eleven of the external review, which found no break and
+suggested this. A receipt dated at or after run 242's clock without
+`anchor_required` fails, even with `--allow-unanchored`; the new
+`--self-hosted-receipt` flag exempts receipts the person checking knows
+came from a deployment that does not anchor receipts. A stripped
+receipt now has to claim an earlier date to be reported as
+self-consistent only. The usage text now lists `-allow-unanchored` and
+receipts. Every real record and receipt keeps its verdict.
 
 ### v0.14.0: receipt anchor v2, run numbers bound
 

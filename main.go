@@ -66,7 +66,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.14.0"
+const Version = "0.14.1"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -156,6 +156,7 @@ func main() {
 		strictMode      = flag.Bool("strict", false, "fail (exit 1) on any scaffold-flagged value")
 		allowUnanchored = flag.Bool("allow-unanchored", false, "exit 0 for a bundle with no public-log anchor; without this flag, unanchored bundles fail, because every sealing property this tool checks hangs off the anchor and an attacker can strip an anchor claim by editing one unprotected field (the documented downgrade attack)")
 		showVersion     = flag.Bool("version", false, "print version and exit")
+		selfHosted      = flag.Bool("self-hosted-receipt", false, "the receipt was issued by a test or self-hosted deployment that does not anchor receipts on the public log, not by the Verdifax API; exempts it from the rule that receipts dated from run 242 on must seal anchor_required")
 		showEvidence    = flag.Bool("show-evidence-summary", false, "print a one-glance maturity summary (real vs scaffold counts, Rekor anchor status, PoTE preimage version, strict-mode gate disposition) and exit; combine with --json for machine-readable form")
 	)
 	flag.Usage = printUsage
@@ -184,7 +185,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "verdifax-verify: invalid receipt JSON:", docErr)
 			os.Exit(2)
 		}
-		rr := verifyReceiptDocument(doc)
+		rr := verifyReceiptDocumentWith(doc, receiptOptions{selfHosted: *selfHosted})
 		if *jsonOutput {
 			emitReceiptJSON(rr)
 		} else {
@@ -504,24 +505,31 @@ func printEvidenceSummary(s EvidenceSummary) {
 }
 
 func printUsage() {
-	fmt.Fprintln(os.Stderr, `verdifax-verify, independent verifier for Verdifax audit bundles
+	fmt.Fprintln(os.Stderr, `verdifax-verify, independent verifier for Verdifax audit bundles and receipts
 
 USAGE
-  verdifax-verify [flags] <bundle.json>
+  verdifax-verify [flags] <bundle.json | receipt.json>
   cat bundle.json | verdifax-verify [flags]
 
 FLAGS
   -json                   emit machine-readable JSON output
   -strict                 fail on any scaffold-flagged value
+  -allow-unanchored       exit 0 for a bundle or receipt that is
+                          consistent but not anchored on the public log
+  -self-hosted-receipt    the receipt came from a test or self-hosted
+                          deployment, not the Verdifax API; exempts it
+                          from the rule that receipts dated from run 242
+                          on must seal anchor_required
   -show-evidence-summary  print a one-glance maturity summary (real vs
                           scaffold counts, Rekor anchor status, PoTE
                           preimage version, strict-mode gate) and exit
   -version                print version and exit
 
 EXIT
-  0  all hashes verified
-  1  one or more checks failed (or --strict + scaffold)
-  2  could not parse the bundle`)
+  0  all checks passed
+  1  one or more checks failed, or the record is not anchored and
+     -allow-unanchored was not passed (or -strict + scaffold)
+  2  could not parse the input`)
 }
 
 // readInput returns the raw bytes of the file, URL or stdin argument.

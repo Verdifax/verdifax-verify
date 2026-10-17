@@ -31,6 +31,15 @@ package main
 // deleted, replaced by a v1 or off-log anchor, FAILS. The document's
 // "ok" field is the API's response flag; it is not checked and is not
 // reported.
+//
+// The anchor_required cutover (v0.14.1, round eleven of the external
+// review). Every receipt the Verdifax API has issued since run 242
+// (receiptAnchorRequiredSince) seals anchor_required. A receipt dated at
+// or after that instant without the field was rewritten, or came from a
+// deployment that does not anchor receipts on the public log, so it
+// FAILS unless the person checking it passes --self-hosted-receipt. The
+// clock is inside the receipt's hash, so evading the rule means
+// backdating the receipt, which changes its sealed date.
 
 import (
 	"encoding/json"
@@ -116,8 +125,27 @@ func factsOf(d *artifacts.ReceiptDocument) ([]receiptFacts, error) {
 	return out, nil
 }
 
-// verifyReceiptDocument checks one served receipt document.
+// receiptAnchorRequiredSince is the deny_clock of run 242, the first
+// receipt the Verdifax API issued under receipt anchor v2; every
+// receipt it has issued since seals anchor_required.
+const receiptAnchorRequiredSince = "2026-10-16T23:48:35.104252967Z"
+
+// receiptOptions are the receipt checks the person verifying chooses.
+type receiptOptions struct {
+	// selfHosted exempts a receipt from the anchor_required cutover: it
+	// was issued by a test or self-hosted deployment that does not
+	// anchor receipts on the public log, not by the Verdifax API.
+	selfHosted bool
+}
+
+// verifyReceiptDocument checks one served receipt document as issued by
+// the Verdifax API.
 func verifyReceiptDocument(d *artifacts.ReceiptDocument) *ReceiptReport {
+	return verifyReceiptDocumentWith(d, receiptOptions{})
+}
+
+// verifyReceiptDocumentWith checks one receipt document under opts.
+func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions) *ReceiptReport {
 	rep := &ReceiptReport{Tool: "verdifax-verify", ToolVersion: Version, RunID: d.RunID, VerdictTier: "FAILED"}
 	fail := func(format string, args ...any) *ReceiptReport {
 		rep.AllPassed = false
@@ -138,6 +166,16 @@ func verifyReceiptDocument(d *artifacts.ReceiptDocument) *ReceiptReport {
 	rep.HashOK = true
 	required := anchorRequiredOf(d)
 	rep.AnchorRequired = required
+	if !required && !opts.selfHosted {
+		if afterCutover, cutoverErr := issuedAfterAnchorRequired(f.clock); cutoverErr != nil {
+			return fail("the receipt's clock %q is not an RFC 3339 time", safePrefix(f.clock))
+		} else if afterCutover {
+			return fail("this receipt is dated %s, at or after %s, since when every receipt the Verdifax API "+
+				"issues seals anchor_required, and it does not: it was rewritten, or it was issued by a "+
+				"deployment that does not anchor receipts (pass --self-hosted-receipt only if you know it was)",
+				f.clock, receiptAnchorRequiredSince)
+		}
+	}
 
 	a := d.ReceiptAnchor
 	if a == nil {
@@ -234,6 +272,21 @@ func verifyReceiptDocument(d *artifacts.ReceiptDocument) *ReceiptReport {
 	rep.Anchored, rep.AllPassed, rep.VerdictTier = true, true, "VERIFIED_ANCHORED"
 	rep.RunIDBound = v2
 	return rep
+}
+
+// issuedAfterAnchorRequired reports whether a receipt clock is at or
+// after receiptAnchorRequiredSince. Error model: an unparseable clock
+// is returned to the caller, which reports it as a failure.
+func issuedAfterAnchorRequired(clock string) (bool, error) {
+	t, parseErr := time.Parse(time.RFC3339Nano, clock)
+	if parseErr != nil {
+		return false, parseErr
+	}
+	since, sinceErr := time.Parse(time.RFC3339Nano, receiptAnchorRequiredSince)
+	if sinceErr != nil {
+		return false, sinceErr
+	}
+	return !t.Before(since), nil
 }
 
 // anchorRequiredOf returns the sealed anchor_required of the document's
