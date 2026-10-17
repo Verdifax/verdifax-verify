@@ -87,3 +87,21 @@ func TestR13OffsetClockIsPrintedWithItsUTCInstant(t *testing.T) {
 		t.Fatal("a UTC clock is printed once")
 	}
 }
+
+// Run 243 is the refused first row of a production batch (2026-10-17),
+// anchored when the row was decided, before the batch's second row ran.
+// It verifies against the real pinned key with its run number bound.
+func TestR14ProductionBatchReceiptRun243(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "round10", "deny-receipt-run243-production-batch.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := artifacts.DecodeReceiptStrict(raw)
+	if err != nil {
+		t.Fatalf("the run 243 receipt document must decode strictly: %v", err)
+	}
+	r := mustReceiptTier(t, "run 243 batch receipt", "VERIFIED_ANCHORED", d)
+	if !r.RunIDBound || !r.AnchorRequired || r.RunID != 243 {
+		t.Fatalf("run 243 must verify with its run number bound and anchor_required: %+v", r)
+	}
+}
