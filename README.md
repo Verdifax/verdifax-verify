@@ -346,7 +346,7 @@ reported as self-consistent only and fails by default, but passes with
 `--allow-unanchored`; it is only as trustworthy as whoever handed it to
 you. A stripped receipt can no longer carry its real date. The document's `ok` field is the API's response
 flag; it is not checked and is not reported. Receipts issued with
-`anchor_required` need v0.14.0 or later, since earlier releases do not
+`anchor_required` need v0.14.0 or a later release, since earlier releases do not
 model that field.
 
 **Also checks, since v0.10.0:** that each logged entry body names the
