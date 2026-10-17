@@ -415,6 +415,15 @@ an end date.
 
 ## Release notes
 
+### v0.14.4: every receipt failure names every cause
+
+Wording only, from round fourteen of the external review; no verdict
+changes. The run 242 cutover failure and the off-log anchor failure now
+name every cause (rewritten, invented, an altered anchor, or a
+deployment that does not anchor receipts), and a receipt clock written
+with an offset is printed with its UTC instant, so it no longer reads as
+contradicting the UTC cutover.
+
 ### v0.14.3: the receipt cutover message names every cause
 
 Wording only, from round thirteen of the external review; no verdict

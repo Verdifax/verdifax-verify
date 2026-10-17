@@ -9,6 +9,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Verdifax/verdifax-verify/internal/artifacts"
@@ -71,5 +72,18 @@ func TestR12SelfHostedReceiptIsExemptFromBothCutovers(t *testing.T) {
 	r := verifyReceiptDocumentWith(d, receiptOptions{selfHosted: true})
 	if r.VerdictTier != "SELF_CONSISTENT_NOT_ANCHORED" {
 		t.Fatalf("self-hosted unanchored receipt: %s (%s)", r.VerdictTier, r.Reason)
+	}
+}
+
+// Round fourteen: a clock written with an offset is printed with its
+// UTC instant, so the failure does not read as a contradiction.
+func TestR13OffsetClockIsPrintedWithItsUTCInstant(t *testing.T) {
+	d := run241Variant(t, "2026-10-16T19:11:17.94873898-04:00", true)
+	r := mustReceiptTier(t, "run 241 stripped, clock at -04:00", "FAILED", d)
+	if !strings.Contains(r.Reason, "(2026-10-16T23:11:17.94873898Z)") {
+		t.Fatalf("the reason must show the UTC instant: %s", r.Reason)
+	}
+	if datedUTC("2026-10-16T23:11:17.94873898Z") != "2026-10-16T23:11:17.94873898Z" {
+		t.Fatal("a UTC clock is printed once")
 	}
 }

@@ -192,10 +192,11 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		if afterCutover, cutoverErr := issuedAtOrAfter(f.clock, receiptAnchorRequiredSince); cutoverErr != nil {
 			return fail("the receipt's clock %q is not an RFC 3339 time", safePrefix(f.clock))
 		} else if afterCutover {
-			return fail("this receipt is dated %s, at or after %s, since when every receipt the Verdifax API "+
-				"issues seals anchor_required, and it does not: it was rewritten, or it was issued by a "+
-				"deployment that does not anchor receipts (pass --self-hosted-receipt only if you know it was)",
-				f.clock, receiptAnchorRequiredSince)
+			return fail("this receipt is dated %s, at or after %s, since when the Verdifax API seals "+
+				"anchor_required into every receipt it issues, and it lacks the field: it was rewritten or "+
+				"invented, or it came from a deployment that does not anchor receipts "+
+				"(pass --self-hosted-receipt only if you know it did)",
+				datedUTC(f.clock), receiptAnchorRequiredSince)
 		}
 	}
 
@@ -210,7 +211,7 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 				"receipts on the public log, and it carries no anchor: it was stripped or invented, its anchoring "+
 				"failed when it was issued, or it came from a deployment that does not anchor receipts "+
 				"(pass --self-hosted-receipt only if you know it did)",
-				f.clock, receiptAnchorExpectedSince)
+				datedUTC(f.clock), receiptAnchorExpectedSince)
 		}
 		rep.AllPassed, rep.VerdictTier = true, "SELF_CONSISTENT_NOT_ANCHORED"
 		rep.Reason = "the receipt carries no receipt_anchor, so nothing shows who issued it or when"
@@ -254,9 +255,10 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		}
 		if anchorExpected {
 			return fail("this receipt is dated %s, at or after %s, when the Verdifax API began anchoring "+
-				"receipts on the public log, but its receipt_anchor backend is %q "+
-				"(pass --self-hosted-receipt only if you know it came from a deployment that does not anchor receipts)",
-				f.clock, receiptAnchorExpectedSince, a.Backend)
+				"receipts on the public log, but its receipt_anchor backend is %q: the anchor was altered, "+
+				"or it came from a deployment that does not anchor receipts "+
+				"(pass --self-hosted-receipt only if you know it did)",
+				datedUTC(f.clock), receiptAnchorExpectedSince, a.Backend)
 		}
 		rep.AllPassed, rep.VerdictTier = true, "SELF_CONSISTENT_NOT_ANCHORED"
 		rep.Reason = fmt.Sprintf("receipt_anchor backend is %q: consistent, but not on a public log", a.Backend)
@@ -323,6 +325,21 @@ func issuedAtOrAfter(clock, sinceText string) (bool, error) {
 		return false, sinceErr
 	}
 	return !t.Before(since), nil
+}
+
+// datedUTC returns a receipt clock as written and, when that text is
+// not already the UTC form, the same instant in UTC, so a clock written
+// with an offset does not read as contradicting a UTC cutover.
+func datedUTC(clock string) string {
+	t, parseErr := time.Parse(time.RFC3339Nano, clock)
+	if parseErr != nil {
+		return clock
+	}
+	utc := t.UTC().Format(time.RFC3339Nano)
+	if utc == clock {
+		return clock
+	}
+	return clock + " (" + utc + ")"
 }
 
 // anchorRequiredOf returns the sealed anchor_required of the document's
