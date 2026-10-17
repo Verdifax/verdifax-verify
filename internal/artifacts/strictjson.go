@@ -23,7 +23,13 @@ package artifacts
 //     spelling encoding/json produces for that value, which is also the
 //     RFC 8785 spelling for every number Verdifax emits. "0.011" passes;
 //     "0.0110000000000000001", "1.0", "1e3" and "011" do not, so the
-//     exact bytes are pinned, not only the values.
+//     exact bytes are pinned, not only the values, and
+//   - invalid UTF-8, an unpaired UTF-16 surrogate escape, or the NUL
+//     character in any string (v0.14.5). Go replaces the first two with
+//     U+FFFD while other readers keep or reject them, so readers would
+//     disagree; NUL is the separator several sealed digests join on.
+//     Verdifax refuses NUL in requests and writes only valid UTF-8, so
+//     no genuine record carries any of the three.
 //
 // So every value any reader can see is a value this verifier checked.
 // Map-typed fields keep free-form keys but still refuse fold-equal
@@ -41,6 +47,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 // ErrNotStrictJSON wraps every refusal, so callers can name it.
@@ -49,6 +56,9 @@ var ErrNotStrictJSON = errors.New("JSON is ambiguous or carries fields this veri
 // DecodeBundleStrict decodes data into an AuditBundle only if every
 // object key is unambiguous and modeled; see the package comment above.
 func DecodeBundleStrict(data []byte) (*AuditBundle, error) {
+	if textErr := checkStringText(data); textErr != nil {
+		return nil, fmt.Errorf("%w: %v", ErrNotStrictJSON, textErr)
+	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
 	if walkErr := walkStrict(dec, reflect.TypeOf(AuditBundle{}), "$"); walkErr != nil {
@@ -67,6 +77,9 @@ func DecodeBundleStrict(data []byte) (*AuditBundle, error) {
 // DecodeReceiptStrict decodes a receipt document under the same rules
 // as DecodeBundleStrict.
 func DecodeReceiptStrict(data []byte) (*ReceiptDocument, error) {
+	if textErr := checkStringText(data); textErr != nil {
+		return nil, fmt.Errorf("%w: %v", ErrNotStrictJSON, textErr)
+	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
 	if walkErr := walkStrict(dec, reflect.TypeOf(ReceiptDocument{}), "$"); walkErr != nil {
@@ -252,3 +265,69 @@ func checkCanonicalNumber(num json.Number, path string) error {
 // integerLiteral matches a JSON integer with no leading zeros, sign
 // only for negatives, and no fraction or exponent.
 var integerLiteral = regexp.MustCompile(`^-?(0|[1-9][0-9]*)$`)
+
+// checkStringText refuses invalid UTF-8 anywhere in the document, and,
+// inside JSON strings, an unpaired surrogate escape or the NUL
+// character. Error model: the reason is returned to the caller, which
+// reports it; this package has no logger.
+func checkStringText(data []byte) error {
+	if !utf8.Valid(data) {
+		return errors.New("the document is not valid UTF-8")
+	}
+	inString := false
+	for i := 0; i < len(data); i++ {
+		c := data[i]
+		if !inString {
+			if c == '"' {
+				inString = true
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inString = false
+		case '\\':
+			if i+1 >= len(data) {
+				return nil // truncated input is reported by the decoder
+			}
+			if data[i+1] != 'u' {
+				i++
+				continue
+			}
+			v, ok := hex4(data, i+2)
+			if !ok {
+				return nil // malformed escape is reported by the decoder
+			}
+			switch {
+			case v == 0:
+				return errors.New("a string contains the NUL character (\\u0000)")
+			case v >= 0xDC00 && v <= 0xDFFF:
+				return fmt.Errorf("a string contains an unpaired low surrogate (\\u%04x)", v)
+			case v >= 0xD800 && v <= 0xDBFF:
+				low, okLow := uint32(0), false
+				if i+11 < len(data) && data[i+6] == '\\' && data[i+7] == 'u' {
+					low, okLow = hex4(data, i+8)
+				}
+				if !okLow || low < 0xDC00 || low > 0xDFFF {
+					return fmt.Errorf("a string contains an unpaired high surrogate (\\u%04x)", v)
+				}
+				i += 11
+				continue
+			}
+			i += 5
+		}
+	}
+	return nil
+}
+
+// hex4 parses four hex digits at data[at:at+4].
+func hex4(data []byte, at int) (uint32, bool) {
+	if at+4 > len(data) {
+		return 0, false
+	}
+	v, parseErr := strconv.ParseUint(string(data[at:at+4]), 16, 32)
+	if parseErr != nil {
+		return 0, false
+	}
+	return uint32(v), true
+}

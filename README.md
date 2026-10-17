@@ -415,6 +415,18 @@ an end date.
 
 ## Release notes
 
+### v0.14.5: strings every reader reads the same way
+
+From an October 2026 review by Google Gemini. Strict reading now also
+refuses invalid UTF-8, an unpaired UTF-16 surrogate escape, and the NUL
+character in any string. Go replaces the first two with U+FFFD while
+other readers keep or reject them, so a reader and this verifier could
+show different text; NUL is the separator several sealed digests join
+on. The Verdifax API refuses NUL in requests, and no genuine record
+carries any of the three, so every real record keeps its verdict. Tests
+also pin that `-0` is refused and that small and large numbers follow
+the canonical spelling (`0.00005`, `5e-7`, `1e+21`).
+
 ### v0.14.4: every receipt failure names every cause
 
 Wording only, from round fourteen of the external review; no verdict
