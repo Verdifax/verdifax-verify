@@ -74,14 +74,13 @@ func TestR11SelfHostedDoesNotExcuseAMissingRequiredAnchor(t *testing.T) {
 	}
 }
 
-// The remaining limit: backdated before the cutover, a stripped receipt
-// is self-consistent only, and its sealed date has had to change.
-func TestR11BackdatedStrippedReceiptIsSelfConsistentOnly(t *testing.T) {
+// Backdated just before the anchor_required cutover, a stripped receipt
+// still fails since v0.14.2: it falls after run 241, from when every
+// API receipt carries an anchor (round12_test's limit, now closed; see
+// round13_test.go for the remaining one).
+func TestR11BackdatedBeforeRun242StillFails(t *testing.T) {
 	d := run242Stripped(t, "2026-10-16T23:48:35.104252966Z")
-	r := mustReceiptTier(t, "stripped receipt backdated one nanosecond", "SELF_CONSISTENT_NOT_ANCHORED", d)
-	if !receiptExitShouldFail(r, false) {
-		t.Fatal("an unanchored receipt fails by default")
-	}
+	mustReceiptTier(t, "stripped receipt backdated one nanosecond before run 242", "FAILED", d)
 }
 
 // Every real receipt keeps its verdict under the cutover rule.

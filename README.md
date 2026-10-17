@@ -332,11 +332,17 @@ lacks the field, unless the person checking it passes
 `--self-hosted-receipt` because they know it came from a test or
 self-hosted deployment that does not anchor receipts. The clock is
 inside the receipt's hash, so evading this rule means backdating the
-receipt. The limit: a receipt with its anchor and `anchor_required`
-deleted, its clock moved before that instant and its hash recomputed
-has nothing anchored left to contradict it; it is reported as
-self-consistent only and fails by default, but it is not identified as
-tampered, and it can no longer carry its real date. The document's `ok` field is the API's response
+receipt. Since v0.14.2, a receipt dated at or after run 241's clock
+(2026-10-16T23:11:17.94873898Z), the first receipt the API anchored,
+fails if it carries no public-log anchor, under the same
+`--self-hosted-receipt` exemption; run 241 is the only receipt the API
+issued between run 241 and run 242. The limit: a receipt with its
+anchor and `anchor_required` deleted, its clock moved before run 241's
+and its hash recomputed has nothing anchored left to contradict it,
+because genuine receipts from before receipt anchoring began carry no
+anchor either. It is reported as self-consistent only and fails by
+default, but it is not identified as tampered, and it can no longer
+carry its real date. The document's `ok` field is the API's response
 flag; it is not checked and is not reported. Receipts issued with
 `anchor_required` need v0.14.0 or later, since earlier releases do not
 model that field.
@@ -406,6 +412,16 @@ entry it signs; a retired key keeps its entries verifiable and is given
 an end date.
 
 ## Release notes
+
+### v0.14.2: receipts dated from run 241 on must be anchored
+
+Answers round twelve of the external review, which found no break and
+suggested this. A receipt dated at or after run 241's clock, the first
+receipt the Verdifax API anchored on the public log, fails if it carries
+no public-log anchor, even with `--allow-unanchored`, unless
+`--self-hosted-receipt` is passed. A stripped receipt now has to claim a
+date before receipt anchoring began to be reported as self-consistent
+only. Every real record and receipt keeps its verdict.
 
 ### v0.14.1: receipts dated from run 242 must seal anchor_required
 
