@@ -41,13 +41,14 @@ package main
 // clock is inside the receipt's hash, so evading the rule means
 // backdating the receipt, which changes its sealed date.
 //
-// The anchor cutover (v0.14.2, round twelve). Every receipt the Verdifax
-// API has issued since run 241 (receiptAnchorExpectedSince), the first
-// after receipt anchoring shipped, carries a public-log anchor; run 241
-// is the only receipt dated between that instant and run 242. A receipt
-// dated at or after it with no public-log anchor FAILS under the same
-// --self-hosted-receipt exemption, so a stripped receipt must claim a
-// date before receipt anchoring began to read as self-consistent only.
+// The anchor cutover (v0.14.2, round twelve). Run 241
+// (receiptAnchorExpectedSince) is the first receipt the Verdifax API
+// anchored on the public log, and the only receipt it issued before run
+// 242; every receipt from run 242 on seals anchor_required. A receipt
+// dated at or after run 241 with no public-log anchor FAILS under the
+// same --self-hosted-receipt exemption, so a stripped or invented
+// receipt must claim a date before receipt anchoring began to read as
+// self-consistent only.
 
 import (
 	"encoding/json"
@@ -139,8 +140,7 @@ func factsOf(d *artifacts.ReceiptDocument) ([]receiptFacts, error) {
 const receiptAnchorRequiredSince = "2026-10-16T23:48:35.104252967Z"
 
 // receiptAnchorExpectedSince is the deny_clock of run 241, the first
-// receipt the Verdifax API issued with a public-log anchor; every
-// receipt it has issued since carries one.
+// receipt the Verdifax API anchored on the public log.
 const receiptAnchorExpectedSince = "2026-10-16T23:11:17.94873898Z"
 
 // receiptOptions are the receipt checks the person verifying chooses.
@@ -206,9 +206,10 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 				"and it carries none: the entry was removed, or anchoring failed when the receipt was issued")
 		}
 		if anchorExpected {
-			return fail("this receipt is dated %s, at or after %s, since when every receipt the Verdifax API "+
-				"issues carries a public-log anchor, and it carries none: the anchor was removed, or it was "+
-				"issued by a deployment that does not anchor receipts (pass --self-hosted-receipt only if you know it was)",
+			return fail("this receipt is dated %s, at or after %s, when the Verdifax API began anchoring "+
+				"receipts on the public log, and it carries no anchor: it was stripped or invented, its anchoring "+
+				"failed when it was issued, or it came from a deployment that does not anchor receipts "+
+				"(pass --self-hosted-receipt only if you know it did)",
 				f.clock, receiptAnchorExpectedSince)
 		}
 		rep.AllPassed, rep.VerdictTier = true, "SELF_CONSISTENT_NOT_ANCHORED"
@@ -252,9 +253,9 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 				"not the public log", a.Backend)
 		}
 		if anchorExpected {
-			return fail("this receipt is dated %s, at or after %s, since when every receipt the Verdifax API "+
-				"issues is anchored on the public log, but its receipt_anchor backend is %q "+
-				"(pass --self-hosted-receipt only if you know it came from such a deployment)",
+			return fail("this receipt is dated %s, at or after %s, when the Verdifax API began anchoring "+
+				"receipts on the public log, but its receipt_anchor backend is %q "+
+				"(pass --self-hosted-receipt only if you know it came from a deployment that does not anchor receipts)",
 				f.clock, receiptAnchorExpectedSince, a.Backend)
 		}
 		rep.AllPassed, rep.VerdictTier = true, "SELF_CONSISTENT_NOT_ANCHORED"
