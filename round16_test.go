@@ -26,3 +26,21 @@ func TestR16ProductionBatchReceiptRun245(t *testing.T) {
 		t.Fatalf("run 245 must verify with its run number bound and anchor_required: %+v", r)
 	}
 }
+
+// Run 247 is the refused first row of the production batch sent
+// 2026-10-18 after successful batch rows began carrying their run
+// number; its allowed second row, run 248, is published.
+func TestR16ProductionBatchReceiptRun247(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "round10", "deny-receipt-run247-production-batch.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := artifacts.DecodeReceiptStrict(raw)
+	if err != nil {
+		t.Fatalf("the run 247 receipt document must decode strictly: %v", err)
+	}
+	r := mustReceiptTier(t, "run 247 batch receipt", "VERIFIED_ANCHORED", d)
+	if !r.RunIDBound || !r.AnchorRequired || r.RunID != 247 {
+		t.Fatalf("run 247 must verify with its run number bound and anchor_required: %+v", r)
+	}
+}
