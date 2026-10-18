@@ -84,8 +84,8 @@ verdifax-verify --version
 | Code | Meaning |
 |---|---|
 | 0 | All hashes verified, no failures. |
-| 1 | One or more verification checks failed (or `--strict` + scaffold). |
-| 2 | Could not parse the bundle. |
+| 1 | One or more verification checks failed (or `--strict` + scaffold), including JSON that strict reading refuses as malformed or ambiguous. |
+| 2 | The input could not be read (a missing file or a failed download), or it was read but could not be decoded as a bundle or receipt. |
 
 ### `--strict` mode
 
@@ -426,6 +426,19 @@ entry it signs; a retired key keeps its entries verifiable and is given
 an end date.
 
 ## Release notes
+
+### v0.14.6: the actor section on leaf v5 to v7 records reads as sealed
+
+Report wording only; no verdict changes. On records anchored with a
+version 5, 6 or 7 leaf, the anchored pre-anchor table carries the actor
+section's four values (actor id, public key, signature and signing
+time), and the verifier already checked each against the record, so a
+changed actor section already failed. The report now says so: when the
+signature verifies, the leaf is this run's and the table is consistent,
+the actor line reads "consistent and SEALED to the anchor", as it
+already did for version 3 leaves. The key is still the one the record
+supplies, so the line still says identity is not established. Production
+run 249 is carried as a test.
 
 ### v0.14.5: strings every reader reads the same way
 

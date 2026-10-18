@@ -83,9 +83,11 @@ type NrepCheck struct {
 // bundle's own envelope_id and aer_hash. See the file comment for the
 // four states.
 // verifyNrepSignature takes the leaf-binding verdict so it can report
-// the sealed state honestly: Sealed is true only when a version-3
+// the sealed state honestly: here Sealed is true only when a version-3
 // leaf, whose preimage embeds the actor-section digest recomputed
-// from this very section, matched the anchored leaf hash.
+// from this very section, matched the anchored leaf hash. Records with
+// a version 5 to 7 leaf are sealed through the pre-anchor table, which
+// sealedByPreAnchor applies once that table has been checked.
 func verifyNrepSignature(b *artifacts.AuditBundle, leaf LeafBindingCheck) NrepCheck {
 	sec := b.Nrep
 
@@ -176,4 +178,32 @@ func printNrepCheck(c NrepCheck) {
 	default:
 		fmt.Printf("  Actor signature:  none claimed\n")
 	}
+}
+
+// sealedByPreAnchor reports the actor section as sealed on records whose
+// anchored leaf is version 5, 6 or 7. Those leaves bind the pre-anchor
+// table, and the table carries the actor section's four values
+// (nrep_actor_id, nrep_public_key, nrep_signature, nrep_signed_at),
+// which verifyPreAnchor checks against this record. So when the
+// signature verifies, the leaf is this run's and the table is
+// consistent, the section is sealed as surely as under a version-3
+// leaf's embedded section digest. Anything less leaves the result as
+// verifyNrepSignature reported it.
+func sealedByPreAnchor(c NrepCheck, leaf LeafBindingCheck, pre PreAnchorCheck) NrepCheck {
+	if c.Sealed || !c.Performed || !c.Match {
+		return c
+	}
+	if !leaf.Performed || !leaf.Match {
+		return c
+	}
+	switch leaf.Form {
+	case leafDomainV5, leafDomainV6, leafDomainV7:
+	default:
+		return c
+	}
+	if !pre.Performed || !pre.Match {
+		return c
+	}
+	c.Sealed = true
+	return c
 }
