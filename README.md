@@ -64,8 +64,10 @@ Requires Go 1.27 or later. The binary lands at `$(go env GOPATH)/bin/verdifax-ve
 
 ### Pre-built binaries
 
-Pre-built binaries for Linux / macOS / Windows are attached to each
-[GitHub release](https://github.com/Verdifax/verdifax-verify/releases).
+Pre-built binaries for Linux and macOS (amd64 and arm64) are attached
+to each [GitHub release](https://github.com/Verdifax/verdifax-verify/releases).
+There is no pre-built Windows binary; on Windows, build from source with
+`go install` as above.
 
 ## Usage
 
@@ -87,8 +89,9 @@ verdifax-verify --version
 
 ### `--strict` mode
 
-By default, the verifier reports scaffold-flagged values (L6 ZK proof,
-L8 hardware attestation, L10 formal verifier, see
+By default, the verifier reports scaffold-flagged values (the ZK
+transcript, hardware attestation, timing declarations and ZK-state-prover
+binding; every hosted-API run carries all four, see
 [Verdifax scaffold-gaps documentation](https://docs.verdifax.com/concepts/scaffold-gaps/))
 without failing the run. Pass `--strict` to fail verification when any
 scaffold flag is set. High-trust environments should always use
@@ -120,10 +123,11 @@ not an advisory line.
 v0.7.1:** the Ed25519 actor signature in the bundle's `nrep` section,
 rebuilt from this run's `envelope_id`, `aer_hash` and `signed_at` and
 validated against the public key the bundle itself supplies. Read that
-last clause carefully: because the key comes from the bundle and the
-nrep section is not yet covered by the bundle hash or the public-log
-leaf, an attacker can replace the whole section with a self-consistent
-one of their own, and this check cannot tell. A second external review
+last clause carefully: because the key comes from the bundle, on records
+sealed before the v3 leaf (v0.8.0), whose nrep section is covered by
+neither the bundle hash nor the public-log leaf, an attacker can replace
+the whole section with a self-consistent one of their own, and this
+check cannot tell. A second external review
 (2026-10-15) demonstrated exactly that against v0.7.0, which printed
 "verified" for a forged identity; v0.7.1 therefore reports a passing
 check as CONSISTENT, never verified, and states on every line that the
@@ -313,7 +317,13 @@ only that its fields agree with each other, and it fails unless
 shipped carry no anchor. The same strict decoding applies, and since
 v0.13.0 every number must be written in its canonical form (the exact
 decimal digits for whole numbers, the shortest round-trip form for
-fractions), so the bytes are pinned, not only the values.
+fractions), so each number's spelling is pinned, not only its value.
+String escapes, whitespace and key order are not pinned: the same
+string may be written with or without `\u` escapes, and every reader
+still reads the same text. A record is therefore identified by the
+hashes the verifier recomputes (a bundle's bundle hash, a receipt's
+receipt hash), not by a hash of the file, whose bytes can differ while
+its values do not.
 
 **Receipt anchor v2, since v0.14.0:** a v1 receipt leaf binds the
 receipt's kind, envelope_id and hash but not the document's `run_id`,
@@ -372,7 +382,9 @@ and was publicly committed at a point in time; it does not establish
 that the computation behind it was honest. An orchestrator that
 controlled the whole pipeline could still anchor a fabricated but
 internally consistent run. Closing that gap needs hardware-rooted
-attestation, which is currently a scaffold value; see
+attestation, which the hosted API does not have today (its records carry
+the hardware-attestation scaffold flag; a SEV-SNP deployment records a
+real quote); see
 [scaffold-gaps](https://docs.verdifax.com/concepts/scaffold-gaps/).
 
 The `log_entry_id` field remains searchable on `search.sigstore.dev` if
@@ -386,8 +398,8 @@ of the key's DER SubjectPublicKeyInfo. The verifier embeds both
 (`entryauth.go`) and checks the fingerprints when it starts.
 
 **Key 1**, the production orchestrator at `api.verdifax.com`. It has
-signed every public Verdifax entry from the first (2026-05-13) on and
-has never been rotated. Custody: the private key is a file on the
+signed every entry the hosted service has logged, from the first
+(2026-05-13) on, and has never been rotated. Custody: the private key is a file on the
 production API server's volume, not in a hardware security module.
 Accepted at any time.
 
@@ -592,7 +604,7 @@ COVERAGE`. That forged bundle is kept as
 under v0.10.0. Releases v0.1.0 through v0.1.3 did not read `entry_body`; they
 walked the proof from `leaf_hash` itself, so this gap did not arise in
 them. Re-verify any bundle
-you accepted with an earlier release using v0.10.0.
+you accepted with an earlier release using the current release (v0.14.5).
 
 ## Release verification (Cosign and SLSA provenance)
 
@@ -611,9 +623,9 @@ cosign verify-blob \
 
 # Build provenance (SLSA Level 3)
 slsa-verifier verify-artifact verdifax-verify-linux-amd64 \
-  --provenance-path verdifax-verify-v0.6.3.intoto.jsonl \
+  --provenance-path verdifax-verify-v0.14.5.intoto.jsonl \
   --source-uri github.com/Verdifax/verdifax-verify \
-  --source-tag v0.6.3
+  --source-tag v0.14.5
 ```
 
 A passing provenance check proves the binary was built by this
