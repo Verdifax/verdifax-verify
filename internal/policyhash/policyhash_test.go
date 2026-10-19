@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/Verdifax/verdifax-verify/internal/artifacts"
 )
 
 // serverVectors were produced by the orchestrator's own psl.Parse and
@@ -19,10 +21,11 @@ import (
 // its hash is the policy_hash production receipts carry. The psl_ and
 // profile_ files are the orchestrator's own policy fixtures, copied
 // unchanged. The synthetic_ files cover every part of the preimage.
+// Every document here passes the strict reading both readers apply.
 var serverVectors = []struct {
 	file, id, name, version, hash string
 }{
-	{"production_baseline_permit.json", "verdifax-default-baseline-permit", "Verdifax Default Baseline-Permit Policy", "1.0.0", "1a090975c0515a14296a0e68bb6840c5de4d76465369c50022e390b3da1e25d0"},
+	{"production_baseline_permit.json", "verdifax-default-baseline-permit", "Verdifax Default Baseline-Permit Policy", "1.0.0", productionBaselinePermitHash},
 	{"profile_financial_governance_v1.json", "financial-governance-v1", "Financial Governance (SOX/FINRA-aligned attestation)", "1.0.0", "12da5a77120c6ea7883b702abb8ddf6a981e6faed99fedff94bd6c442612520b"},
 	{"profile_gdpr_aligned_attestation_v1.json", "gdpr-aligned-attestation-v1", "GDPR-Aligned Attestation", "1.0.0", "e57e838fc0bae8d5cb66dfc865c71fd72f61c57c496e665a5f18d8c9e2a63f6e"},
 	{"profile_healthcare_baseline_v1.json", "healthcare-baseline-v1", "Healthcare Baseline (HIPAA-aligned attestation)", "1.0.0", "1ad9e31e3f3e9fc061de0280af852be6e268d0786fbe3c0ab5f7236d0184ee8e"},
@@ -30,14 +33,11 @@ var serverVectors = []struct {
 	{"psl_policy_minimal.json", "policy-cross-lang-test", "Cross-language determinism test policy", "1.0.0", "70a63237f8cb0538db06d82b2fc29b7cfd01159e67c12ae362173aa4614e70ac"},
 	{"psl_policy_signed.json", "policy-cross-lang-signed-test", "Cross-language determinism test policy (signed)", "1.0.0", "1a93993fd0ce09f48310a87ba22c3d4dd56b39f16d868c999ebfc3e6e09d5204"},
 	{"synthetic_all_rule_shapes.json", "synthetic-all-rule-shapes", "Every subject, verb, object and condition shape", "4.2.0", "3bac3c125b3e527f49d62c525cc121d6d526172bc53751b487b68a537f2eae8a"},
-	{"synthetic_case_variant_and_unknown_keys.json", "synthetic-case-variant-keys", "Case variant keys and unknown fields at every level", "1.0.0", "d1229bea0a59c16df83a13c15874e55d3848c92b3f7482035d062ee22a7e8b76"},
 	{"synthetic_empty_optionals.json", "synthetic-empty-optionals", "Every optional part present but empty", "1.0.0", "16cd9f574245006c5eb23de21c7e571a3dc260ccbc2c9805c227191ea7169758"},
 	{"synthetic_empty_optionals_omitted.json", "synthetic-empty-optionals", "Every optional part present but empty", "1.0.0", "16cd9f574245006c5eb23de21c7e571a3dc260ccbc2c9805c227191ea7169758"},
-	{"synthetic_integers.json", "synthetic-integers", "Integer edge values", "1.0.0", "55fa9b4a5b7128e8a83b7f1457054cde893d02f7b4b89d3add70224798161b9b"},
-	{"synthetic_invalid_utf8.json", "synthetic-invalid-utf8", "bad byte \ufffd\ufffd here", "1.0.0", "80f66e88bbea3474668fdff2dbcffdecbf4b966b7fbdefa74888d764e651765c"},
+	{"synthetic_integers_canonical.json", "synthetic-integers", "Integer edge values", "1.0.0", "55fa9b4a5b7128e8a83b7f1457054cde893d02f7b4b89d3add70224798161b9b"},
 	{"synthetic_kitchen_sink.json", "synthetic-kitchen-sink", "Every hashed part at once", "5.0.0", "809adb722b883978f54255efd09a41854a217116b5d7efc000cc526f8dbe21a4"},
-	{"synthetic_lone_surrogate.json", "synthetic-lone-surrogate", "lone high \ufffd and low \ufffd surrogates", "1.0.0", "9716d457fc7150aef8f931a95995e7926d3e9153a5f9264ea9d596faa379dd89"},
-	{"synthetic_metadata_tags.json", "synthetic-metadata-tags", "Metadata and tags carrying every JSON kind", "1.0.0", "468cb35d657fcb1c14e1c3e5a17d76fab5e4545dd9099b14644042706eb104e6"},
+	{"synthetic_metadata_tags_canonical.json", "synthetic-metadata-tags", "Metadata and tags carrying every JSON kind", "1.0.0", "468cb35d657fcb1c14e1c3e5a17d76fab5e4545dd9099b14644042706eb104e6"},
 	{"synthetic_metadata_tags_stripped.json", "synthetic-metadata-tags", "Metadata and tags carrying every JSON kind", "1.0.0", "468cb35d657fcb1c14e1c3e5a17d76fab5e4545dd9099b14644042706eb104e6"},
 	{"synthetic_nulls.json", "synthetic-nulls", "", "", "428ad5725f51ade8d7691d653809ac077685c1efdf0d55e39b2de199e4969733"},
 	{"synthetic_required_fields_profile.json", "synthetic-required-fields", "Required attested and outcome fields with a profile tag", "3.0.0", "188832856d9ae4854e2c2abc7e9c5ce43ceff8b1ae26641d1d4d30ea8a3baab6"},
@@ -48,20 +48,24 @@ var serverVectors = []struct {
 	{"synthetic_unicode_strings.json", "synthetic-unicode-é中🚀", "Café “quoted” <b>&amp;</b> \"q\" \\ / tab\tnl\n ctl\x01 del\x7f ls\u2028 ps\u2029 bom\ufeff", "v².①", "63444c42561611fdde099491a3d8483fa38152c33357fd412b0e023115a7914b"},
 }
 
+// productionBaselinePermitHash is the policy_hash every production
+// record carries for the default policy. It must never change.
+const productionBaselinePermitHash = "1a090975c0515a14296a0e68bb6840c5de4d76465369c50022e390b3da1e25d0"
+
 func readVector(t *testing.T, name string) []byte {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join("testdata", name))
-	if err != nil {
-		t.Fatal(err)
+	b, readErr := os.ReadFile(filepath.Join("testdata", name))
+	if readErr != nil {
+		t.Fatal(readErr)
 	}
 	return b
 }
 
 func TestServerParityVectors(t *testing.T) {
 	for _, v := range serverVectors {
-		got, err := FromDocument(readVector(t, v.file))
-		if err != nil {
-			t.Errorf("%s: refused a document the server accepts: %v", v.file, err)
+		got, docErr := FromDocument(readVector(t, v.file))
+		if docErr != nil {
+			t.Errorf("%s: refused a document the server accepts: %v", v.file, docErr)
 			continue
 		}
 		want := Result{PolicyID: v.id, PolicyName: v.name, PolicyVersion: v.version, PolicyHash: v.hash}
@@ -71,12 +75,24 @@ func TestServerParityVectors(t *testing.T) {
 	}
 }
 
+// The published production policy hashes as it always has; the strict
+// reading changed nothing about an accepted document.
+func TestProductionPolicyHashUnchanged(t *testing.T) {
+	got, docErr := FromDocument(readVector(t, "production_baseline_permit.json"))
+	if docErr != nil {
+		t.Fatal(docErr)
+	}
+	if got.PolicyHash != productionBaselinePermitHash {
+		t.Fatalf("production policy_hash = %s, want %s", got.PolicyHash, productionBaselinePermitHash)
+	}
+}
+
 // Every top-level document in testdata/ must have a vector, so a new
 // fixture cannot sit there untested.
 func TestEveryTestdataDocumentHasAVector(t *testing.T) {
-	files, err := filepath.Glob(filepath.Join("testdata", "*.json"))
-	if err != nil {
-		t.Fatal(err)
+	files, globErr := filepath.Glob(filepath.Join("testdata", "*.json"))
+	if globErr != nil {
+		t.Fatal(globErr)
 	}
 	have := map[string]bool{}
 	for _, v := range serverVectors {
@@ -99,46 +115,90 @@ const kitchenSinkPreimage = `{"default_effect":"deny","effective_at":"2026-06-14
 
 func TestKitchenSinkPreimageBytes(t *testing.T) {
 	var p policy
-	if err := json.Unmarshal(readVector(t, "synthetic_kitchen_sink.json"), &p); err != nil {
-		t.Fatal(err)
+	if unmarshalErr := json.Unmarshal(readVector(t, "synthetic_kitchen_sink.json"), &p); unmarshalErr != nil {
+		t.Fatal(unmarshalErr)
 	}
-	got, err := canonicalize(canonicalPolicyForHash(&p))
-	if err != nil {
-		t.Fatal(err)
+	got, canonErr := canonicalize(canonicalPolicyForHash(&p))
+	if canonErr != nil {
+		t.Fatal(canonErr)
 	}
 	if string(got) != kitchenSinkPreimage {
 		t.Fatalf("preimage differs from the server's:\n got %s\nwant %s", got, kitchenSinkPreimage)
 	}
 }
 
+// strictRefusals pins the reason for every document in testdata/refused/
+// that the strict reading or the priority rule refuses, so none of them
+// can pass this test by being refused for an unrelated reason. The
+// production_ files are the published production policy with the one
+// edit an external reviewer showed every other reader would see and this
+// verifier, before v0.15.1, did not; the synthetic_ files were accepted
+// parity vectors until the same release.
+var strictRefusals = map[string]struct {
+	is   error
+	says string
+}{
+	"production_override_rules.json":               {artifacts.ErrNotStrictJSON, "$.override_rules is not a field"},
+	"production_rules_capitalized.json":            {artifacts.ErrNotStrictJSON, "$.Rules is not a field"},
+	"production_priority_one.json":                 {ErrReservedPriority, `rule "baseline-permit" sets priority 1`},
+	"synthetic_case_variant_and_unknown_keys.json": {artifacts.ErrNotStrictJSON, "$.SCHEMA is not a field"},
+	"synthetic_metadata_tags.json":                 {artifacts.ErrNotStrictJSON, `$.metadata.big is written "1e300"`},
+	"synthetic_integers.json":                      {artifacts.ErrNotStrictJSON, `$.metadata.neg is written "-0.0"`},
+	"synthetic_invalid_utf8.json":                  {artifacts.ErrNotStrictJSON, "not valid UTF-8"},
+	"synthetic_lone_surrogate.json":                {artifacts.ErrNotStrictJSON, "unpaired high surrogate"},
+	"integer_valued_float_priority.json":           {artifacts.ErrNotStrictJSON, `$.rules[0].priority is written "1.0"`},
+	"exponent_seconds.json":                        {artifacts.ErrNotStrictJSON, `$.rules[0].conditions[0].seconds is written "1e3"`},
+	"trailing_data.json":                           {artifacts.ErrNotStrictJSON, "data after the document's closing token"},
+}
+
 // The server's psl.Parse refuses every document in testdata/refused/
-// (type errors, failed validation, malformed JSON); so must this port.
+// (type errors, failed validation, malformed JSON, and, from October 19,
+// 2026 UTC, the strict reading and the priority rule); so must this port.
 func TestServerRefusalsAreRefused(t *testing.T) {
-	files, err := filepath.Glob(filepath.Join("testdata", "refused", "*.json"))
-	if err != nil {
-		t.Fatal(err)
+	files, globErr := filepath.Glob(filepath.Join("testdata", "refused", "*.json"))
+	if globErr != nil {
+		t.Fatal(globErr)
 	}
-	if len(files) < 19 {
-		t.Fatalf("expected the 19 refusal vectors, found %d", len(files))
+	if len(files) < 27 {
+		t.Fatalf("expected the 27 refusal vectors, found %d", len(files))
 	}
+	seen := map[string]bool{}
 	for _, f := range files {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatal(err)
+		b, readErr := os.ReadFile(f)
+		if readErr != nil {
+			t.Fatal(readErr)
 		}
-		if _, err := FromDocument(b); err == nil {
+		_, docErr := FromDocument(b)
+		if docErr == nil {
 			t.Errorf("%s: accepted a document the server refuses", f)
-		} else if errors.Is(err, ErrDuplicateKey) {
-			t.Errorf("%s: refused for the wrong reason: %v", f, err)
+			continue
+		}
+		name := filepath.Base(f)
+		seen[name] = true
+		pinned, isPinned := strictRefusals[name]
+		if !isPinned {
+			continue
+		}
+		if !errors.Is(docErr, pinned.is) {
+			t.Errorf("%s: refused for the wrong reason: %v", f, docErr)
+		}
+		if !strings.Contains(docErr.Error(), pinned.says) {
+			t.Errorf("%s: error %q does not say %q", f, docErr, pinned.says)
+		}
+	}
+	for name := range strictRefusals {
+		if !seen[name] {
+			t.Errorf("strictRefusals names %s, which is not in testdata/refused/", name)
 		}
 	}
 }
 
-// The one deliberate difference from the server: it accepts these and
-// lets the last of two fold-equal keys win (the hash it computed is
-// noted for each), this port refuses them as ambiguous.
+// Two fold-equal keys in one object are refused as ambiguous by both
+// readers: another reader could show a value the hash did not cover.
+// Before October 19, 2026 UTC the server let the last one win; the
+// hash it computed then is noted for each.
 func TestDuplicateKeysAreRefused(t *testing.T) {
-	for file, serverHash := range map[string]string{
+	for file, formerServerHash := range map[string]string{
 		"top_level_exact.json":     "b81147fb5c9b9fd88543628b181fd79b27950584f9c511bb63dea23a23153111",
 		"top_level_case_fold.json": "b2d3951d176e4e730f511f428fd50f7306e515ec6633f3cda3a7376fd2cf6422",
 		"long_s_fold.json":         "22bcf1db1d25cd53f1e6f9f18fc851b43a5c47f76cd1d284a03d48814dc62e47",
@@ -146,9 +206,9 @@ func TestDuplicateKeysAreRefused(t *testing.T) {
 		"in_metadata_kelvin.json":  "22bcf1db1d25cd53f1e6f9f18fc851b43a5c47f76cd1d284a03d48814dc62e47",
 		"in_signer.json":           "9f968d7a647dd1f07d0d8161922acbf3bd2e6e0b8fc02fe4b80f52cf2c24eef9",
 	} {
-		_, err := FromDocument(readVector(t, filepath.Join("duplicate", file)))
-		if !errors.Is(err, ErrDuplicateKey) {
-			t.Errorf("%s (server hash %s): want ErrDuplicateKey, got %v", file, serverHash[:12], err)
+		_, docErr := FromDocument(readVector(t, filepath.Join("duplicate", file)))
+		if !errors.Is(docErr, artifacts.ErrNotStrictJSON) || !strings.Contains(docErr.Error(), "has both") {
+			t.Errorf("%s (former server hash %s): want a duplicate-key refusal, got %v", file, formerServerHash[:12], docErr)
 		}
 	}
 }
@@ -163,8 +223,8 @@ func mutate(t *testing.T, base []byte, path string, value any) []byte {
 	dec := json.NewDecoder(bytes.NewReader(base))
 	dec.UseNumber()
 	var doc any
-	if err := dec.Decode(&doc); err != nil {
-		t.Fatal(err)
+	if decodeErr := dec.Decode(&doc); decodeErr != nil {
+		t.Fatal(decodeErr)
 	}
 	parts := strings.Split(path, ".")
 	cur := doc
@@ -182,8 +242,8 @@ func mutate(t *testing.T, base []byte, path string, value any) []byte {
 				cur = node[part]
 			}
 		case []any:
-			idx, err := strconv.Atoi(part)
-			if err != nil || idx >= len(node) {
+			idx, idxErr := strconv.Atoi(part)
+			if idxErr != nil || idx >= len(node) {
 				t.Fatalf("bad path %s", path)
 			}
 			if last {
@@ -195,18 +255,18 @@ func mutate(t *testing.T, base []byte, path string, value any) []byte {
 			t.Fatalf("bad path %s", path)
 		}
 	}
-	out, err := json.Marshal(doc)
-	if err != nil {
-		t.Fatal(err)
+	out, marshalErr := json.Marshal(doc)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
 	}
 	return out
 }
 
 func TestSingleFieldChanges(t *testing.T) {
 	base := readVector(t, "synthetic_kitchen_sink.json")
-	baseResult, err := FromDocument(base)
-	if err != nil {
-		t.Fatal(err)
+	baseResult, baseErr := FromDocument(base)
+	if baseErr != nil {
+		t.Fatal(baseErr)
 	}
 
 	substantive := []struct {
@@ -260,9 +320,9 @@ func TestSingleFieldChanges(t *testing.T) {
 	}
 	seen := map[string]string{baseResult.PolicyHash: "base"}
 	for _, m := range substantive {
-		got, err := FromDocument(mutate(t, base, m.path, m.value))
-		if err != nil {
-			t.Errorf("%s: %v", m.path, err)
+		got, docErr := FromDocument(mutate(t, base, m.path, m.value))
+		if docErr != nil {
+			t.Errorf("%s: %v", m.path, docErr)
 			continue
 		}
 		if got.PolicyHash == baseResult.PolicyHash {
@@ -274,6 +334,9 @@ func TestSingleFieldChanges(t *testing.T) {
 		seen[got.PolicyHash] = m.path
 	}
 
+	// Modeled fields the hash excludes: accepted, and the result is the
+	// base result. priority written as 0 is the zero value, not a
+	// priority, so it is accepted too.
 	excluded := []struct {
 		path  string
 		value any
@@ -286,20 +349,40 @@ func TestSingleFieldChanges(t *testing.T) {
 		{"tags", []any{}},
 		{"tags", remove},
 		{"rules.0.rule_name", "renamed"},
-		{"rules.0.priority", 99},
+		{"rules.0.priority", 0},
 		{"signers.0.signature_base64", "CCCC"},
 		{"signers.1.signed_at", "2027-01-01T00:00:00Z"},
 		{"rules.0.conditions.0.role", "unused by rate_limit"},
-		{"future_field", "ignored by the server"},
 	}
 	for _, m := range excluded {
-		got, err := FromDocument(mutate(t, base, m.path, m.value))
-		if err != nil {
-			t.Errorf("%s: %v", m.path, err)
+		got, docErr := FromDocument(mutate(t, base, m.path, m.value))
+		if docErr != nil {
+			t.Errorf("%s: %v", m.path, docErr)
 			continue
 		}
 		if got != baseResult {
 			t.Errorf("changing %s changed the result: %+v", m.path, got)
+		}
+	}
+
+	// Content the hash would not cover but another reader would see:
+	// refused rather than hashed as if absent.
+	refused := []struct {
+		path  string
+		value any
+		is    error
+	}{
+		{"rules.0.priority", 99, ErrReservedPriority},
+		{"rules.0.priority", -1, ErrReservedPriority},
+		{"future_field", "once ignored by the server", artifacts.ErrNotStrictJSON},
+		{"Rules", []any{}, artifacts.ErrNotStrictJSON},
+		{"rules.0.Effect", "deny", artifacts.ErrNotStrictJSON},
+		{"metadata.extra", map[string]any{"k": 1, "K": 2}, artifacts.ErrNotStrictJSON},
+	}
+	for _, m := range refused {
+		_, docErr := FromDocument(mutate(t, base, m.path, m.value))
+		if !errors.Is(docErr, m.is) {
+			t.Errorf("adding %s: want %v, got %v", m.path, m.is, docErr)
 		}
 	}
 }

@@ -87,6 +87,10 @@ verdifax-verify --policy policy.json bundle.json  # also check a policy document
 verdifax-verify --version
 ```
 
+Flags go before the record path. Since v0.15.1 an argument after the
+path is refused with exit code 2 instead of being ignored, so a
+misplaced `--policy` can never pass as "checked".
+
 ### Exit codes
 
 | Code | Meaning |
@@ -435,7 +439,7 @@ an end date.
 
 ### `--policy`: confirming which policy admitted a run
 
-Records sealed by the orchestrator from its October 18, 2026 release on
+Records sealed from orchestrator 564f1d4 (October 19, 2026 UTC) on
 carry the policy gate's decision in the EPA section (`epa.policy_gate`):
 the policy's identifier, name and version, its hash, the rule that
 admitted the request and the reason code. The report prints them on the
@@ -448,7 +452,7 @@ version belong to the hashed document, because the record carries the
 hash, not the policy. `--policy FILE` closes that gap for a reader who
 holds the policy document: the verifier recomputes the document's policy
 hash exactly as the orchestrator does (`internal/policyhash`, with
-parity vectors against the orchestrator for 24 documents, including the
+parity vectors against the orchestrator for 21 documents, including the
 production default policy) and fails verification unless the hash,
 identifier, name and version all equal the sealed values. Against a
 record with no policy gate, `--policy` fails rather than passing
@@ -458,9 +462,30 @@ not identify a policy.
 
 ## Release notes
 
+### v0.15.1: --policy refuses documents other readers would read differently
+
+From an October 2026 external review. `--policy FILE` now reads the
+policy document under the strict rules bundles are read with
+(`internal/artifacts/strictjson.go`) and refuses, before any hash is
+computed: a key that is not byte-for-byte a field of the policy
+document (an unknown key such as an extra `override_rules` array, which
+Go ignored while jq or Python kept it; or a case variant such as `Rules`
+for `rules`, which Go matched while other readers saw no rules); two
+keys in one object equal under case folding, including exact
+duplicates; a number not written in its canonical spelling (`1.0`,
+`1e2`); invalid UTF-8, an unpaired surrogate escape or NUL in a string;
+and any rule that sets a non-zero `priority`, a reserved field that no
+evaluation code reads and the policy hash excludes, so two documents
+differing only in it hashed the same. Such a document is now refused
+with the path named, instead of hashing as if the extra content were
+not there. Verdicts of every record are unchanged, and the production
+default policy keeps its hash. The orchestrator's own policy reader
+(`psl.Parse`) applies the same rules from the same date, so a policy
+document is read the same way, or refused, by both.
+
 ### v0.15.0: the policy gate's decision is read, and a policy document can be checked
 
-Records sealed by the orchestrator from its October 18, 2026 release on
+Records sealed from orchestrator 564f1d4 (October 19, 2026 UTC) on
 carry `epa.policy_gate`; this release reads it, prints it, and adds
 `--policy FILE` (see above). Verdicts of every existing record are
 unchanged: the section is covered by the existing EPA section hash,

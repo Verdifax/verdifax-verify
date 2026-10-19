@@ -1,0 +1,29 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "synthetic-metadata-tags",
+  "policy_name": "Metadata and tags carrying every JSON kind",
+  "policy_version": "1.0.0",
+  "effective_at": "2026-06-07T00:00:00Z",
+  "default_effect": "deny",
+  "tags": ["alpha", "béta", "中文", ""],
+  "metadata": {
+    "owner": "security@example.invalid",
+    "ratio": 0.1,
+    "big": 1e+300,
+    "tiny": -2.5e-308,
+    "count": 42,
+    "flag": true,
+    "nothing": null,
+    "nested": {"list": [1, 2.75, "three", {"deep": [false, null]}], "emoji": "🔒"}
+  },
+  "rules": [
+    {
+      "rule_id": "deny-model-writes",
+      "rule_name": "excluded rule name",
+      "effect": "deny",
+      "subject": {"type": "agent", "id_match": {"operator": "any"}},
+      "verb": {"match": {"operator": "exact", "value": "write"}},
+      "object": {"type": "model", "id_match": {"operator": "any"}}
+    }
+  ]
+}

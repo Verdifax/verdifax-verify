@@ -4,28 +4,36 @@
 //
 // It is a port of the server's psl package (PolicyHash, Parse and
 // Canonicalize) and must stay byte-identical to it: the parity vectors
-// in policyhash_test.go were produced by the server's own code. It
-// imports nothing from the rest of this verifier, so it can be read and
+// in policyhash_test.go were produced by the server's own code. From
+// the rest of this verifier it imports only artifacts.CheckStrict, the
+// strict JSON reader bundles are read with, so it can still be read and
 // audited on its own.
 //
-// Decoding mirrors the server's psl.Parse, which is encoding/json into
-// the Policy struct followed by Validate:
+// Decoding mirrors the server's psl.Parse as of October 19, 2026 UTC:
+// the strict reading, then encoding/json into the Policy struct, then
+// Validate:
 //
+//   - the document is refused before any value is read when it carries
+//     a key that is not byte-for-byte a field the server models (an
+//     unknown key, or a case variant of a known one, which encoding/json
+//     would silently match); two keys in one object equal under Unicode
+//     simple case folding (which includes exact duplicates; metadata
+//     keys stay free-form but may not repeat); a number not written in
+//     the spelling encoding/json produces for its value ("1.0", "1e2",
+//     "011" and "-0" are refused, which pins the bytes and not only the
+//     values); invalid UTF-8, an unpaired UTF-16 surrogate escape or
+//     the NUL character in a string; or data after the closing brace.
+//     Each is a document jq, Python or another reader would read
+//     differently from Go, so it must not hash as if it were plain;
 //   - field names, Go types and type errors are the server's (a float
-//     in an integer field, a string where an array belongs, data after
-//     the document and invalid JSON are all refused, as the server
-//     refuses them);
-//   - unknown fields are ignored, because the server ignores them;
-//   - keys match fields case-insensitively and invalid UTF-8 becomes
-//     U+FFFD, because that is what encoding/json does on the server;
-//   - schema must be "psl.v1", policy_id must be set and default_effect
-//     must be "allow" or "deny" (psl.Validate).
-//
-// One deliberate difference: two keys in one object that are equal
-// under Unicode case folding (which includes exact duplicates) are
-// refused anywhere in the document. The server lets the last one win,
-// so such a document is ambiguous: another reader could show a value
-// the hash did not cover. A genuine policy never carries one.
+//     in an integer field, a string where an array belongs and invalid
+//     JSON are refused, as the server refuses them);
+//   - schema must be "psl.v1", policy_id must be set, default_effect
+//     must be "allow" or "deny", and no rule may set a non-zero
+//     priority (psl.Validate). priority is reserved: no evaluation code
+//     reads it and the hash excludes it, so two documents differing only
+//     in priority hash the same while a reader that honored it would
+//     order the rules differently.
 package policyhash
 
 import (
@@ -34,9 +42,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
-	"unicode"
+
+	"github.com/Verdifax/verdifax-verify/internal/artifacts"
 )
 
 // Result is what a policy document seals: its identity and its hash.
@@ -47,15 +57,16 @@ type Result struct {
 	PolicyHash    string // 64 lowercase hex characters
 }
 
-// ErrDuplicateKey wraps every refusal of a repeated (or case-fold
-// equal) key, so callers can name it.
-var ErrDuplicateKey = errors.New("policyhash: duplicate key in policy document")
+// ErrReservedPriority wraps the refusal of a rule that sets priority,
+// so callers can name it. Strict-reading refusals wrap
+// artifacts.ErrNotStrictJSON.
+var ErrReservedPriority = errors.New("policyhash: priority is reserved and not evaluated")
 
-// FromDocument decodes a PSL policy document the way the server does
-// and returns its identity and policy_hash.
+// FromDocument reads a PSL policy document the way the server does and
+// returns its identity and policy_hash.
 func FromDocument(doc []byte) (Result, error) {
-	if dupErr := checkDuplicateKeys(doc); dupErr != nil {
-		return Result{}, dupErr
+	if strictErr := artifacts.CheckStrict(doc, reflect.TypeOf(policy{})); strictErr != nil {
+		return Result{}, fmt.Errorf("policyhash: %w", strictErr)
 	}
 	var p policy
 	if parseErr := json.Unmarshal(doc, &p); parseErr != nil {
@@ -171,6 +182,14 @@ func validate(p *policy) error {
 	}
 	if p.DefaultEffect != "allow" && p.DefaultEffect != "deny" {
 		return fmt.Errorf("policyhash: default_effect must be allow or deny: got %q", p.DefaultEffect)
+	}
+	// A reader that honored priority would order the rules differently
+	// from the server under the same hash, so the field is refused
+	// rather than carried.
+	for _, r := range p.Rules {
+		if r.Priority != 0 {
+			return fmt.Errorf("%w: rule %q sets priority %d", ErrReservedPriority, r.RuleID, r.Priority)
+		}
 	}
 	return nil
 }
@@ -437,72 +456,4 @@ func writeCanonicalNumber(w *bytes.Buffer, s string) error {
 		return nil
 	}
 	return fmt.Errorf("canonicalize: unparseable number %q", s)
-}
-
-// checkDuplicateKeys walks the whole document and refuses any object
-// holding two keys that are equal under Unicode simple case folding.
-// Malformed JSON is left for json.Unmarshal to report, so the error a
-// caller sees for it is the server's.
-func checkDuplicateKeys(doc []byte) error {
-	dec := json.NewDecoder(bytes.NewReader(doc))
-	dec.UseNumber()
-	if err := walkValue(dec, "$"); errors.Is(err, ErrDuplicateKey) {
-		return err
-	}
-	return nil
-}
-
-func walkValue(dec *json.Decoder, path string) error {
-	tok, tokErr := dec.Token()
-	if tokErr != nil {
-		return tokErr
-	}
-	delim, ok := tok.(json.Delim)
-	if !ok {
-		return nil
-	}
-	switch delim {
-	case '{':
-		seen := map[string]string{}
-		for dec.More() {
-			keyTok, keyErr := dec.Token()
-			if keyErr != nil {
-				return keyErr
-			}
-			key, _ := keyTok.(string)
-			folded := foldKey(key)
-			if first, dup := seen[folded]; dup {
-				return fmt.Errorf("%w: %s holds %q and %q", ErrDuplicateKey, path, first, key)
-			}
-			seen[folded] = key
-			if nestedErr := walkValue(dec, path+"."+key); nestedErr != nil {
-				return nestedErr
-			}
-		}
-	case '[':
-		for i := 0; dec.More(); i++ {
-			if elemErr := walkValue(dec, path+"["+strconv.Itoa(i)+"]"); elemErr != nil {
-				return elemErr
-			}
-		}
-	}
-	_, closeErr := dec.Token() // the closing delimiter
-	return closeErr
-}
-
-// foldKey maps every rune to the smallest rune of its simple case
-// folding orbit, so two keys fold to the same string exactly when
-// strings.EqualFold reports them equal.
-func foldKey(s string) string {
-	out := make([]rune, 0, len(s))
-	for _, r := range s {
-		min := r
-		for f := unicode.SimpleFold(r); f != r; f = unicode.SimpleFold(f) {
-			if f < min {
-				min = f
-			}
-		}
-		out = append(out, min)
-	}
-	return string(out)
 }

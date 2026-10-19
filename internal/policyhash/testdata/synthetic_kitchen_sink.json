@@ -19,7 +19,6 @@
     {
       "rule_id": "r1",
       "rule_name": "first rule",
-      "priority": 10,
       "effect": "allow",
       "subject": {"type": "user", "id_match": {"operator": "prefix", "value": "u-"}, "role_match": {"operator": "in", "values": ["engineer", "sre"]}},
       "verb": {"match": {"operator": "exact", "value": "execute"}},

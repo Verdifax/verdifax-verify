@@ -95,6 +95,27 @@ func DecodeReceiptStrict(data []byte) (*ReceiptDocument, error) {
 	return &d, nil
 }
 
+// CheckStrict applies the rules above to a whole document that will be
+// decoded into type t, without decoding it: checkStringText, then
+// walkStrict from the root, then no data after the closing token. Every
+// refusal wraps ErrNotStrictJSON. internal/policyhash uses it for
+// --policy documents, so a policy is read under the same rules as a
+// bundle.
+func CheckStrict(data []byte, t reflect.Type) error {
+	if textErr := checkStringText(data); textErr != nil {
+		return fmt.Errorf("%w: %v", ErrNotStrictJSON, textErr)
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	if walkErr := walkStrict(dec, t, "$"); walkErr != nil {
+		return fmt.Errorf("%w: %v", ErrNotStrictJSON, walkErr)
+	}
+	if _, trailingErr := dec.Token(); trailingErr != io.EOF {
+		return fmt.Errorf("%w: data after the document's closing token", ErrNotStrictJSON)
+	}
+	return nil
+}
+
 var unmarshalerType = reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()
 
 // opaque reports whether values of t are decoded by something other

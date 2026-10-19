@@ -66,7 +66,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.15.0"
+const Version = "0.15.1"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -165,6 +165,15 @@ func main() {
 	)
 	flag.Usage = printUsage
 	flag.Parse()
+
+	// Go's flag package stops at the first argument that is not a flag,
+	// so a flag written after the record path would be read as a second
+	// path and silently ignored; "--policy" after the path would check
+	// nothing. Refuse instead of guessing.
+	if flag.NArg() > 1 {
+		fmt.Fprintf(os.Stderr, "verdifax-verify: unexpected argument %q after the record path; flags such as --policy go before the path\n", flag.Arg(1))
+		os.Exit(2)
+	}
 
 	if *showVersion {
 		fmt.Println("verdifax-verify version", Version)
