@@ -16,10 +16,13 @@ import (
 // "attest:<key id>:<subject>" and whose digest field is chosen by the
 // caller. Without this check such an entry could stand as the first
 // entry of a forged pre-v5 record, which then read as verified and
-// anchored with partial coverage. Every run's envelope identifier is
-// minted by the server as "env-" plus sixteen hex characters and never
-// supplied by a caller, so an anchored record whose identifier has any
-// other form is not a run's record.
+// anchored with partial coverage. A run's envelope identifier is "env-"
+// followed by the first sixteen hex characters of the payload's admission
+// hash: derived from what the caller sends, repeated when the same
+// payload is sent again, and not a unique run number. What matters is
+// that it always begins "env-" while every /attest preimage carries
+// "attest:" in that position, so an anchored record whose identifier has
+// any other form is not a run's record.
 //
 // A second rule covers the leaf forms themselves: records have been
 // sealed with a pre-anchor table (leaf v5 and later) since run 236,
@@ -44,7 +47,7 @@ func verifyRecordIdentity(b *artifacts.AuditBundle, leaf LeafBindingCheck) Recor
 	}
 	if !runEnvelopeID.MatchString(b.Envelope.EnvelopeID) {
 		return RecordIdentityCheck{Performed: true, Reason: fmt.Sprintf(
-			"envelope identifier %q is not a run identifier (env- and sixteen hex characters); "+
+			"envelope identifier %q is not a run envelope identifier (env- and the first sixteen hex characters of the payload's admission hash); "+
 				"public-log entries the /attest endpoint signs carry attest: identifiers and are never a record's entries",
 			safePrefix(b.Envelope.EnvelopeID))}
 	}
@@ -66,7 +69,7 @@ func printRecordIdentity(c RecordIdentityCheck) {
 		return
 	}
 	if c.Match {
-		fmt.Printf("  Record identity:  a run identifier, in a leaf form current when it was logged\n")
+		fmt.Printf("  Record identity:  an env- envelope identifier (from the payload hash; not unique per run), in a leaf form current when it was logged\n")
 		return
 	}
 	fmt.Printf("  Record identity:  ✗ FAILED · %s\n", c.Reason)

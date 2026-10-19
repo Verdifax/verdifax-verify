@@ -462,7 +462,20 @@ not identify a policy.
 
 ## Release notes
 
-### v0.15.2: a record must carry a run identifier
+### v0.15.3: the record identity line says what the identifier is
+
+Report wording only; no verdict changes. The envelope identifier v0.15.2
+checks is derived from the payload the caller sends (`env-` followed by
+the first sixteen hex characters of its admission hash): it repeats when
+the same payload is sent again (runs 237, 238 and 239 share one) and is
+not a unique run number. v0.15.2's report and this README called it a
+run identifier minted by the server; v0.15.3 says what it is. The check
+itself is unchanged and its reason is unchanged: every `/attest`
+preimage carries `attest:` where a record carries this identifier, and
+`/attest` has used that prefix since its first version (orchestrator
+27da552, 2026-09-03T01:47Z).
+
+### v0.15.2: a record must carry a run envelope identifier
 
 The orchestrator's `POST /attest` endpoint signs, with log-signing key 1,
 a leaf in the same legacy form as records sealed before run 236, carrying
@@ -472,9 +485,9 @@ record hash. v0.15.1 and earlier would accept a record built around such
 an entry and report it as VERIFIED AND ANCHORED with partial coverage
 (the pre-v5 tier; never complete-record coverage, which needs a second
 entry of a form `/attest` never produces). v0.15.2 fails any anchored
-record whose envelope identifier is not a run identifier (`env-` and
-sixteen hex characters, minted by the server and never supplied by a
-caller), and any record in a pre-table leaf form (v1, v2 or v3) whose
+record whose envelope identifier is not a run envelope identifier
+(`env-` followed by the first sixteen hex characters of the payload's
+admission hash), and any record in a pre-table leaf form (v1, v2 or v3) whose
 entry the log integrated at or after run 236's first entry
 (2026-10-15T19:51:06Z). Every genuine record keeps its verdict; a test
 builds the forgery and checks it fails.
