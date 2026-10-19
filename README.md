@@ -22,7 +22,14 @@ entry timestamp. See
 [What this verifier proves](#what-this-verifier-proves-and-doesnt-prove). The manifest hash
 itself is not recomputed here: its preimage includes fields held only
 in the orchestrator's stored manifest, which the orchestrator re-derives
-server-side for authenticated callers at `GET /runs/{id}/verify`.
+server-side for authenticated callers at `GET /runs/{id}/verify`. To
+show the formula, production run 249's full manifest preimage is
+published as `testdata/manifest-vectors/run-249-manifest-preimage.json`: its 67
+parts, joined with `.`, hash to run 249's manifest hash, the last part
+recomputes from the execution record fields, only the leading domain
+tag contains a dot, and the parts include the bundle's envelope id,
+public-log leaf and entry, and actor fields
+(`round21_manifest_test.go`).
 
 It is the offline-verification path for Verdifax bundles: given just a
 bundle file, this binary decides whether the evidence is internally
