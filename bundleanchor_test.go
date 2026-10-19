@@ -296,8 +296,8 @@ func anchorRecord(t *testing.T, l *testLog, b *artifacts.AuditBundle) {
 
 func TestRound6IntactRun237WithoutBundleAnchorIsHonestlyPartial(t *testing.T) {
 	r := verify(loadRound6(t, "run-237-intact.json"))
-	if !r.AllPassed || !r.Anchored || r.VerdictTier != "VERIFIED_ANCHORED" {
-		t.Fatalf("intact run 237 must still verify and be anchored: tier=%s %+v", r.VerdictTier, r.RekorAnchor)
+	if !r.AllPassed || !r.Anchored || r.VerdictTier != "ANCHORED_PARTIAL_COVERAGE" {
+		t.Fatalf("intact run 237 must pass, be anchored and be reported as partial: tier=%s %+v", r.VerdictTier, r.RekorAnchor)
 	}
 	if r.BundleAnchor.Present || completeRecordAnchored(r) {
 		t.Fatal("a record without bundle_anchor must never read as complete")

@@ -84,6 +84,7 @@ cat bundle.json | verdifax-verify     # verify from stdin
 verdifax-verify --json bundle.json    # machine-readable JSON output
 verdifax-verify --strict bundle.json  # also fail on any scaffold-flagged value
 verdifax-verify --policy policy.json bundle.json  # also check a policy document against the sealed policy gate
+verdifax-verify --allow-partial bundle.json       # exit 0 for a record the public log covers only in part
 verdifax-verify --version
 ```
 
@@ -95,9 +96,15 @@ misplaced `--policy` can never pass as "checked".
 
 | Code | Meaning |
 |---|---|
-| 0 | All hashes verified, no failures. |
+| 0 | Every check passed, and the public log covers the complete record (or the input is a receipt, which its entry covers whole). |
 | 1 | One or more verification checks failed (or `--strict` + scaffold), including JSON that strict reading refuses as malformed or ambiguous. |
 | 2 | The input could not be read (a missing file or a failed download), or it was read but could not be decoded as a bundle or receipt. |
+| 3 | Every check passed, but the public log covers only part of the record (a record sealed before leaf v5, or one without a verified complete-record anchor), and `--allow-partial` was not given. Since v0.16.0. |
+
+A script that treats exit 0 as a pass accepts only complete-record
+anchored records. Until v0.15.3 a partial record exited 0, although its
+descriptive sections, the decision among them, could have been rewritten
+together with their hashes.
 
 ### `--strict` mode
 
@@ -196,7 +203,10 @@ that a party able to rewrite the whole bundle has not changed them, and
 v0.10.0 says so in the verdict: `VERIFIED AND ANCHORED, PARTIAL
 COVERAGE`, naming the descriptive sections as bundle-sealed, NOT
 anchored. The six round-six forgeries are kept in `testdata/round6/` and
-receive exactly that verdict.
+received exactly that verdict. Since v0.16.0 the partial verdict no
+longer says VERIFIED: it reads `ANCHORED, PARTIAL COVERAGE`, the JSON
+tier is `ANCHORED_PARTIAL_COVERAGE`, and the exit code is 3 unless
+`--allow-partial` is given.
 
 **Also proves, since v0.10.0:** that a bundle carrying `bundle_anchor`
 is, section for section, the record that was anchored. After the bundle
@@ -221,7 +231,8 @@ are `rekor_anchor` and `bundle_anchor` themselves. In a v5 record, a
 bundle whose `bundle_anchor` was stripped cannot be told apart from one
 sealed before the anchor shipped. It receives the partial verdict, never
 the complete one, so a relying party that requires complete coverage
-must require that exact verdict.
+must require that exact verdict; since v0.16.0, exit code 0 without
+`--allow-partial` means exactly that.
 
 **Also proves, since v0.11.0:** that a record sealed with the version-6
 leaf still carries the complete-record anchor it was sealed with. The
@@ -461,6 +472,31 @@ SHA-256 of `orchestrator.policy.v1`) kept for record stability; it does
 not identify a policy.
 
 ## Release notes
+
+### v0.16.0: a partially covered record is not reported as verified, and exits 3
+
+A record the public log covers only in part, either sealed before leaf
+v5 (the October 2026 hardware run is one) or a v5 record without a
+verified complete-record anchor, printed `VERIFIED AND ANCHORED, PARTIAL
+COVERAGE` and exited 0. Its descriptive sections, including the
+decision, the approval chain and the real-world effects, are sealed only
+by hashes inside the bundle. An external review on 2026-10-19 took the
+published hardware run, flipped its decision to deny, changed the
+approver, added a confirmed wire transfer and raised its SLSA level,
+recomputed those hashes and kept the real public-log entry; v0.15.3
+reported it as verified with exit code 0, so a script gating on exit
+status accepted it. The limit was disclosed, but the verdict and exit
+code vouched for it.
+
+From v0.16.0 such a record reads `ANCHORED, PARTIAL COVERAGE`, with a
+line saying not to rely on the unanchored sections. The JSON
+`verdict_tier` is `ANCHORED_PARTIAL_COVERAGE` instead of
+`VERIFIED_ANCHORED`, and the exit code is 3. `--allow-partial` restores
+exit 0 for anyone who accepts partial coverage knowingly. No check
+changed: every record passes or fails exactly as before, and
+complete-record anchored records, receipts and failures keep their
+verdicts and exit codes. Tests in `round27_test.go` replay the
+reviewer's rewrite of the hardware run and the six round-six rewrites.
 
 ### v0.15.3: the record identity line says what the identifier is
 

@@ -145,22 +145,22 @@ func TestWriteRound7Fixtures(t *testing.T) {
 	write("v6-strip-test-log.json", b)
 }
 
-// ── v5 records keep their v0.10.0 verdicts exactly ───────────────────
+// ── v5 records keep their coverage; partial ones are no longer "verified" (v0.16.0) ──
 
 func TestV5RecordsKeepTheirV010Verdicts(t *testing.T) {
 	const (
 		complete = "VERDICT: ✓ VERIFIED AND ANCHORED, COMPLETE RECORD ANCHORED (with scaffold flags)"
-		partial  = "VERDICT: ✓ VERIFIED AND ANCHORED, PARTIAL COVERAGE (with scaffold flags)"
+		partial  = "VERDICT: ⚠ ANCHORED, PARTIAL COVERAGE (with scaffold flags)"
 	)
 	cases := []struct {
 		dir, name, tier, coverage, verdict string
 	}{
 		{"round7", "run-238-intact.json", "VERIFIED_ANCHORED", "complete_record_anchored", complete},
-		{"round6", "run-237-intact.json", "VERIFIED_ANCHORED", "partial_descriptive_sections_bundle_sealed", partial},
+		{"round6", "run-237-intact.json", "ANCHORED_PARTIAL_COVERAGE", "partial_descriptive_sections_bundle_sealed", partial},
 	}
 	for _, name := range run238Strips {
 		cases = append(cases, struct{ dir, name, tier, coverage, verdict string }{
-			"round7", name, "VERIFIED_ANCHORED", "partial_descriptive_sections_bundle_sealed", partial})
+			"round7", name, "ANCHORED_PARTIAL_COVERAGE", "partial_descriptive_sections_bundle_sealed", partial})
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -176,7 +176,10 @@ func TestV5RecordsKeepTheirV010Verdicts(t *testing.T) {
 					r.VerdictTier, r.RecordCoverage, r.AllPassed, c.tier, c.coverage)
 			}
 			if exitShouldFail(r, false, false) {
-				t.Fatal("a v5 record that passed under v0.10.0 must still exit 0")
+				t.Fatal("a v5 record that passed under v0.10.0 must not exit 1")
+			}
+			if wantPartial := c.coverage != "complete_record_anchored"; partialCoverageExit(r, false) != wantPartial {
+				t.Fatalf("partial-coverage exit = %v, want %v", !wantPartial, wantPartial)
 			}
 			if r.CompleteRecordRequirement.Sealed {
 				t.Fatal("a v5 record carries no requirement and must not be judged as if it did")
@@ -186,7 +189,7 @@ func TestV5RecordsKeepTheirV010Verdicts(t *testing.T) {
 			}
 			out := captureHumanReport(t, b, r)
 			if !strings.Contains(out, c.verdict+"\n") {
-				t.Fatalf("verdict line changed from v0.10.0, want %q:\n%s", c.verdict, out)
+				t.Fatalf("verdict line, want %q:\n%s", c.verdict, out)
 			}
 			if !strings.Contains(out, "Anchor required:  not sealed (pre-v6 record") {
 				t.Fatalf("a v5 record must say a deleted record anchor is not detectable:\n%s", out)

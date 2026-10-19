@@ -66,7 +66,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.15.3"
+const Version = "0.16.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -161,6 +161,7 @@ func main() {
 	var (
 		jsonOutput      = flag.Bool("json", false, "emit machine-readable JSON instead of human report")
 		strictMode      = flag.Bool("strict", false, "fail (exit 1) on any scaffold-flagged value")
+		allowPartial    = flag.Bool("allow-partial", false, "exit 0 for a record whose public-log anchor binds only part of it (a record sealed before leaf v5, or one without a verified complete-record anchor); without this flag such a record exits 3, because its unanchored sections could have been rewritten together with their hashes")
 		allowUnanchored = flag.Bool("allow-unanchored", false, "exit 0 for a bundle with no public-log anchor; without this flag, unanchored bundles fail, because every sealing property this tool checks hangs off the anchor and an attacker can strip an anchor claim by editing one unprotected field (the documented downgrade attack)")
 		showVersion     = flag.Bool("version", false, "print version and exit")
 		selfHosted      = flag.Bool("self-hosted-receipt", false, "the receipt was issued by a test or self-hosted deployment that does not anchor receipts on the public log, not by the Verdifax API; exempts it from the rules that receipts dated from run 241 on must carry a public-log anchor and receipts dated from run 242 on must seal anchor_required")
@@ -252,6 +253,9 @@ func main() {
 		if exitShouldFail(report, *strictMode, *allowUnanchored) {
 			os.Exit(1)
 		}
+		if partialCoverageExit(report, *allowPartial) {
+			os.Exit(exitPartialCoverage)
+		}
 		return
 	}
 
@@ -264,6 +268,25 @@ func main() {
 	if exitShouldFail(report, *strictMode, *allowUnanchored) {
 		os.Exit(1)
 	}
+	if partialCoverageExit(report, *allowPartial) {
+		os.Exit(exitPartialCoverage)
+	}
+}
+
+// exitPartialCoverage is the exit code of a record that passes every
+// check but whose public-log anchor binds only part of it (v0.16.0).
+// Until v0.15.3 such a record exited 0, so a script gating on exit
+// status accepted a record whose decision, approvals and effects had
+// been rewritten together with their hashes. It is distinct from 1
+// (a check failed) and 2 (unreadable input).
+const exitPartialCoverage = 3
+
+// partialCoverageExit reports whether a record that did not fail must
+// still exit exitPartialCoverage: it passed and is anchored, but the
+// anchor does not cover the complete record, and --allow-partial was
+// not given.
+func partialCoverageExit(r *Report, allowPartial bool) bool {
+	return r.AllPassed && r.Anchored && !completeRecordAnchored(r) && !allowPartial
 }
 
 // exitShouldFail is the single exit-code policy (v0.8.1). Unanchored
@@ -512,6 +535,8 @@ func printEvidenceSummary(s EvidenceSummary) {
 	//      stored value. This IS a cryptographic failure.
 	gate := s.StrictModeGate
 	switch {
+	case s.StrictModeGate == "pass" && s.RecordCoverage != "complete_record_anchored":
+		gate = gate + " (every check passed, but the anchor covers only part of the record; exit 3 without --allow-partial)"
 	case s.StrictModeGate == "pass":
 		gate = gate + " (all cryptographic checks verified)"
 	case s.StrictModeWanted && s.HashesAllMatch:
@@ -541,6 +566,9 @@ FLAGS
   -strict                 fail on any scaffold-flagged value
   -allow-unanchored       exit 0 for a bundle or receipt that is
                           consistent but not anchored on the public log
+  -allow-partial          exit 0 for a record whose public-log anchor
+                          covers only part of it (sealed before leaf
+                          v5, or without a complete-record anchor)
   -self-hosted-receipt    the receipt came from a test or self-hosted
                           deployment, not the Verdifax API; exempts it
                           from the rules that receipts dated from run
@@ -555,7 +583,9 @@ EXIT
   0  all checks passed
   1  one or more checks failed, or the record is not anchored and
      -allow-unanchored was not passed (or -strict + scaffold)
-  2  could not parse the input`)
+  2  could not parse the input
+  3  every check passed, but the public-log anchor covers only part
+     of the record, and -allow-partial was not passed`)
 }
 
 // readInput returns the raw bytes of the file, URL or stdin argument.
@@ -857,6 +887,12 @@ func verify(b *artifacts.AuditBundle) *Report {
 		r.VerdictTier = "SELF_CONSISTENT_NOT_ANCHORED"
 	}
 	r.RecordCoverage = recordCoverage(r)
+	// A record the anchor covers only in part is not reported as
+	// verified (v0.16.0): the unanchored sections could have been
+	// rewritten together with their hashes.
+	if r.VerdictTier == "VERIFIED_ANCHORED" && r.RecordCoverage != "complete_record_anchored" {
+		r.VerdictTier = "ANCHORED_PARTIAL_COVERAGE"
+	}
 	return r
 }
 
@@ -1087,19 +1123,23 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 		fmt.Println("  entry and every section of the record by the second.")
 		printScaffoldList(r)
 	case r.AllPassed && r.PreAnchor.Performed:
-		fmt.Printf("VERDICT: ✓ VERIFIED AND ANCHORED, PARTIAL COVERAGE%s\n", scaffoldSuffix(r))
+		fmt.Printf("VERDICT: ⚠ ANCHORED, PARTIAL COVERAGE%s\n", scaffoldSuffix(r))
 		fmt.Println("  The run identity and the pre-anchor table are anchored. The descriptive")
 		fmt.Println("  sections (decision record, request substance, authorization chain,")
 		fmt.Println("  causal graph, system provenance and the rest) are bundle-sealed, NOT")
 		fmt.Println("  anchored: this record has no verified complete-record anchor, so those")
 		fmt.Println("  sections could have been rewritten together with their hashes.")
+		fmt.Println("  Do not rely on those sections. Exit code 3 without --allow-partial.")
 		printScaffoldList(r)
 	case r.AllPassed:
 		note := ""
 		if r.HasScaffold {
 			note = "; with scaffold flags"
 		}
-		fmt.Printf("VERDICT: ✓ VERIFIED AND ANCHORED (PARTIAL COVERAGE: pre-v5 record; the anchor binds the run identity, not every field%s)\n", note)
+		fmt.Printf("VERDICT: ⚠ ANCHORED, PARTIAL COVERAGE (pre-v5 record; the anchor binds the run identity, not every field%s)\n", note)
+		fmt.Println("  Every other section, including the decision, approvals and effects, is")
+		fmt.Println("  bundle-sealed, NOT anchored, and could have been rewritten together with")
+		fmt.Println("  its hashes. Do not rely on those sections. Exit code 3 without --allow-partial.")
 		printScaffoldList(r)
 	case r.CompleteRecordRequirement.Sealed && !r.CompleteRecordRequirement.Satisfied &&
 		r.passedExceptRequirement:
