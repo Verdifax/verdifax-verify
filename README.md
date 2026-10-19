@@ -427,6 +427,20 @@ an end date.
 
 ## Release notes
 
+### v0.14.7: SEALED requires the public-log entry and its signer
+
+Report wording only; no verdict changes. v0.14.6 and earlier set the
+actor line's SEALED label once the leaf rebuilt from the record matched
+the leaf hash the record itself states. An editor who substitutes the
+actor section, re-signs it with their own key, rebuilds the pre-anchor
+table and recomputes that stated leaf hash got the label, although the
+public-log entry no longer matched and the verdict was FAILED with exit
+code 1 under every flag. v0.14.7 sets SEALED only when the public-log
+entry also matches (inclusion proof, signed checkpoint, and the entry
+naming this leaf) and a published Verdifax log-signing key signed it.
+This applies to version-3 leaves as well as versions 5 to 7. Genuine
+records keep the label; a test substitutes run 249's actor section.
+
 ### v0.14.6: the actor section on leaf v5 to v7 records reads as sealed
 
 Report wording only; no verdict changes. On records anchored with a

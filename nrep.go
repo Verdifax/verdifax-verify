@@ -71,9 +71,11 @@ type NrepCheck struct {
 	Reason    string `json:"reason,omitempty"`
 
 	// KeyPinned stays false until registry pinning lands. Sealed is
-	// true when a version-3 anchored leaf, embedding this section's
-	// recomputed digest, matched: the section can then no longer be
-	// replaced offline. Sealed consistency is still not identity;
+	// true when the anchored leaf covers this section (a version-3 leaf
+	// embedding its digest, or a version 5 to 7 leaf binding the table
+	// that carries its values) and that leaf is the one a published
+	// Verdifax key logged: the section can then no longer be replaced
+	// offline. Sealed consistency is still not identity;
 	// that upgrade needs the key pinned.
 	KeyPinned bool `json:"key_pinned"`
 	Sealed    bool `json:"sealed"`
@@ -83,11 +85,14 @@ type NrepCheck struct {
 // bundle's own envelope_id and aer_hash. See the file comment for the
 // four states.
 // verifyNrepSignature takes the leaf-binding verdict so it can report
-// the sealed state honestly: here Sealed is true only when a version-3
+// the sealed state honestly: here Sealed is set only when a version-3
 // leaf, whose preimage embeds the actor-section digest recomputed
-// from this very section, matched the anchored leaf hash. Records with
-// a version 5 to 7 leaf are sealed through the pre-anchor table, which
-// sealedByPreAnchor applies once that table has been checked.
+// from this very section, matched the leaf hash the bundle records.
+// Records with a version 5 to 7 leaf are sealed through the pre-anchor
+// table, which sealedByPreAnchor applies once that table has been
+// checked. Either way sealedOnlyWhenLogged then clears Sealed unless
+// the public-log entry itself matches and is signed by a published
+// Verdifax key.
 func verifyNrepSignature(b *artifacts.AuditBundle, leaf LeafBindingCheck) NrepCheck {
 	sec := b.Nrep
 
@@ -178,6 +183,20 @@ func printNrepCheck(c NrepCheck) {
 	default:
 		fmt.Printf("  Actor signature:  none claimed\n")
 	}
+}
+
+// sealedOnlyWhenLogged keeps Sealed only when the leaf that seals the
+// section is the one on the public log: the inclusion proof and signed
+// checkpoint verify, the logged entry names this record's leaf, and a
+// published Verdifax log-signing key signed the entry. The earlier steps
+// compare the leaf rebuilt from the bundle with the leaf hash the bundle
+// itself records, which an editor can rewrite together with the section,
+// its table and that recorded hash; only the log entry cannot be.
+func sealedOnlyWhenLogged(c NrepCheck, anchor RekorAnchorCheck, auth EntryAuthCheck) NrepCheck {
+	if c.Sealed && !(anchor.Performed && anchor.Match && auth.Performed && auth.Match) {
+		c.Sealed = false
+	}
+	return c
 }
 
 // sealedByPreAnchor reports the actor section as sealed on records whose
