@@ -1,0 +1,13 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "synthetic-signers-only",
+  "policy_name": "Signers without a signature policy",
+  "policy_version": "1.0.0",
+  "effective_at": "2026-06-04T00:00:00Z",
+  "default_effect": "deny",
+  "rules": [],
+  "signers": [
+    {"signer_id": "b-signer", "key_algorithm": "ed25519", "key_fingerprint": "eeee", "signature_base64": "", "signed_at": ""},
+    {"signer_id": "a-signer", "key_algorithm": "rsa-future", "key_fingerprint": "ffff", "signature_base64": "eA==", "signed_at": "2026-06-04T00:00:00Z"}
+  ]
+}

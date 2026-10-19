@@ -1,0 +1,46 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "policy-cross-lang-test",
+  "policy_name": "Cross-language determinism test policy",
+  "policy_version": "1.0.0",
+  "effective_at": "2026-05-02T00:00:00Z",
+  "default_effect": "deny",
+  "rules": [
+    {
+      "rule_id": "rule-001-allow-summarize-internal",
+      "effect": "allow",
+      "subject": {
+        "type": "agent",
+        "id_match": { "operator": "any" }
+      },
+      "verb": {
+        "match": { "operator": "exact", "value": "summarize" }
+      },
+      "object": {
+        "type": "text",
+        "id_match": { "operator": "any" },
+        "classification_max": "INTERNAL"
+      }
+    },
+    {
+      "rule_id": "rule-002-engineer-execute",
+      "effect": "allow",
+      "subject": {
+        "type": "user",
+        "id_match": { "operator": "any" },
+        "role_match": { "operator": "in", "values": ["engineer", "sre"] }
+      },
+      "verb": {
+        "match": { "operator": "exact", "value": "execute" }
+      },
+      "object": {
+        "type": "code",
+        "id_match": { "operator": "any" }
+      },
+      "conditions": [
+        { "type": "mfa_required", "required": true },
+        { "type": "time_window", "start_utc": "08:00", "end_utc": "20:00" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "internal-audit-v1",
+  "policy_name": "Internal Audit Baseline",
+  "policy_version": "1.0.0",
+  "effective_at": "2026-05-08T00:00:00Z",
+  "default_effect": "allow",
+  "profile_tag": "internal_audit_v1",
+  "tags": ["internal-audit", "governance", "baseline", "v1"],
+  "metadata": {
+    "purpose": "Generic governance baseline for any organization that wants attested decisions sealed, regardless of specific regulatory framework. Suitable as a starting profile that customers extend with framework-specific fields (HIPAA, GDPR, SOX, etc.).",
+    "intended_audience": "Any organization using Verdifax to seal attested decisions where the audit trail must include who decided, under what authority, and why.",
+    "what_this_does": "Refuses admission when the caller fails to declare actor identity, role, authorization basis, decision classification, or decision rationale. Produces a sealed AttestationGapReceipt naming the gap.",
+    "what_this_does_not_do": "This profile makes no regulatory compliance claim. It is the minimum viable attested-decision floor, most regulated customers will inherit from this profile and add framework-specific fields on top."
+  },
+  "required_attested_fields": [
+    "actor_id",
+    "actor_role",
+    "authorization_policy",
+    "decision_kind",
+    "decision_note"
+  ],
+  "rules": []
+}

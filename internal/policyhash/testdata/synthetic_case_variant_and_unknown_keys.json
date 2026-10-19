@@ -1,0 +1,22 @@
+{
+  "SCHEMA": "psl.v1",
+  "Policy_Id": "synthetic-case-variant-keys",
+  "policy_name": "Case variant keys and unknown fields at every level",
+  "Policy_Version": "1.0.0",
+  "effective_at": "2026-06-12T00:00:00Z",
+  "Default_Effect": "allow",
+  "_comment": "unknown field, ignored by the server",
+  "future_top_level": {"anything": [1, 2, 3]},
+  "rules": [
+    {
+      "RULE_ID": "r-case",
+      "effect": "allow",
+      "unknown_rule_field": true,
+      "subject": {"Type": "agent", "ID_MATCH": {"Operator": "exact", "VALUE": "x"}, "extra": null},
+      "verb": {"match": {"operator": "any", "extra": 1}},
+      "object": {"type": "text", "id_match": {"operator": "any"}, "Classification_Max": "PUBLIC"}
+    }
+  ],
+  "signers": [{"Signer_ID": "s1", "key_algorithm": "ed25519", "key_fingerprint": "01", "unknown": "x"}],
+  "signature_policy": {"TYPE": "any", "extra": []}
+}

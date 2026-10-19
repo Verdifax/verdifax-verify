@@ -1,0 +1,26 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "synthetic-nulls",
+  "policy_name": null,
+  "policy_version": null,
+  "effective_at": null,
+  "default_effect": "deny",
+  "profile_tag": null,
+  "metadata": null,
+  "tags": null,
+  "required_attested_fields": null,
+  "signers": null,
+  "signature_policy": null,
+  "rules": [
+    {
+      "rule_id": "r-null",
+      "rule_name": null,
+      "effect": null,
+      "reason_code": null,
+      "subject": {"type": "user", "id_match": {"operator": "any", "value": null, "values": null}, "role_match": null},
+      "verb": null,
+      "object": {"type": "file", "id_match": null, "classification_max": null},
+      "conditions": null
+    }
+  ]
+}

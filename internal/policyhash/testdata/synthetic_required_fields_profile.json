@@ -1,0 +1,12 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "synthetic-required-fields",
+  "policy_name": "Required attested and outcome fields with a profile tag",
+  "policy_version": "3.0.0",
+  "effective_at": "2026-06-05T00:00:00Z",
+  "default_effect": "allow",
+  "profile_tag": "synthetic_profile_v1",
+  "required_attested_fields": ["model_provider", "actor_id", "actor_role", "actor_id"],
+  "required_outcome_fields": ["decision_result", "outcome"],
+  "rules": []
+}

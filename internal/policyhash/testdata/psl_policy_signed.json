@@ -1,0 +1,38 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "policy-cross-lang-signed-test",
+  "policy_name": "Cross-language determinism test policy (signed)",
+  "policy_version": "1.0.0",
+  "effective_at": "2026-05-15T00:00:00Z",
+  "default_effect": "deny",
+  "rules": [
+    {
+      "rule_id": "allow-summarize-internal",
+      "effect": "allow",
+      "subject": {"type": "any", "id_match": {"operator": "any"}},
+      "verb":    {"match": {"operator": "exact", "value": "summarize"}},
+      "object":  {"type": "text", "id_match": {"operator": "any"}, "classification_max": "INTERNAL"}
+    }
+  ],
+  "signature_policy": {
+    "type": "n_of_m",
+    "threshold": 2,
+    "required": ["compliance"]
+  },
+  "signers": [
+    {
+      "signer_id": "ciso",
+      "key_algorithm": "ed25519",
+      "key_fingerprint": "1111111111111111111111111111111111111111111111111111111111111111",
+      "signature_base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "signed_at": "2026-05-15T00:00:00Z"
+    },
+    {
+      "signer_id": "compliance",
+      "key_algorithm": "ed25519",
+      "key_fingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
+      "signature_base64": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "signed_at": "2026-05-15T00:01:00Z"
+    }
+  ]
+}

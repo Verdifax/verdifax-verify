@@ -1,0 +1,10 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "synthetic-signature-policy-only",
+  "policy_name": "Signature policy with zero threshold and empty required",
+  "policy_version": "1",
+  "effective_at": "2026-06-02T00:00:00Z",
+  "default_effect": "allow",
+  "rules": [],
+  "signature_policy": {"type": "any", "threshold": 0, "required": []}
+}

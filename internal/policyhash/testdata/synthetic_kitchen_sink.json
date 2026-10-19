@@ -1,0 +1,44 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "synthetic-kitchen-sink",
+  "policy_name": "Every hashed part at once",
+  "policy_version": "5.0.0",
+  "effective_at": "2026-06-14T00:00:00Z",
+  "default_effect": "deny",
+  "profile_tag": "kitchen_sink_v1",
+  "required_attested_fields": ["actor_id", "model_provider"],
+  "required_outcome_fields": ["decision_result"],
+  "tags": ["one", "two"],
+  "metadata": {"owner": "policy-team", "ratio": 0.5, "count": 3},
+  "signature_policy": {"type": "n_of_m", "threshold": 2, "required": ["compliance"]},
+  "signers": [
+    {"signer_id": "ciso", "key_algorithm": "ed25519", "key_fingerprint": "1111", "signature_base64": "AAAA", "signed_at": "2026-06-14T00:00:00Z"},
+    {"signer_id": "compliance", "key_algorithm": "ed25519", "key_fingerprint": "2222", "signature_base64": "BBBB", "signed_at": "2026-06-14T00:01:00Z"}
+  ],
+  "rules": [
+    {
+      "rule_id": "r1",
+      "rule_name": "first rule",
+      "priority": 10,
+      "effect": "allow",
+      "subject": {"type": "user", "id_match": {"operator": "prefix", "value": "u-"}, "role_match": {"operator": "in", "values": ["engineer", "sre"]}},
+      "verb": {"match": {"operator": "exact", "value": "execute"}},
+      "object": {"type": "code", "id_match": {"operator": "substring", "value": "repo"}, "classification_min": "PUBLIC", "classification_max": "RESTRICTED"},
+      "conditions": [
+        {"type": "rate_limit", "max_per_window": 100, "window_seconds": 3600},
+        {"type": "time_window", "start_utc": "08:00", "end_utc": "20:00"},
+        {"type": "mfa_required", "required": true},
+        {"type": "min_session_age", "seconds": 300},
+        {"type": "requires_role", "role": "approver"}
+      ],
+      "reason_code": "RULE_ALLOWED"
+    },
+    {
+      "rule_id": "r2",
+      "effect": "deny",
+      "subject": {"type": "agent", "id_match": {"operator": "any"}},
+      "verb": {"match": {"operator": "any"}},
+      "object": {"type": "data", "id_match": {"operator": "any"}}
+    }
+  ]
+}

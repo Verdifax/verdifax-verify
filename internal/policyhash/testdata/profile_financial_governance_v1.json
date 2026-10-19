@@ -1,0 +1,26 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "financial-governance-v1",
+  "policy_name": "Financial Governance (SOX/FINRA-aligned attestation)",
+  "policy_version": "1.0.0",
+  "effective_at": "2026-05-08T00:00:00Z",
+  "default_effect": "allow",
+  "profile_tag": "financial_governance_v1",
+  "tags": ["financial-services", "sox-aligned", "finra-aligned", "baseline", "v1"],
+  "metadata": {
+    "purpose": "Designed to support Sarbanes-Oxley §404 internal-controls evidentiary patterns and FINRA Rule 3110 supervision-record requirements. Not a compliance attestation. Verdifax provides the policy mechanism; the customer's compliance officer attests compliance for their use case.",
+    "intended_audience": "Broker-dealers, investment advisers, and public companies subject to SOX/FINRA evidentiary requirements when using AI-mediated decision systems.",
+    "what_this_does": "Refuses admission when the caller fails to declare actor identity, supervisory authorization, model provenance, or decision classification. Produces a sealed AttestationGapReceipt naming the gap.",
+    "what_this_does_not_do": "This profile is NOT a SOX or FINRA compliance certification. Compliance with either framework requires documented internal-control testing, signed CEO/CFO attestations, books-and-records preservation, and other process controls outside Verdifax's scope."
+  },
+  "required_attested_fields": [
+    "actor_id",
+    "actor_role",
+    "authorization_policy",
+    "model_provider",
+    "model_name",
+    "decision_kind",
+    "decision_result"
+  ],
+  "rules": []
+}

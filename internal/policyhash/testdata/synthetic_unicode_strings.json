@@ -1,0 +1,19 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "synthetic-unicode-é中🚀",
+  "policy_name": "Café “quoted” <b>&amp;</b> \"q\" \\ / tab\tnl\n ctl\u0001 del\u007f ls  ps  bom﻿",
+  "policy_version": "v².①",
+  "effective_at": "2026-06-09T00:00:00Z",
+  "default_effect": "allow",
+  "profile_tag": "Ã©-literal-é-precomposed-é-combining",
+  "required_attested_fields": ["العربية", "עברית", "😀"],
+  "rules": [
+    {
+      "rule_id": "r-🔑",
+      "effect": "allow",
+      "subject": {"type": "user", "id_match": {"operator": "exact", "value": "üserß"}},
+      "verb": {"match": {"operator": "exact", "value": "редакт"}},
+      "object": {"type": "text", "id_match": {"operator": "prefix", "value": "a<b>c&d"}}
+    }
+  ]
+}

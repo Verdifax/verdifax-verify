@@ -223,14 +223,7 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 		},
 		AttestedContext: attested,
 	}
-	epa.Hash = MustCanonicalHash(struct {
-		Kind                string          `json:"kind"`
-		KernelID            string          `json:"kernel_id"`
-		KernelVersion       string          `json:"kernel_version"`
-		PolicyHash          string          `json:"policy_hash"`
-		EnvironmentSnapshot EnvSnapshot     `json:"environment_snapshot"`
-		AttestedContext     AttestedContext `json:"attested_context"`
-	}{epa.Kind, epa.KernelID, epa.KernelVersion, epa.PolicyHash, epa.EnvironmentSnapshot, epa.AttestedContext})
+	epa.Hash = RecomputeEPAHash(epa)
 	epa.Seal = seal("epa_hash", in.EpaHash)
 
 	// 5. EFA

@@ -83,6 +83,7 @@ verdifax-verify bundle.json           # verify a file, print human report
 cat bundle.json | verdifax-verify     # verify from stdin
 verdifax-verify --json bundle.json    # machine-readable JSON output
 verdifax-verify --strict bundle.json  # also fail on any scaffold-flagged value
+verdifax-verify --policy policy.json bundle.json  # also check a policy document against the sealed policy gate
 verdifax-verify --version
 ```
 
@@ -432,7 +433,45 @@ A new key will be added here, with the date it took effect, before any
 entry it signs; a retired key keeps its entries verifiable and is given
 an end date.
 
+### `--policy`: confirming which policy admitted a run
+
+Records sealed by the orchestrator from its October 18, 2026 release on
+carry the policy gate's decision in the EPA section (`epa.policy_gate`):
+the policy's identifier, name and version, its hash, the rule that
+admitted the request and the reason code. The report prints them on the
+"Policy gate" line. Those values are covered by the EPA section hash, the
+bundle hash and, on complete-record anchored records, the second
+public-log entry, so editing them fails verification.
+
+What the record cannot show on its own is that the named identifier and
+version belong to the hashed document, because the record carries the
+hash, not the policy. `--policy FILE` closes that gap for a reader who
+holds the policy document: the verifier recomputes the document's policy
+hash exactly as the orchestrator does (`internal/policyhash`, with
+parity vectors against the orchestrator for 24 documents, including the
+production default policy) and fails verification unless the hash,
+identifier, name and version all equal the sealed values. Against a
+record with no policy gate, `--policy` fails rather than passing
+silently. `epa.policy_hash`, a separate field, is a fixed value (the
+SHA-256 of `orchestrator.policy.v1`) kept for record stability; it does
+not identify a policy.
+
 ## Release notes
+
+### v0.15.0: the policy gate's decision is read, and a policy document can be checked
+
+Records sealed by the orchestrator from its October 18, 2026 release on
+carry `epa.policy_gate`; this release reads it, prints it, and adds
+`--policy FILE` (see above). Verdicts of every existing record are
+unchanged: the section is covered by the existing EPA section hash,
+whose recipe appends it last and omits it when absent, so a record
+sealed before the field existed hashes exactly as before. The
+policy-hash port is checked byte for byte against the orchestrator's
+own hashes. One deliberate difference from the orchestrator's policy
+reader: a document that names the same key twice in one object (exact
+or case-variant) is refused, because other readers would keep different
+values.
+
 
 ### v0.14.7: SEALED requires the public-log entry and its signer
 

@@ -1,0 +1,25 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "synthetic-integers",
+  "policy_name": "Integer edge values",
+  "policy_version": "1.0.0",
+  "effective_at": "2026-06-11T00:00:00Z",
+  "default_effect": "deny",
+  "signature_policy": {"type": "n_of_m", "threshold": 9007199254740993},
+  "metadata": {"pi": 3.141592653589793, "third": 0.3333333333333333, "neg": -0.0, "exp": 1.5E+10},
+  "rules": [
+    {
+      "rule_id": "r-ints",
+      "effect": "deny",
+      "priority": -1,
+      "subject": {"type": "any", "id_match": {"operator": "any"}},
+      "verb": {"match": {"operator": "any"}},
+      "object": {"type": "any", "id_match": {"operator": "any"}},
+      "conditions": [
+        {"type": "rate_limit", "max_per_window": 9223372036854775807, "window_seconds": -9223372036854775808},
+        {"type": "min_session_age", "seconds": -0},
+        {"type": "rate_limit", "max_per_window": 0, "window_seconds": 0}
+      ]
+    }
+  ]
+}

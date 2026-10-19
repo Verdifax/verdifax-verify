@@ -1,0 +1,13 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "synthetic-signers-negative-threshold",
+  "policy_name": "Signers with an all policy and a negative threshold",
+  "policy_version": "1.0.0",
+  "effective_at": "2026-06-03T00:00:00Z",
+  "default_effect": "deny",
+  "rules": [],
+  "signature_policy": {"type": "all", "threshold": -3},
+  "signers": [
+    {"signer_id": "solo", "key_algorithm": "ed25519", "key_fingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}
+  ]
+}

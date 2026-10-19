@@ -1,0 +1,83 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "synthetic-all-rule-shapes",
+  "policy_name": "Every subject, verb, object and condition shape",
+  "policy_version": "4.2.0",
+  "effective_at": "2026-06-08T12:30:00Z",
+  "default_effect": "deny",
+  "rules": [
+    {
+      "rule_id": "r01-agent-exact",
+      "effect": "allow",
+      "subject": {"type": "agent", "id_match": {"operator": "exact", "value": "agent-7"}},
+      "verb": {"match": {"operator": "exact", "value": "summarize"}},
+      "object": {"type": "text", "id_match": {"operator": "any"}, "classification_max": "INTERNAL"}
+    },
+    {
+      "rule_id": "r02-user-role-in",
+      "effect": "allow",
+      "subject": {"type": "user", "id_match": {"operator": "suffix", "value": "@example.invalid"}, "role_match": {"operator": "in", "values": ["engineer", "sre", "oncall"]}},
+      "verb": {"match": {"operator": "prefix", "value": "exec"}},
+      "object": {"type": "code", "id_match": {"operator": "substring", "value": "repo/"}, "classification_min": "PUBLIC", "classification_max": "RESTRICTED"},
+      "conditions": [
+        {"type": "mfa_required", "required": true},
+        {"type": "time_window", "start_utc": "08:00", "end_utc": "20:00"},
+        {"type": "rate_limit", "max_per_window": 100, "window_seconds": 3600},
+        {"type": "min_session_age", "seconds": 300},
+        {"type": "requires_role", "role": "approver"}
+      ]
+    },
+    {
+      "rule_id": "r03-service-not-in",
+      "effect": "deny",
+      "subject": {"type": "service", "id_match": {"operator": "not_in", "values": ["svc-a", "svc-b"]}},
+      "verb": {"match": {"operator": "not_in", "values": ["read"]}},
+      "object": {"type": "transaction", "id_match": {"operator": "prefix", "value": "txn-"}, "classification_min": "TOP_SECRET"},
+      "reason_code": "CLASSIFICATION_BELOW_MIN"
+    },
+    {
+      "rule_id": "r04-system-file",
+      "effect": "deny",
+      "subject": {"type": "system", "id_match": {"operator": "any"}, "role_match": {"operator": "exact", "value": "root"}},
+      "verb": {"match": {"operator": "substring", "value": "delete"}},
+      "object": {"type": "file", "id_match": {"operator": "suffix", "value": ".key"}, "classification_max": "TS_SCI"},
+      "conditions": [
+        {"type": "mfa_required", "required": false},
+        {"type": "mfa_required"},
+        {"type": "rate_limit"},
+        {"type": "time_window"},
+        {"type": "min_session_age", "seconds": 0},
+        {"type": "requires_role"}
+      ],
+      "reason_code": "CLASSIFICATION_EXCEEDED"
+    },
+    {
+      "rule_id": "r05-any-model-data",
+      "effect": "allow",
+      "subject": {"type": "any", "id_match": {"operator": "any", "value": "", "values": []}},
+      "verb": {"match": {"operator": "exact", "value": "infer", "values": ["also", "kept"]}},
+      "object": {"type": "model", "id_match": {"operator": "in", "values": ["m1"]}},
+      "conditions": [
+        {"type": "rate_limit", "max_per_window": 5, "window_seconds": 60, "role": "ignored", "seconds": 9, "required": true, "start_utc": "x", "end_utc": "y"},
+        {"type": "time_window", "start_utc": "22:00", "end_utc": "06:00", "max_per_window": 3},
+        {"type": "requires_role", "role": "auditor", "seconds": 12},
+        {"type": "future_condition_kind", "max_per_window": 1, "role": "dropped"}
+      ]
+    },
+    {
+      "rule_id": "r06-data-empty-type",
+      "effect": "deny",
+      "subject": {"type": "", "id_match": {"operator": ""}},
+      "verb": {"match": {"operator": "any"}},
+      "object": {"type": "data", "id_match": {"operator": "any"}},
+      "conditions": []
+    },
+    {
+      "rule_id": "r07-bare",
+      "effect": "allow",
+      "subject": {},
+      "verb": {},
+      "object": {}
+    }
+  ]
+}

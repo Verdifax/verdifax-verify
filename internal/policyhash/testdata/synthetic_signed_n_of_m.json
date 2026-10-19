@@ -1,0 +1,23 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "synthetic-signed-n-of-m",
+  "policy_name": "Signed policy, three signers, n_of_m",
+  "policy_version": "2.1.0",
+  "effective_at": "2026-06-01T00:00:00Z",
+  "default_effect": "deny",
+  "rules": [
+    {
+      "rule_id": "allow-read-data",
+      "effect": "allow",
+      "subject": {"type": "service", "id_match": {"operator": "prefix", "value": "svc-"}},
+      "verb": {"match": {"operator": "in", "values": ["read", "list"]}},
+      "object": {"type": "data", "id_match": {"operator": "any"}, "classification_max": "CONFIDENTIAL"}
+    }
+  ],
+  "signature_policy": {"type": "n_of_m", "threshold": 2, "required": ["compliance", "ciso"]},
+  "signers": [
+    {"signer_id": "ciso", "key_algorithm": "ed25519", "key_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "signature_base64": "c2lnbmF0dXJlLW9uZQ==", "signed_at": "2026-06-01T00:00:00Z"},
+    {"signer_id": "compliance", "key_algorithm": "ed25519", "key_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "signature_base64": "c2lnbmF0dXJlLXR3bw==", "signed_at": "2026-06-01T00:05:00Z"},
+    {"signer_id": "platform-team", "key_algorithm": "ed25519", "key_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "signature_base64": "c2lnbmF0dXJlLXRocmVl", "signed_at": "2026-06-01T00:10:00Z"}
+  ]
+}

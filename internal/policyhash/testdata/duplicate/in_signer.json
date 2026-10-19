@@ -1,0 +1,1 @@
+{"schema":"psl.v1","policy_name":"n","policy_version":"1","effective_at":"2026-06-13T00:00:00Z","policy_id":"p","default_effect":"deny","rules":[],"signers":[{"signer_id":"a","Signer_Id":"b","key_algorithm":"ed25519","key_fingerprint":"00"}]}

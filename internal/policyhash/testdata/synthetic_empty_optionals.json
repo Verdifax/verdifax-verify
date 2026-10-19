@@ -1,0 +1,16 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "synthetic-empty-optionals",
+  "policy_name": "Every optional part present but empty",
+  "policy_version": "1.0.0",
+  "effective_at": "2026-06-06T00:00:00Z",
+  "default_effect": "deny",
+  "rules": null,
+  "metadata": {},
+  "tags": [],
+  "required_attested_fields": [],
+  "required_outcome_fields": [],
+  "profile_tag": "",
+  "signature_policy": null,
+  "signers": []
+}

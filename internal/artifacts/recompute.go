@@ -64,6 +64,9 @@ func RecomputeTransportHash(t Transport) string {
 	})
 }
 
+// RecomputeEPAHash is the EPA section hash. policy_gate is appended last
+// and omitted when absent, so the EPA hash of every record sealed before
+// it existed is unchanged.
 func RecomputeEPAHash(e EPA) string {
 	return MustCanonicalHash(struct {
 		Kind                string          `json:"kind"`
@@ -72,7 +75,8 @@ func RecomputeEPAHash(e EPA) string {
 		PolicyHash          string          `json:"policy_hash"`
 		EnvironmentSnapshot EnvSnapshot     `json:"environment_snapshot"`
 		AttestedContext     AttestedContext `json:"attested_context"`
-	}{e.Kind, e.KernelID, e.KernelVersion, e.PolicyHash, e.EnvironmentSnapshot, e.AttestedContext})
+		PolicyGate          *PolicyGate     `json:"policy_gate,omitempty"`
+	}{e.Kind, e.KernelID, e.KernelVersion, e.PolicyHash, e.EnvironmentSnapshot, e.AttestedContext, e.PolicyGate})
 }
 
 func RecomputeEFAHash(e EFA) string {

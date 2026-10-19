@@ -1,0 +1,31 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "api-test-allow-all",
+  "policy_name": "API Test Allow-All",
+  "policy_version": "1.0.0",
+  "effective_at": "2026-05-01T00:00:00Z",
+  "default_effect": "deny",
+  "rules": [
+    {
+      "rule_id": "allow-all",
+      "effect": "allow",
+      "subject": {
+        "type": "any",
+        "id_match": {
+          "operator": "any"
+        }
+      },
+      "verb": {
+        "match": {
+          "operator": "any"
+        }
+      },
+      "object": {
+        "type": "any",
+        "id_match": {
+          "operator": "any"
+        }
+      }
+    }
+  ]
+}

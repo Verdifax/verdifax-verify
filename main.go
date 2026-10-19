@@ -66,7 +66,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.14.7"
+const Version = "0.15.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -131,6 +131,9 @@ type Report struct {
 	// (v0.12.0): pinned signer, signed entry timestamps, and the sealed
 	// anchoring window on table v3 records.
 	EntryAuth EntryAuthCheck `json:"entry_authentication"`
+	// PolicyGate is the policy gate's sealed decision and, with
+	// --policy, the document check (v0.15.0).
+	PolicyGate PolicyGateCheck `json:"policy_gate"`
 	// RecordValues are the decision-bearing values as checked (v0.12.1).
 	RecordValues RecordValues `json:"record_values"`
 	CrossChecks  []string     `json:"cross_check_failures,omitempty"`
@@ -157,6 +160,7 @@ func main() {
 		allowUnanchored = flag.Bool("allow-unanchored", false, "exit 0 for a bundle with no public-log anchor; without this flag, unanchored bundles fail, because every sealing property this tool checks hangs off the anchor and an attacker can strip an anchor claim by editing one unprotected field (the documented downgrade attack)")
 		showVersion     = flag.Bool("version", false, "print version and exit")
 		selfHosted      = flag.Bool("self-hosted-receipt", false, "the receipt was issued by a test or self-hosted deployment that does not anchor receipts on the public log, not by the Verdifax API; exempts it from the rules that receipts dated from run 241 on must carry a public-log anchor and receipts dated from run 242 on must seal anchor_required")
+		policyFile      = flag.String("policy", "", "a policy document (JSON) to check against the policy gate the record seals: its recomputed policy hash, identifier, name and version must equal the sealed values, or verification fails")
 		showEvidence    = flag.Bool("show-evidence-summary", false, "print a one-glance maturity summary (real vs scaffold counts, Rekor anchor status, PoTE preimage version, strict-mode gate disposition) and exit; combine with --json for machine-readable form")
 	)
 	flag.Usage = printUsage
@@ -210,6 +214,14 @@ func main() {
 	}
 
 	report := verify(bundle)
+	if *policyFile != "" {
+		doc, readErr := os.ReadFile(*policyFile)
+		if readErr != nil {
+			fmt.Fprintln(os.Stderr, "verdifax-verify: read --policy:", readErr)
+			os.Exit(2)
+		}
+		applyPolicyDocument(report, doc)
+	}
 
 	// --show-evidence-summary short-circuits the normal output paths so
 	// CPTOs / reviewers / CI scripts can get a one-glance read on the
@@ -731,6 +743,7 @@ func verify(b *artifacts.AuditBundle) *Report {
 	r.EntryAuth = verifyEntryAuthentication(b, r)
 	r.NrepSignature = sealedOnlyWhenLogged(r.NrepSignature, r.RekorAnchor, r.EntryAuth)
 	r.RecordValues = recordValuesOf(b)
+	r.PolicyGate = policyGateOf(b)
 
 	// Roll-up.
 	allPassed := r.BundleHashOK
@@ -1029,6 +1042,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	printCompleteRecordRequirement(r.CompleteRecordRequirement, len(b.PreAnchor) > 0)
 	printEntryAuth(r.EntryAuth)
 	printRecordValues(r.RecordValues)
+	printPolicyGate(r.PolicyGate)
 	for _, f := range r.CrossChecks {
 		fmt.Printf("  Cross-check:      ✗ FAILED · %s\n", f)
 	}

@@ -107,8 +107,31 @@ type EPA struct {
 	PolicyHash          string          `json:"policy_hash"`
 	EnvironmentSnapshot EnvSnapshot     `json:"environment_snapshot"`
 	AttestedContext     AttestedContext `json:"attested_context"`
-	Hash                string          `json:"hash"`
-	Seal                SealReference   `json:"seal"`
+	// PolicyGate is the policy gate's decision for an allowed run: the
+	// policy it evaluated, named and hashed, and the rule that admitted
+	// the request. Absent on records sealed before it was added and on
+	// runs with no policy gate. PolicyHash above is a fixed value, the
+	// SHA-256 of "orchestrator.policy.v1", kept for record stability; it
+	// does not identify a policy.
+	PolicyGate *PolicyGate   `json:"policy_gate,omitempty"`
+	Hash       string        `json:"hash"`
+	Seal       SealReference `json:"seal"`
+}
+
+// PolicyGate records the policy gate's decision in an allowed run's EPA
+// section. PolicyHash is computed over the whole policy document,
+// including PolicyID, PolicyName and PolicyVersion, so a holder of the
+// document can recompute it (--policy). Field order is fixed: it is
+// part of the EPA section hash.
+type PolicyGate struct {
+	PolicyID           string `json:"policy_id"`
+	PolicyName         string `json:"policy_name"`
+	PolicyVersion      string `json:"policy_version"`
+	PolicyHash         string `json:"policy_hash"`
+	Outcome            string `json:"outcome"`
+	FiredRuleID        string `json:"fired_rule_id"`
+	DecisionReasonCode string `json:"decision_reason_code"`
+	EvaluationHash     string `json:"evaluation_hash"`
 }
 
 type EnvSnapshot struct {

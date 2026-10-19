@@ -1,0 +1,26 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "gdpr-aligned-attestation-v1",
+  "policy_name": "GDPR-Aligned Attestation",
+  "policy_version": "1.0.0",
+  "effective_at": "2026-05-08T00:00:00Z",
+  "default_effect": "allow",
+  "profile_tag": "gdpr_aligned_attestation_v1",
+  "tags": ["gdpr", "data-protection", "eu", "baseline", "v1"],
+  "metadata": {
+    "purpose": "Designed to support GDPR Article 6 (lawful basis), Article 17 (right to erasure), and Article 30 (records of processing) workflows. Not a compliance attestation. Verdifax provides the policy mechanism; the customer's Data Protection Officer attests compliance for their use case.",
+    "intended_audience": "EU-based data controllers and processors using Verdifax to seal attested decisions involving personal data of EU data subjects.",
+    "what_this_does": "Refuses admission when the caller fails to declare actor identity, supervisory authorization, model provenance, decision classification, or the GDPR lawful basis for processing. Combined with Verdifax's CRES Phase-1 erasure capability, supports the Article 17 right-to-erasure workflow with sealed DeletionReceipts.",
+    "what_this_does_not_do": "This profile is NOT a GDPR compliance certification. GDPR compliance requires documented data-protection impact assessments (DPIAs), data subject access request (DSAR) procedures, breach-notification workflows, lawful basis documentation, and ongoing DPO oversight outside Verdifax's scope."
+  },
+  "required_attested_fields": [
+    "actor_id",
+    "actor_role",
+    "authorization_policy",
+    "model_provider",
+    "model_name",
+    "decision_kind",
+    "decision_note"
+  ],
+  "rules": []
+}
