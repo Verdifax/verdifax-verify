@@ -462,6 +462,23 @@ not identify a policy.
 
 ## Release notes
 
+### v0.15.2: a record must carry a run identifier
+
+The orchestrator's `POST /attest` endpoint signs, with log-signing key 1,
+a leaf in the same legacy form as records sealed before run 236, carrying
+`attest:<key id>:<subject>` where a record carries its envelope
+identifier and the caller's digest where a record carries its execution
+record hash. v0.15.1 and earlier would accept a record built around such
+an entry and report it as VERIFIED AND ANCHORED with partial coverage
+(the pre-v5 tier; never complete-record coverage, which needs a second
+entry of a form `/attest` never produces). v0.15.2 fails any anchored
+record whose envelope identifier is not a run identifier (`env-` and
+sixteen hex characters, minted by the server and never supplied by a
+caller), and any record in a pre-table leaf form (v1, v2 or v3) whose
+entry the log integrated at or after run 236's first entry
+(2026-10-15T19:51:06Z). Every genuine record keeps its verdict; a test
+builds the forgery and checks it fails.
+
 ### v0.15.1: --policy refuses documents other readers would read differently
 
 From an October 2026 external review. `--policy FILE` now reads the

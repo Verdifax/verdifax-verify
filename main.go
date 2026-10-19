@@ -66,7 +66,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.15.1"
+const Version = "0.15.2"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -131,6 +131,10 @@ type Report struct {
 	// (v0.12.0): pinned signer, signed entry timestamps, and the sealed
 	// anchoring window on table v3 records.
 	EntryAuth EntryAuthCheck `json:"entry_authentication"`
+	// RecordIdentity is whether the anchored record can be a run's at
+	// all (v0.15.2): a run envelope identifier, and a leaf form current
+	// when its entry was logged.
+	RecordIdentity RecordIdentityCheck `json:"record_identity"`
 	// PolicyGate is the policy gate's sealed decision and, with
 	// --policy, the document check (v0.15.0).
 	PolicyGate PolicyGateCheck `json:"policy_gate"`
@@ -742,6 +746,7 @@ func verify(b *artifacts.AuditBundle) *Report {
 	// line a bundle naming a genuine but unrelated Rekor entry passes
 	// every check in this tool.
 	r.LeafBinding = verifyLeafBinding(b)
+	r.RecordIdentity = verifyRecordIdentity(b, r.LeafBinding)
 	r.NrepSignature = verifyNrepSignature(b, r.LeafBinding)
 	r.RuntimeTiming = verifyRuntimeTiming(b)
 	r.PreAnchor = verifyPreAnchor(b)
@@ -776,6 +781,9 @@ func verify(b *artifacts.AuditBundle) *Report {
 		}
 	}
 	if r.RekorAnchor.Performed && !r.RekorAnchor.Match {
+		allPassed = false
+	}
+	if r.RecordIdentity.Performed && !r.RecordIdentity.Match {
 		allPassed = false
 	}
 	// A failed binding is a FAILURE, not an advisory note. An anchored
@@ -1044,6 +1052,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	fmt.Println("SIGSTORE REKOR ANCHOR")
 	printRekorAnchor(r.RekorAnchor, b.RekorAnchor.LogEntryID)
 	printLeafBinding(r.LeafBinding)
+	printRecordIdentity(r.RecordIdentity)
 	printNrepCheck(r.NrepSignature)
 	printTimingCheck(r.RuntimeTiming)
 	printPreAnchor(r.PreAnchor)
