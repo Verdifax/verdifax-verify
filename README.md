@@ -420,11 +420,24 @@ with one of these ECDSA P-256 keys. The fingerprint is the hex SHA-256
 of the key's DER SubjectPublicKeyInfo. The verifier embeds both
 (`entryauth.go`) and checks the fingerprints when it starts.
 
-**Key 1**, the production orchestrator at `api.verdifax.com`. It has
-signed every entry the hosted service has logged, from the first
-(2026-05-13) on, and has never been rotated. Custody: the private key is a file on the
-production API server's volume, not in a hardware security module.
-Accepted at any time.
+**Key 3**, the production orchestrator at `api.verdifax.com` from
+2026-10-24T15:59:19Z on. It is an asymmetric ECC_NIST_P256 key in AWS
+Key Management Service (region us-east-2). Its private key never leaves
+KMS: the server sends each leaf hash to KMS and receives the signature.
+Accepted only for entries logged from 2026-10-24T15:59:19Z on.
+
+    fingerprint df009371c140e355d6c9dd46b29ed7fb37ff835bf94192a1f13bded66c92a54f
+    -----BEGIN PUBLIC KEY-----
+    MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErfGSv8mLyB/dzWBfrf8K2EuO7Z1g
+    gK6+Bq6yDgRDbbisjdAwHGmcT6Mo/7xNFNuOlr1Z/SJzkU5xvpFPieYj2A==
+    -----END PUBLIC KEY-----
+
+**Key 1**, the production orchestrator's key from the first entry
+(2026-05-13) until the switch to key 3 at 2026-10-24T15:59:19Z. Its
+private key was a file on the production API server's volume, not in a
+hardware security module. Accepted only for entries logged up to
+2026-10-24T15:59:19Z, so a copy of it cannot vouch for anything logged
+later.
 
     fingerprint 0822255b6c085f394088d1ce4142dc927941789be75faf084d163059551000b7
     -----BEGIN PUBLIC KEY-----
@@ -444,9 +457,13 @@ so it cannot vouch for anything logged later.
     SjGPIXP3UGH1hTsdwx+uYHNJ5a0b6nsdiIf+Z0a4L5LWvfEQF1p8kev6Sw==
     -----END PUBLIC KEY-----
 
-A new key will be added here, with the date it took effect, before any
-entry it signs; a retired key keeps its entries verifiable and is given
-an end date.
+A new key is added here with the moment it takes effect, and a retired
+key keeps its entries verifiable and is given an end date. Key 3 was
+published in v0.17.0 on the day it took effect, after it had signed its
+first three entries, all from private test runs on 2026-10-24
+(entries 3441033974, 3441086489 and 3441086501); verifier releases
+before v0.17.0 report entries signed by key 3 as signed by an
+unpublished key.
 
 ### `--policy`: confirming which policy admitted a run
 
@@ -472,6 +489,26 @@ SHA-256 of `orchestrator.policy.v1`) kept for record stability; it does
 not identify a policy.
 
 ## Release notes
+
+### v0.17.0: log-signing key 3, held in AWS KMS
+
+The production orchestrator now signs public-log entries with key 3,
+an ECC_NIST_P256 key in AWS Key Management Service whose private key
+never leaves KMS (orchestrator aef1b3e and 04d06fd). The switch took
+effect at 2026-10-24T15:59:19Z. This release pins key 3 for entries
+logged from that moment on and limits key 1, whose private key was a
+file on the server volume, to entries logged up to it, so a copy of
+key 1 can never vouch for a later entry. Every record logged before the
+switch verifies exactly as before.
+
+Key 3 signed three entries before this release was published, all from
+private test runs on the day of the switch. Entry 3441033974 is the
+first entry of a test run that failed before its complete-record entry,
+because the server signed that second entry with the old key path,
+which is empty once KMS signing is configured; it matches no record.
+Orchestrator 04d06fd fixed it, and run 255 then logged both of its
+entries (3441086489 and 3441086501). Tests in `key3_test.go` check that
+key 1 is refused after the switch and key 3 before it.
 
 ### v0.16.0: a partially covered record is not reported as verified, and exits 3
 

@@ -58,10 +58,18 @@ type pinnedSigner struct {
 	NotAfter  int64
 }
 
-// Key 1 is the production orchestrator's key. It signed every public
-// Verdifax entry on api.verdifax.com from the first (2026-05-13) on
-// and has not been rotated. Custody: the private key is a file on the
-// production API server's volume, not in a hardware module.
+// Key 1 was the production orchestrator's key. It signed every public
+// Verdifax entry on api.verdifax.com from the first (2026-05-13) until
+// the switch to key 3 at 2026-10-24T15:59:19Z. Its private key was a
+// file on the production API server's volume, not in a hardware
+// module, so it is accepted only for entries logged up to the switch:
+// a copy of it can never vouch for anything logged later.
+//
+// Key 3 is the production orchestrator's key from 2026-10-24T15:59:19Z
+// on. It is an asymmetric ECC_NIST_P256 key in AWS Key Management
+// Service (us-east-2); its private key never leaves KMS, and the
+// server asks KMS to sign each leaf hash. It is accepted only for
+// entries logged from the switch on.
 //
 // Key 2 was generated on the AWS SEV-SNP instance that produced the
 // October 2026 hardware evidence run, signed that run's single entry
@@ -71,6 +79,12 @@ type pinnedSigner struct {
 const (
 	verdifaxLogSigningKey1Fingerprint = "0822255b6c085f394088d1ce4142dc927941789be75faf084d163059551000b7"
 	verdifaxLogSigningKey2Fingerprint = "16349c23103f9bd5fd59f0be45e199540e430ab02587e497f96856817d47fe0a"
+	verdifaxLogSigningKey3Fingerprint = "df009371c140e355d6c9dd46b29ed7fb37ff835bf94192a1f13bded66c92a54f"
+
+	// keySwitchUnix is 2026-10-24T15:59:19Z, when the production server
+	// restarted signing with key 3: the last moment key 1 is accepted
+	// and the first moment key 3 is.
+	keySwitchUnix = 1792857559
 )
 
 // pinnedEntrySigners maps each trusted signer fingerprint (hex SHA-256
@@ -85,6 +99,7 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEsgyMROAY9glbF1VAFeKzSG7xN2Vg
 pIA8djKUggfjIOOLQ25gtyrQNUk2JLbDvOM015SmWZyoB8cPG0LdO/0SSA==
 -----END PUBLIC KEY-----
 `,
+		NotAfter: keySwitchUnix,
 	},
 	verdifaxLogSigningKey2Fingerprint: {
 		Name: "Verdifax log-signing key 2 (October 2026 hardware evidence run)",
@@ -95,6 +110,15 @@ SjGPIXP3UGH1hTsdwx+uYHNJ5a0b6nsdiIf+Z0a4L5LWvfEQF1p8kev6Sw==
 `,
 		NotBefore: 1791039647 - 3600,
 		NotAfter:  1791039647 + 3600,
+	},
+	verdifaxLogSigningKey3Fingerprint: {
+		Name: "Verdifax log-signing key 3 (AWS KMS)",
+		PEM: `-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErfGSv8mLyB/dzWBfrf8K2EuO7Z1g
+gK6+Bq6yDgRDbbisjdAwHGmcT6Mo/7xNFNuOlr1Z/SJzkU5xvpFPieYj2A==
+-----END PUBLIC KEY-----
+`,
+		NotBefore: keySwitchUnix,
 	},
 }
 
