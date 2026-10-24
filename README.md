@@ -503,11 +503,12 @@ switch verifies exactly as before.
 
 Key 3 signed three entries before this release was published, all from
 private test runs on the day of the switch. Entry 3441033974 is the
-first entry of a test run that failed before its complete-record entry,
-because the server signed that second entry with the old key path,
-which is empty once KMS signing is configured; it matches no record.
-Orchestrator 04d06fd fixed it, and run 255 then logged both of its
-entries (3441086489 and 3441086501). Tests in `key3_test.go` check that
+run entry of private test run 254. The server then signed the run's
+complete-record entry with the old key path, which is empty once KMS
+signing is configured, so run 254 stopped before that entry: it has no
+complete record and nothing a verifier can check, and its stored run
+row still reads as successful. Orchestrator 04d06fd fixed it, and run
+255 then logged both of its entries (3441086489 and 3441086501). Tests in `key3_test.go` check that
 key 1 is refused after the switch and key 3 before it.
 
 ### v0.16.0: a partially covered record is not reported as verified, and exits 3
