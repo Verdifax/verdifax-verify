@@ -493,6 +493,15 @@ not identify a policy.
 
 ## Release notes
 
+### v0.17.2: built with Go 1.27.3
+
+The same code as v0.17.1, built with Go 1.27.3, which fixes a Go
+standard-library advisory (GO-2026-6809: crypto/x509 now refuses known
+compromised intermediate certificates). The verifier reaches that code
+only through the standard library; no check, verdict or exit code
+changes. Every workflow (tests, fuzzing, CodeQL and release) now uses
+Go 1.27.3, and `govulncheck` reports no vulnerabilities.
+
 ### v0.17.1: no second at which two keys are both accepted
 
 In v0.17.0 a key's period included its end second, so at exactly
