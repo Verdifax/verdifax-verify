@@ -48,7 +48,9 @@ import (
 
 // pinnedSigner is one published Verdifax log-signing key and the
 // period, in Rekor-authenticated Unix time, in which its entries are
-// accepted (0 means open-ended). The period is checked against the
+// accepted: from NotBefore inclusive to NotAfter exclusive, so two
+// keys that hand over at one moment never overlap (0 means
+// open-ended). The period is checked against the
 // signed entry timestamp, so an entry logged outside it fails even if
 // the key's private half were ever copied.
 type pinnedSigner struct {
@@ -62,8 +64,8 @@ type pinnedSigner struct {
 // Verdifax entry on api.verdifax.com from the first (2026-05-13) until
 // the switch to key 3 at 2026-10-24T15:59:19Z. Its private key was a
 // file on the production API server's volume, not in a hardware
-// module, so it is accepted only for entries logged up to the switch:
-// a copy of it can never vouch for anything logged later.
+// module, so it is accepted only for entries logged before the switch:
+// a copy of it can never vouch for anything logged at or after it.
 //
 // Key 3 is the production orchestrator's key from 2026-10-24T15:59:19Z
 // on. It is an asymmetric ECC_NIST_P256 key in AWS Key Management
@@ -82,8 +84,8 @@ const (
 	verdifaxLogSigningKey3Fingerprint = "df009371c140e355d6c9dd46b29ed7fb37ff835bf94192a1f13bded66c92a54f"
 
 	// keySwitchUnix is 2026-10-24T15:59:19Z, when the production server
-	// restarted signing with key 3: the last moment key 1 is accepted
-	// and the first moment key 3 is.
+	// restarted signing with key 3: the first moment key 3 is accepted
+	// and the first moment key 1 is not.
 	keySwitchUnix = 1792857559
 )
 
@@ -172,9 +174,9 @@ func init() {
 }
 
 // signerAcceptsAt reports whether key k may vouch for an entry the log
-// recorded at unix time t.
+// recorded at unix time t: NotBefore <= t < NotAfter.
 func signerAcceptsAt(k pinnedSigner, t int64) bool {
-	return (k.NotBefore == 0 || t >= k.NotBefore) && (k.NotAfter == 0 || t <= k.NotAfter)
+	return (k.NotBefore == 0 || t >= k.NotBefore) && (k.NotAfter == 0 || t < k.NotAfter)
 }
 
 // parseAnchoringWindow reads a sealed window row: whole seconds,

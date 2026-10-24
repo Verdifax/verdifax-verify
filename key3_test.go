@@ -1,7 +1,7 @@
 package main
 
 // Log-signing key rotation (2026-10-24): key 1, a file on the server
-// volume, is accepted only for entries logged up to the switch; key 3,
+// volume, is accepted only for entries logged before the switch; key 3,
 // held in AWS KMS, only for entries logged from the switch on.
 
 import (
@@ -54,5 +54,29 @@ func TestKeySwitchIsTheDocumentedMoment(t *testing.T) {
 	// 2026-10-24T15:59:19Z, when production restarted signing with key 3.
 	if keySwitchUnix != 1792857559 {
 		t.Fatalf("keySwitchUnix = %d", keySwitchUnix)
+	}
+}
+
+// At the switch second itself exactly one key is accepted: key 3. No
+// moment exists at which both keys, or neither, may vouch for an entry
+// (round 34 noted that v0.17.0 accepted both at that one second).
+func TestExactlyOneKeyIsAcceptedAroundTheSwitch(t *testing.T) {
+	k1 := pinnedEntrySigners[verdifaxLogSigningKey1Fingerprint]
+	k3 := pinnedEntrySigners[verdifaxLogSigningKey3Fingerprint]
+	if signerAcceptsAt(k1, keySwitchUnix) {
+		t.Fatal("key 1 must not be accepted at the switch second")
+	}
+	for _, at := range []int64{keySwitchUnix - 1, keySwitchUnix, keySwitchUnix + 1} {
+		if signerAcceptsAt(k1, at) == signerAcceptsAt(k3, at) {
+			t.Fatalf("at %d exactly one of key 1 and key 3 must be accepted", at)
+		}
+	}
+}
+
+// Key 2's window still contains the hardware run's single entry.
+func TestKey2StillAcceptsTheHardwareRunEntry(t *testing.T) {
+	k2 := pinnedEntrySigners[verdifaxLogSigningKey2Fingerprint]
+	if !signerAcceptsAt(k2, 1791039647) || signerAcceptsAt(k2, 1791039647+3600) {
+		t.Fatal("key 2 must accept the hardware run's entry and nothing from an hour after it")
 	}
 }

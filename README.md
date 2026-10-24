@@ -417,8 +417,10 @@ you would rather confirm the entry by hand than trust this binary.
 
 Every public-log entry Verdifax makes is a Rekor `hashedrekord` signed
 with one of these ECDSA P-256 keys. The fingerprint is the hex SHA-256
-of the key's DER SubjectPublicKeyInfo. The verifier embeds both
-(`entryauth.go`) and checks the fingerprints when it starts.
+of the key's DER SubjectPublicKeyInfo. The verifier embeds all three
+(`entryauth.go`) and checks the fingerprints when it starts. Each key is
+accepted from the start of its period up to, but not including, its
+end, so two keys that hand over at one moment never overlap.
 
 **Key 3**, the production orchestrator at `api.verdifax.com` from
 2026-10-24T15:59:19Z on. It is an asymmetric ECC_NIST_P256 key in AWS
@@ -435,9 +437,10 @@ Accepted only for entries logged from 2026-10-24T15:59:19Z on.
 **Key 1**, the production orchestrator's key from the first entry
 (2026-05-13) until the switch to key 3 at 2026-10-24T15:59:19Z. Its
 private key was a file on the production API server's volume, not in a
-hardware security module. Accepted only for entries logged up to
+hardware security module. Accepted only for entries logged before
 2026-10-24T15:59:19Z, so a copy of it cannot vouch for anything logged
-later.
+at or after that moment (v0.17.0 also accepted it at that exact
+second; v0.17.1 does not).
 
     fingerprint 0822255b6c085f394088d1ce4142dc927941789be75faf084d163059551000b7
     -----BEGIN PUBLIC KEY-----
@@ -489,6 +492,19 @@ SHA-256 of `orchestrator.policy.v1`) kept for record stability; it does
 not identify a policy.
 
 ## Release notes
+
+### v0.17.1: no second at which two keys are both accepted
+
+In v0.17.0 a key's period included its end second, so at exactly
+2026-10-24T15:59:19Z both key 1 and key 3 were accepted. No entry was
+logged at that second, and Rekor's signed entry timestamp means none can
+be now, but the overlap had no purpose. From this release every period
+runs from its start up to, but not including, its end: key 1 is
+accepted only for entries logged before the switch, and key 3 from the
+switch on. Key 2's one-hour window around the hardware run's entry is
+unchanged in effect. Every public record and test vector keeps its
+verdict and exit code. `TestExactlyOneKeyIsAcceptedAroundTheSwitch`
+checks the second before, at and after the switch.
 
 ### v0.17.0: log-signing key 3, held in AWS KMS
 
