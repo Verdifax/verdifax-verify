@@ -510,7 +510,8 @@ checked with them earlier can still be traced.
 
 ### v0.17.4: README corrections
 
-Documentation only; the code is the same as v0.17.3. The v0.10.0 notes
+Documentation and the version string only; the verification code is the same as
+v0.17.3. The v0.10.0 notes
 now say to re-verify with v0.17.2 or later instead of naming v0.14.5,
 which is retracted. Supported versions now says
 exactly which Go commands warn about a retracted release and which ways
@@ -527,7 +528,8 @@ inside key 1's period by design.
 
 ### v0.17.2: built with Go 1.27.3
 
-The same code as v0.17.1, built with Go 1.27.3, which fixes a Go
+The same verification code as v0.17.1 (only the version string changes),
+built with Go 1.27.3, which fixes a Go
 standard-library advisory (GO-2026-6809: crypto/x509 now refuses known
 compromised intermediate certificates). The verifier reaches that code
 only through the standard library; no check, verdict or exit code
