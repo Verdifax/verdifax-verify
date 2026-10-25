@@ -491,7 +491,27 @@ silently. `epa.policy_hash`, a separate field, is a fixed value (the
 SHA-256 of `orchestrator.policy.v1`) kept for record stability; it does
 not identify a policy.
 
+## Supported versions
+
+Use v0.17.2 or later; only the latest release receives fixes. Every
+release before v0.17.2 is retracted in `go.mod`: Go tools warn when one
+is requested, `@latest` never resolves to one, and pkg.go.dev marks them
+retracted. Their prebuilt binaries were built with Go versions that have
+since received security fixes, and they lack later verification fixes
+listed in the release notes below (releases before v0.17.0 do not know
+key 3). Their tags, binaries and provenance stay published, so evidence
+checked with them earlier can still be traced.
+
 ## Release notes
+
+### v0.17.3: releases before v0.17.2 are retracted
+
+`go.mod` retracts every release from v0.1.0 to v0.17.1 (see Supported
+versions). No check, verdict or exit code changes from v0.17.2. A new
+test, `TestKeyPeriodsOverlapOnlyInKey2sDocumentedWindow`, fails if any
+second is accepted by no key, or by two keys anywhere except key 2's
+documented one-hour window around the hardware run's entry, which lies
+inside key 1's period by design.
 
 ### v0.17.2: built with Go 1.27.3
 
