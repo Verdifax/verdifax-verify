@@ -494,15 +494,27 @@ not identify a policy.
 ## Supported versions
 
 Use v0.17.2 or later; only the latest release receives fixes. Every
-release before v0.17.2 is retracted in `go.mod`: Go tools warn when one
-is requested, `@latest` never resolves to one, and pkg.go.dev marks them
-retracted. Their prebuilt binaries were built with Go versions that have
+release before v0.17.2 is retracted in `go.mod`: `go get`, `go install`
+and `go list -m -u` warn when one is requested, `@latest` and
+`go list -m -versions` never resolve to one, and pkg.go.dev marks them
+retracted. Go does not check a retraction for a commit or branch pin
+(`@<commit>`, `@main`), for a go.mod that already requires a retracted
+release (a plain `go build` uses it silently), or for a vendored copy, so
+check the version you build with `verdifax-verify --version`. Their prebuilt binaries were built with Go versions that have
 since received security fixes, and they lack later verification fixes
 listed in the release notes below (releases before v0.17.0 do not know
 key 3). Their tags, binaries and provenance stay published, so evidence
 checked with them earlier can still be traced.
 
 ## Release notes
+
+### v0.17.4: README corrections
+
+Documentation only; the code is the same as v0.17.3. The v0.10.0 notes
+now say to re-verify with v0.17.2 or later instead of naming v0.14.5,
+which is retracted. Supported versions now says
+exactly which Go commands warn about a retracted release and which ways
+of pinning a version Go does not check.
 
 ### v0.17.3: releases before v0.17.2 are retracted
 
@@ -851,7 +863,7 @@ COVERAGE`. That forged bundle is kept as
 under v0.10.0. Releases v0.1.0 through v0.1.3 did not read `entry_body`; they
 walked the proof from `leaf_hash` itself, so this gap did not arise in
 them. Re-verify any bundle
-you accepted with an earlier release using the current release (v0.14.5).
+you accepted with an earlier release using v0.17.2 or later.
 
 ## Release verification (Cosign and SLSA provenance)
 
