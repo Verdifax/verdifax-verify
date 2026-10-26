@@ -66,7 +66,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.17.4"
+const Version = "0.17.5"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -147,9 +147,12 @@ type Report struct {
 	// RecordCoverage says how much of the record the public log binds:
 	// "complete_record_anchored", "partial_descriptive_sections_bundle_sealed",
 	// "partial_pre_v5_identity_only", "not_anchored" or "failed".
-	RecordCoverage string   `json:"record_coverage"`
-	HasScaffold    bool     `json:"has_scaffold"`
-	ScaffoldList   []string `json:"scaffold_list,omitempty"`
+	RecordCoverage string `json:"record_coverage"`
+	// UncoveredFields lists, for a record without a complete-record
+	// anchor, the fields no hash covers: changing one still verifies.
+	UncoveredFields []string `json:"uncovered_fields,omitempty"`
+	HasScaffold     bool     `json:"has_scaffold"`
+	ScaffoldList    []string `json:"scaffold_list,omitempty"`
 
 	// passedExceptRequirement is the roll-up before the complete-record
 	// requirement is applied, so the verdict can name the requirement
@@ -166,6 +169,7 @@ func main() {
 		showVersion     = flag.Bool("version", false, "print version and exit")
 		selfHosted      = flag.Bool("self-hosted-receipt", false, "the receipt was issued by a test or self-hosted deployment that does not anchor receipts on the public log, not by the Verdifax API; exempts it from the rules that receipts dated from run 241 on must carry a public-log anchor and receipts dated from run 242 on must seal anchor_required")
 		policyFile      = flag.String("policy", "", "a policy document (JSON) to check against the policy gate the record seals: its recomputed policy hash, identifier, name and version must equal the sealed values, or verification fails")
+		tamperTest      = flag.Bool("tamper-test", false, "change every sealed value one at a time, and delete each, and report any change the verifier accepts; exit 0 only if every change fails")
 		showEvidence    = flag.Bool("show-evidence-summary", false, "print a one-glance maturity summary (real vs scaffold counts, Rekor anchor status, PoTE preimage version, strict-mode gate disposition) and exit; combine with --json for machine-readable form")
 	)
 	flag.Usage = printUsage
@@ -227,7 +231,11 @@ func main() {
 		os.Exit(2)
 	}
 
+	if *tamperTest {
+		os.Exit(runTamperTest(os.Stdout, data, verifyForTamper))
+	}
 	report := verify(bundle)
+	report.UncoveredFields = uncoveredFields(data, report)
 	if *policyFile != "" {
 		doc, readErr := os.ReadFile(*policyFile)
 		if readErr != nil {
@@ -552,40 +560,6 @@ func printEvidenceSummary(s EvidenceSummary) {
 		}
 	}
 	fmt.Printf("  Verdict:          %s\n", gate)
-}
-
-func printUsage() {
-	fmt.Fprintln(os.Stderr, `verdifax-verify, independent verifier for Verdifax audit bundles and receipts
-
-USAGE
-  verdifax-verify [flags] <bundle.json | receipt.json>
-  cat bundle.json | verdifax-verify [flags]
-
-FLAGS
-  -json                   emit machine-readable JSON output
-  -strict                 fail on any scaffold-flagged value
-  -allow-unanchored       exit 0 for a bundle or receipt that is
-                          consistent but not anchored on the public log
-  -allow-partial          exit 0 for a record whose public-log anchor
-                          covers only part of it (sealed before leaf
-                          v5, or without a complete-record anchor)
-  -self-hosted-receipt    the receipt came from a test or self-hosted
-                          deployment, not the Verdifax API; exempts it
-                          from the rules that receipts dated from run
-                          241 on must carry a public-log anchor and
-                          from run 242 on must seal anchor_required
-  -show-evidence-summary  print a one-glance maturity summary (real vs
-                          scaffold counts, Rekor anchor status, PoTE
-                          preimage version, strict-mode gate) and exit
-  -version                print version and exit
-
-EXIT
-  0  all checks passed
-  1  one or more checks failed, or the record is not anchored and
-     -allow-unanchored was not passed (or -strict + scaffold)
-  2  could not parse the input
-  3  every check passed, but the public-log anchor covers only part
-     of the record, and -allow-partial was not passed`)
 }
 
 // readInput returns the raw bytes of the file, URL or stdin argument.
@@ -1093,6 +1067,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	printTimingCheck(r.RuntimeTiming)
 	printPreAnchor(r.PreAnchor)
 	printBundleAnchor(r.BundleAnchor)
+	printUncoveredFields(r.UncoveredFields)
 	printCompleteRecordRequirement(r.CompleteRecordRequirement, len(b.PreAnchor) > 0)
 	printEntryAuth(r.EntryAuth)
 	printRecordValues(r.RecordValues)

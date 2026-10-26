@@ -85,6 +85,7 @@ verdifax-verify --json bundle.json    # machine-readable JSON output
 verdifax-verify --strict bundle.json  # also fail on any scaffold-flagged value
 verdifax-verify --policy policy.json bundle.json  # also check a policy document against the sealed policy gate
 verdifax-verify --allow-partial bundle.json       # exit 0 for a record the public log covers only in part
+verdifax-verify --tamper-test bundle.json         # change every sealed value one at a time and confirm each change fails
 verdifax-verify --version
 ```
 
@@ -105,6 +106,33 @@ A script that treats exit 0 as a pass accepts only complete-record
 anchored records. Until v0.15.3 a partial record exited 0, although its
 descriptive sections, the decision among them, could have been rewritten
 together with their hashes.
+
+### `--tamper-test`: a changed record fails
+
+`--tamper-test` changes every non-empty value of the record one at a
+time (a string gains a character, a hash changes its first digit, a
+number gains one, a true becomes false) and, separately, deletes each,
+then runs the full verification on every changed copy. It reports how
+many changes it tried and lists any copy that did not fail. It exits 0
+only when every change fails, 1 when any change is accepted or the
+record itself does not verify, and 2 when the record cannot be read.
+On a record whose complete-record anchor is required (successful runs
+sealed from run 239 on) every change fails: run 249 in `testdata/round18` takes 847
+changes and rejects all of them.
+
+On a record without a complete-record anchor, some fields are covered
+by no hash, and changing one leaves the record verifying with its
+partial-coverage verdict. Since v0.17.5 the normal report lists those
+fields on a `Not hash-covered` line (and `--json` lists them as
+`uncovered_fields`), found by the same method. The October 2026 hardware
+run is such a record: 74 of its fields are uncovered, among them the AI
+review summary (`aivp_t4`), the hardware-attestation summary
+(`hardware_attestation.verification`) and certificate text, the actor
+signature fields, the record's status, run number and timestamp, and the
+labels and reference hashes inside each section's seal. Its raw SEV-SNP
+report (`quote_b64`), which the verifier checks against AMD's root and
+binds to the record's own values, its execution record and its
+anchored identity values are covered.
 
 ### `--strict` mode
 
@@ -507,6 +535,15 @@ key 3). Their tags, binaries and provenance stay published, so evidence
 checked with them earlier can still be traced.
 
 ## Release notes
+
+### v0.17.5: `--tamper-test`, and uncovered fields named
+
+`--tamper-test` runs the check both Verdifax offers ask a customer to
+make: change a sealed record and see it fail (see above). For a record
+without a complete-record anchor, the report now names every field no
+hash covers on a `Not hash-covered` line, and `--json` adds
+`uncovered_fields`. No check, verdict or exit code changes. The October
+2026 hardware run is added to `testdata/round40` with tests for both.
 
 ### v0.17.4: README corrections
 
