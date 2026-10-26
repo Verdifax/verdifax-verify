@@ -86,6 +86,7 @@ verdifax-verify --strict bundle.json  # also fail on any scaffold-flagged value
 verdifax-verify --policy policy.json bundle.json  # also check a policy document against the sealed policy gate
 verdifax-verify --allow-partial bundle.json       # exit 0 for a record the public log covers only in part
 verdifax-verify --tamper-test bundle.json         # change every sealed value one at a time and confirm each change fails
+verdifax-verify --tamper-test --recompute-hashes bundle.json  # the same, as a forger who also recomputes every hash the record stores
 verdifax-verify --version
 ```
 
@@ -141,6 +142,38 @@ and reference hashes inside each section's seal. Its raw SEV-SNP
 report (`quote_b64`), which the verifier checks against AMD's root and
 binds to the record's own values, its execution record and its
 anchored identity values are covered.
+
+For every change that fails, the report also names the checks that
+caught it, since v0.17.7: an internal hash, the first public-log entry,
+the complete-record entry, the entries' signer or timestamps, the actor
+signature, AMD's report signature, a consistency check, or a record that
+no longer decodes. A change can be caught by more than one.
+
+### `--recompute-hashes`: does the public log catch it?
+
+A single edit breaks the hash of the section it sits in, so the
+default test shows that some hash covers each field, not that the public
+log does. A forger who rewrites a record would also recompute the
+hashes stored inside it. With `--tamper-test --recompute-hashes`
+(since v0.17.7) the test plays that forger: after each change it
+recomputes every hash the record itself determines and stores the new
+value wherever the old one appeared, until every internal hash agrees.
+What no rewrite can recompute is left as it was: the signed public-log
+entry bodies and their timestamps, the actor signature and AMD's signed
+report. A change counts as stopped only when one of those checks catches
+it; a change caught only by a check a rewrite satisfies counts as not
+stopped. Editing or deleting a stored hash is not counted, since the
+recomputation restores the original record. It exits 0 only when every
+change is stopped.
+
+On every complete public record every change is stopped by the
+public-log entries or a signature: run 249 in `testdata/round18` takes
+1,133 changes and stops all of them. On the October 2026 hardware run,
+which predates the complete-record anchor, a full rewrite can change
+372 of its paths, among them the decision, as the evidence page states;
+it cannot change the raw AMD report or the execution record's inputs
+that report signs, the envelope identifier and the AER and binding seal
+hashes the public-log entry binds, or that entry itself.
 
 ### `--strict` mode
 
@@ -543,6 +576,17 @@ key 3). Their tags, binaries and provenance stay published, so evidence
 checked with them earlier can still be traced.
 
 ## Release notes
+
+### v0.17.7: which check caught each change, and `--recompute-hashes`
+
+`--tamper-test` now names, for every change that fails, the checks that
+caught it. The new `--recompute-hashes` flag makes the test play a
+forger who recomputes every hash the record stores after each change,
+so only the public-log entries, their signer and timestamps, the actor
+signature and AMD's report signature can stop it. Every complete public
+record stops every change (run 249: 1,133). On the October 2026 hardware
+run a full rewrite can change 372 paths, which the evidence page states.
+No check, verdict or exit code of normal verification changes.
 
 ### v0.17.6: `--tamper-test` covers empty values, sections and additions
 

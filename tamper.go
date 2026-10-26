@@ -7,7 +7,14 @@ package main
 // included), removes every list item, appends a copy of each list's last
 // item and adds an unknown key to every object, runs the full
 // verification on each changed copy, and reports any copy that does not
-// fail.
+// fail, and for every copy that fails, which checks caught it.
+//
+// With --recompute-hashes it plays a forger who rewrites the whole
+// record: after each change, every hash the record itself determines is
+// recomputed and stored wherever its old value appeared, so only checks
+// no rewrite can satisfy (the public-log entries, their signer and
+// timestamps, the actor signature and AMD's report signature) are left
+// to catch the change.
 
 import (
 	"bytes"
@@ -287,23 +294,349 @@ func tamperAccepted(data []byte, accepts func([]byte) bool) (accepted []tamperCh
 // verification, 1 when any change is accepted or the record itself does
 // not verify, 2 when the record cannot be read.
 func runTamperTest(w io.Writer, data []byte, accepts func([]byte) bool) int {
-	if !accepts(data) {
+	return runTamperTestJudged(w, data, acceptsJudge(accepts), false)
+}
+
+// tamperVerdict is what one changed copy of the record earned: accepted,
+// or rejected by the named check groups.
+type tamperVerdict struct {
+	accepted bool
+	caughtBy []string
+}
+
+type tamperJudge func([]byte) tamperVerdict
+
+// The check groups a rejection is attributed to. The first six are
+// checks no rewrite of the record can satisfy without keys Verdifax or
+// AMD hold; the last two a forger rewriting the whole record could.
+const (
+	catchFirstEntry    = "the first public-log entry"
+	catchCompleteEntry = "the complete-record entry"
+	catchEntrySigner   = "the entries' signer or timestamps"
+	catchActor         = "the actor signature"
+	catchAMD           = "AMD's report signature"
+	catchDecode        = "the record no longer decodes"
+	catchInternal      = "an internal hash"
+	catchConsistency   = "a consistency check"
+)
+
+var tamperUnforgeable = map[string]bool{
+	catchFirstEntry: true, catchCompleteEntry: true, catchEntrySigner: true,
+	catchActor: true, catchAMD: true, catchDecode: true,
+}
+
+var tamperCatchOrder = []string{catchCompleteEntry, catchFirstEntry, catchEntrySigner, catchActor, catchAMD,
+	catchDecode, catchInternal, catchConsistency}
+
+// acceptsJudge wraps a plain accept/reject function, for callers that do
+// not need to know which check caught a change.
+func acceptsJudge(accepts func([]byte) bool) tamperJudge {
+	return func(data []byte) tamperVerdict {
+		if accepts(data) {
+			return tamperVerdict{accepted: true}
+		}
+		return tamperVerdict{caughtBy: []string{catchInternal}}
+	}
+}
+
+// judgeForTamper verifies a candidate the way verifyForTamper does and,
+// when it fails, names every check group that failed.
+func judgeForTamper(data []byte) tamperVerdict {
+	// Error model: this binary has no logger; a candidate that cannot be
+	// decoded is a rejection by decoding.
+	b, decodeErr := decodeBundle(data)
+	if decodeErr != nil {
+		return tamperVerdict{caughtBy: []string{catchDecode}}
+	}
+	r := verify(b)
+	if !exitShouldFail(r, false, false) {
+		return tamperVerdict{accepted: true}
+	}
+	return tamperVerdict{caughtBy: tamperCatchers(r)}
+}
+
+// tamperCatchers names the check groups that failed in a report.
+func tamperCatchers(r *Report) []string {
+	hit := map[string]bool{}
+	for _, c := range append(append([]HashCheck{}, r.Artifacts...), r.Categories...) {
+		if c.Match {
+			continue
+		}
+		if c.Name == "hardware_attestation_sevsnp_quote" {
+			hit[catchAMD] = true
+		} else {
+			hit[catchInternal] = true
+		}
+	}
+	if !r.BundleHashOK {
+		hit[catchInternal] = true
+	}
+	for _, s := range r.Seals {
+		if !s.Match {
+			hit[catchInternal] = true
+		}
+	}
+	if (r.RekorAnchor.Performed && !r.RekorAnchor.Match) || (r.LeafBinding.Performed && !r.LeafBinding.Match) ||
+		(r.RecordIdentity.Performed && !r.RecordIdentity.Match) || !r.Anchored {
+		hit[catchFirstEntry] = true
+	}
+	if (r.BundleAnchor.Present && !r.BundleAnchor.Match) ||
+		(r.CompleteRecordRequirement.Sealed && !r.CompleteRecordRequirement.Satisfied) {
+		hit[catchCompleteEntry] = true
+	}
+	if r.EntryAuth.Performed && !r.EntryAuth.Match {
+		hit[catchEntrySigner] = true
+	}
+	if r.NrepSignature.Performed && !r.NrepSignature.Match {
+		hit[catchActor] = true
+	}
+	if (r.RuntimeTiming.Performed && !r.RuntimeTiming.Match) || (r.PreAnchor.Performed && !r.PreAnchor.Match) ||
+		len(r.CrossChecks) > 0 {
+		hit[catchConsistency] = true
+	}
+	var out []string
+	for _, g := range tamperCatchOrder {
+		if hit[g] {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// tamperStopped reports whether a verdict holds against a forger who can
+// rewrite the whole record: some check no rewrite can satisfy caught it.
+func tamperStopped(v tamperVerdict) bool {
+	if v.accepted {
+		return false
+	}
+	for _, g := range v.caughtBy {
+		if tamperUnforgeable[g] {
+			return true
+		}
+	}
+	return false
+}
+
+// tamperRecompute rewrites the record the way a forger would: every
+// stored hash that no longer recomputes is replaced, wherever its old
+// value appears, by the recomputed value, until every internal hash
+// agrees or nothing more changes. Signed public-log entry bodies, the
+// actor signature and AMD's report cannot be recomputed and are left as
+// they are.
+func tamperRecompute(data []byte) []byte {
+	for round := 0; round < 12; round++ {
+		b, decodeErr := decodeBundle(data)
+		if decodeErr != nil {
+			return data
+		}
+		r := verify(b)
+		stale := map[string]string{}
+		note := func(recorded, computed string) {
+			if recorded != computed && tamperHex64.MatchString(recorded) && tamperHex64.MatchString(computed) {
+				stale[recorded] = computed
+			}
+		}
+		for _, c := range append(append([]HashCheck{r.BundleHash}, r.Artifacts...), r.Categories...) {
+			note(c.Recorded, c.Computed)
+		}
+		for _, s := range r.Seals {
+			note(s.SealManifest, s.ExpectedManifest)
+		}
+		if len(stale) == 0 {
+			return data
+		}
+		root, readErr := tamperDecode(data)
+		if readErr != nil {
+			return data
+		}
+		root = tamperReplaceValues(root, stale)
+		next, encodeErr := json.Marshal(root)
+		if encodeErr != nil || bytes.Equal(next, data) {
+			return data
+		}
+		data = next
+	}
+	return data
+}
+
+// tamperDerivedHashes returns every hash value the record stores that
+// verification recomputes from the record's own content.
+func tamperDerivedHashes(data []byte) map[string]bool {
+	out := map[string]bool{}
+	b, decodeErr := decodeBundle(data)
+	if decodeErr != nil {
+		return out
+	}
+	r := verify(b)
+	for _, c := range append(append([]HashCheck{r.BundleHash}, r.Artifacts...), r.Categories...) {
+		if tamperHex64.MatchString(c.Recorded) {
+			out[c.Recorded] = true
+		}
+	}
+	for _, s := range r.Seals {
+		if tamperHex64.MatchString(s.SealManifest) {
+			out[s.SealManifest] = true
+		}
+	}
+	return out
+}
+
+// tamperValueAt returns the value at path in the decoded record.
+func tamperValueAt(node any, path []tamperStep) any {
+	for _, s := range path {
+		switch v := node.(type) {
+		case map[string]any:
+			node = v[s.key]
+		case []any:
+			if s.index >= len(v) {
+				return nil
+			}
+			node = v[s.index]
+		default:
+			return nil
+		}
+	}
+	return node
+}
+
+// tamperReplaceValues replaces every string value found in stale.
+func tamperReplaceValues(node any, stale map[string]string) any {
+	switch v := node.(type) {
+	case map[string]any:
+		for k, c := range v {
+			v[k] = tamperReplaceValues(c, stale)
+		}
+	case []any:
+		for i, c := range v {
+			v[i] = tamperReplaceValues(c, stale)
+		}
+	case string:
+		if n, found := stale[v]; found {
+			return n
+		}
+	}
+	return node
+}
+
+// tamperOutcome is the result of one run of the test.
+type tamperOutcome struct {
+	tried, unchanged int
+	notStopped       []tamperChange   // accepted, or (recompute mode) caught only by checks a forger satisfies
+	notStoppedBy     map[int][]string // index into notStopped: the forgeable groups that caught it, if any
+	caughtCount      map[string]int   // per check group, how many rejected changes it caught
+}
+
+// tamperRun runs every change; with recompute, each changed copy is first
+// rewritten by tamperRecompute, and a change counts as stopped only when
+// a check no rewrite can satisfy catches it.
+func tamperRun(data []byte, judge tamperJudge, recompute bool) (tamperOutcome, bool) {
+	out := tamperOutcome{notStoppedBy: map[int][]string{}, caughtCount: map[string]int{}}
+	root, readErr := tamperDecode(data)
+	if readErr != nil {
+		return out, false
+	}
+	// The test re-encodes the record after each change; the unchanged
+	// re-encoding must still verify, or results would mean nothing.
+	same, encodeErr := json.Marshal(root)
+	if encodeErr != nil || !judge(same).accepted {
+		return out, false
+	}
+	var changes []tamperChange
+	tamperChanges(root, nil, &changes)
+	var derived map[string]bool
+	if recompute {
+		derived = tamperDerivedHashes(same)
+	}
+	for _, c := range changes {
+		// A forger recomputes a stored hash rather than deleting it, so
+		// deleting one is no more a change than editing it is.
+		if recompute && c.kind == "deleted" {
+			if s, isString := tamperValueAt(root, c.path).(string); isString && derived[s] {
+				out.unchanged++
+				continue
+			}
+		}
+		changed, built := tamperApply(data, c)
+		if !built {
+			continue
+		}
+		if recompute {
+			changed = tamperRecompute(changed)
+			// A change the recomputation undoes entirely (a stored
+			// hash edited to another value) leaves the forger's record
+			// identical to the original: it is not a change.
+			if bytes.Equal(changed, same) {
+				out.unchanged++
+				continue
+			}
+		}
+		out.tried++
+		v := judge(changed)
+		for _, g := range v.caughtBy {
+			out.caughtCount[g]++
+		}
+		stopped := !v.accepted
+		if recompute {
+			stopped = tamperStopped(v)
+		}
+		if !stopped {
+			if !v.accepted {
+				out.notStoppedBy[len(out.notStopped)] = v.caughtBy
+			}
+			out.notStopped = append(out.notStopped, c)
+		}
+	}
+	return out, true
+}
+
+// runTamperTestJudged prints the test's result and returns its exit code.
+func runTamperTestJudged(w io.Writer, data []byte, judge tamperJudge, recompute bool) int {
+	if !judge(data).accepted {
 		fmt.Fprintln(w, "TAMPER TEST: the record itself does not verify, so there is nothing to test.")
 		return 1
 	}
-	accepted, tried, ok := tamperAccepted(data, accepts)
+	o, ok := tamperRun(data, judge, recompute)
 	if !ok {
 		fmt.Fprintln(w, "verdifax-verify: tamper test: the record could not be decoded and re-encoded unchanged; no result")
 		return 2
 	}
-	fmt.Fprintf(w, "TAMPER TEST: %d changes tried (every value changed, every key holding a value deleted, every list item removed, a list item appended, an unknown key added to every object); %d rejected, %d accepted.\n",
-		tried, tried-len(accepted), len(accepted))
-	if len(accepted) == 0 {
-		fmt.Fprintln(w, "Every change made the record fail verification.")
+	const kinds = "every value changed, every key holding a value deleted, every list item removed, a list item appended, an unknown key added to every object"
+	if recompute {
+		fmt.Fprintf(w, "TAMPER TEST WITH HASHES RECOMPUTED: %d changes tried (%s), each followed by recomputing every hash the record itself determines; %d stopped by a check no rewrite can satisfy, %d not stopped.\n",
+			o.tried, kinds, o.tried-len(o.notStopped), len(o.notStopped))
+		fmt.Fprintf(w, "Checks no rewrite can satisfy: %s, %s, %s, %s and %s. %d changes left the record unchanged once its hashes were recomputed and are not counted.\n",
+			catchFirstEntry, catchCompleteEntry, catchEntrySigner, catchActor, catchAMD, o.unchanged)
+	} else {
+		fmt.Fprintf(w, "TAMPER TEST: %d changes tried (%s); %d rejected, %d accepted.\n",
+			o.tried, kinds, o.tried-len(o.notStopped), len(o.notStopped))
+	}
+	var parts []string
+	for _, g := range tamperCatchOrder {
+		if n := o.caughtCount[g]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%s %d", g, n))
+		}
+	}
+	if len(parts) > 0 {
+		fmt.Fprintf(w, "Caught by (a change can be caught by more than one check): %s.\n", strings.Join(parts, ", "))
+	}
+	if len(o.notStopped) == 0 {
+		if recompute {
+			fmt.Fprintln(w, "Every change was stopped by a check no rewrite of the record can satisfy.")
+		} else {
+			fmt.Fprintln(w, "Every change made the record fail verification.")
+		}
 		return 0
 	}
-	for _, c := range accepted {
-		fmt.Fprintln(w, "  ACCEPTED:", c.kind, tamperPathString(c.path))
+	for i, c := range o.notStopped {
+		label := "ACCEPTED:"
+		if recompute {
+			label = "NOT STOPPED:"
+		}
+		line := fmt.Sprintf("  %s %s %s", label, c.kind, tamperPathString(c.path))
+		if by := o.notStoppedBy[i]; len(by) > 0 {
+			line += " (caught only by " + strings.Join(by, " and ") + ", which a rewrite satisfies)"
+		}
+		fmt.Fprintln(w, line)
 	}
 	return 1
 }

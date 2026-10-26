@@ -20,6 +20,13 @@ FLAGS
   -allow-partial          exit 0 for a record whose public-log anchor
                           covers only part of it (sealed before leaf
                           v5, or without a complete-record anchor)
+  -recompute-hashes       with -tamper-test, play a forger who rewrites
+                          the whole record: after each change, recompute
+                          every hash the record itself determines, and
+                          count a change as stopped only when a check no
+                          rewrite can satisfy catches it (the public-log
+                          entries, their signer and timestamps, the actor
+                          signature or AMD's report signature)
   -self-hosted-receipt    the receipt came from a test or self-hosted
                           deployment, not the Verdifax API; exempts it
                           from the rules that receipts dated from run
@@ -31,8 +38,9 @@ FLAGS
   -tamper-test            change every value of the record one at a
                           time, delete every key holding a value, remove
                           and append list items and add unknown keys,
-                          and report any change the verifier accepts;
-                          exit 0 only if every change fails verification
+                          and report any change the verifier accepts and
+                          which checks caught the rest; exit 0 only if
+                          every change fails verification
   -version                print version and exit
 
 EXIT
