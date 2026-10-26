@@ -28,10 +28,11 @@ FLAGS
   -show-evidence-summary  print a one-glance maturity summary (real vs
                           scaffold counts, Rekor anchor status, PoTE
                           preimage version, strict-mode gate) and exit
-  -tamper-test            change every sealed value of the record one
-                          at a time, and delete each, and report any
-                          change the verifier accepts; exit 0 only if
-                          every change fails verification
+  -tamper-test            change every value of the record one at a
+                          time, delete every key holding a value, remove
+                          and append list items and add unknown keys,
+                          and report any change the verifier accepts;
+                          exit 0 only if every change fails verification
   -version                print version and exit
 
 EXIT

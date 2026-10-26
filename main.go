@@ -66,7 +66,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.17.5"
+const Version = "0.17.6"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -169,7 +169,7 @@ func main() {
 		showVersion     = flag.Bool("version", false, "print version and exit")
 		selfHosted      = flag.Bool("self-hosted-receipt", false, "the receipt was issued by a test or self-hosted deployment that does not anchor receipts on the public log, not by the Verdifax API; exempts it from the rules that receipts dated from run 241 on must carry a public-log anchor and receipts dated from run 242 on must seal anchor_required")
 		policyFile      = flag.String("policy", "", "a policy document (JSON) to check against the policy gate the record seals: its recomputed policy hash, identifier, name and version must equal the sealed values, or verification fails")
-		tamperTest      = flag.Bool("tamper-test", false, "change every sealed value one at a time, and delete each, and report any change the verifier accepts; exit 0 only if every change fails")
+		tamperTest      = flag.Bool("tamper-test", false, "change every value one at a time, delete every key holding a value, remove and append list items and add unknown keys, and report any change the verifier accepts; exit 0 only if every change fails")
 		showEvidence    = flag.Bool("show-evidence-summary", false, "print a one-glance maturity summary (real vs scaffold counts, Rekor anchor status, PoTE preimage version, strict-mode gate disposition) and exit; combine with --json for machine-readable form")
 	)
 	flag.Usage = printUsage

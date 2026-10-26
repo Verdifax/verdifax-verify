@@ -79,3 +79,60 @@ func TestNoUncoveredFieldsOnACompleteRecord(t *testing.T) {
 		t.Fatalf("a complete-record anchored record has no uncovered fields, got %v", f)
 	}
 }
+
+// Round 40: the harness must also change empty, false, zero and null
+// values, delete whole sections, and add keys and list items. On a
+// complete record each of those fails; deleting a key that holds an
+// empty value is not tried, since the record reads the same without it.
+func TestTamperTestCoversEmptyValuesSectionsAndAdditions(t *testing.T) {
+	data := readTestRecord(t, "testdata/round18/run-249-production.json")
+	root, readErr := tamperDecode(data)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	var changes []tamperChange
+	tamperChanges(root, nil, &changes)
+	seen := map[string]bool{}
+	for _, c := range changes {
+		seen[c.kind+" "+tamperPathString(c.path)] = true
+	}
+	for _, want := range []string{
+		"changed $.authorization_chain.human_in_loop.performed", // false
+		"changed $.aivp_t4.ai_output_hash",                      // ""
+		"deleted $.aivp_t4",                                     // a whole section
+		"added $.request_substance",                             // an unknown key
+		"removed $.rekor_anchor.inclusion_path[0]",              // a list item
+		"appended $.rekor_anchor.inclusion_path",                // an added list item
+	} {
+		if !seen[want] {
+			t.Errorf("the harness must try %q", want)
+		}
+	}
+	if seen["deleted $.authorization_chain.human_in_loop.performed"] {
+		t.Error("deleting a key holding false leaves the record's meaning unchanged and must not be tried")
+	}
+	accepted, tried, ok := tamperAccepted(data, verifyForTamper)
+	if !ok || tried < 1200 || len(accepted) != 0 {
+		t.Fatalf("complete record: tried %d, accepted %d (ok=%v)", tried, len(accepted), ok)
+	}
+}
+
+func TestHardwareRunUncoveredIncludesSectionsAndScaffoldFlags(t *testing.T) {
+	data := readTestRecord(t, "testdata/round40/hardware-run-2026-10.json")
+	b, decodeErr := decodeBundle(data)
+	if decodeErr != nil {
+		t.Fatal(decodeErr)
+	}
+	got := map[string]bool{}
+	for _, f := range uncoveredFields(data, verify(b)) {
+		got[f] = true
+	}
+	for _, want := range []string{"aivp_t4", "nrep", "hardware_attestation.scaffold.is_scaffold", "aivp_t4.halt_receipt_hash"} {
+		if !got[want] {
+			t.Errorf("uncovered fields must include %s", want)
+		}
+	}
+	if len(got) != 82 {
+		t.Errorf("the hardware run has %d uncovered fields; the disclosure states 82", len(got))
+	}
+}
