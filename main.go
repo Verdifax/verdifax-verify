@@ -66,7 +66,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.17.7"
+const Version = "0.17.8"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -237,7 +237,7 @@ func main() {
 		os.Exit(2)
 	}
 	if *tamperTest {
-		os.Exit(runTamperTestJudged(os.Stdout, data, judgeForTamper, *recomputeHashes))
+		os.Exit(runTamperTestOutput(os.Stdout, data, judgeForTamper, *recomputeHashes, *jsonOutput))
 	}
 	report := verify(bundle)
 	report.UncoveredFields = uncoveredFields(data, report)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -157,7 +158,7 @@ func TestTamperReportNamesWhichCheckCaughtEachChange(t *testing.T) {
 func TestRecomputeHashesStopsEveryChangeOnACompleteRecord(t *testing.T) {
 	var out bytes.Buffer
 	code := runTamperTestJudged(&out, readTestRecord(t, "testdata/round18/run-249-production.json"), judgeForTamper, true)
-	if code != 0 || !strings.Contains(out.String(), " 0 not stopped.") {
+	if code != 0 || !strings.Contains(out.String(), "not stopped 0") {
 		t.Fatalf("exit %d, want every change stopped by a check no rewrite can satisfy:\n%s", code, out.String())
 	}
 	if strings.Contains(out.String(), "NOT STOPPED") {
@@ -188,13 +189,13 @@ func TestRecomputeHashesReportsACoverageSlip(t *testing.T) {
 	if !ok {
 		t.Fatal("the record did not decode")
 	}
-	if len(o.notStopped) < 100 {
-		t.Fatalf("only %d changes reported not stopped without the complete-record entry; the mode would miss a coverage slip", len(o.notStopped))
+	if len(o.notStopped()) < 100 {
+		t.Fatalf("only %d changes reported not stopped without the complete-record entry; the mode would miss a coverage slip", len(o.notStopped()))
 	}
 	// Some fields are covered by the complete-record entry alone: without
 	// it, changing them is accepted even when no hash is recomputed.
 	o, _ = tamperRun(readTestRecord(t, "testdata/round18/run-249-production.json"), withoutSecondEntry, false)
-	if len(o.notStopped) == 0 {
+	if len(o.notStopped()) == 0 {
 		t.Fatal("expected fields only the complete-record entry covers")
 	}
 }
@@ -205,8 +206,8 @@ func TestRecomputeHashesOnTheHardwareRun(t *testing.T) {
 		t.Fatal("the record did not decode")
 	}
 	paths := map[string]bool{}
-	for _, c := range o.notStopped {
-		paths[tamperIndex.ReplaceAllString(tamperPathString(c.path), "[]")] = true
+	for _, r := range o.notStopped() {
+		paths[tamperIndex.ReplaceAllString(r.Path, "[]")] = true
 	}
 	// No rewrite can change what AMD's report signs or what the
 	// public-log entry binds.
@@ -236,9 +237,9 @@ func TestReadmeStatesTheTamperCounts(t *testing.T) {
 		verify(mustDecode(t, "testdata/round40/hardware-run-2026-10.json")))
 	hwForger, _ := tamperRun(readTestRecord(t, "testdata/round40/hardware-run-2026-10.json"), judgeForTamper, true)
 	rewritable := map[string]bool{}
-	for _, c := range hwForger.notStopped {
-		p := tamperIndex.ReplaceAllString(tamperPathString(c.path), "[]")
-		switch c.kind {
+	for _, r := range hwForger.notStopped() {
+		p := tamperIndex.ReplaceAllString(r.Path, "[]")
+		switch r.Kind {
 		case "added":
 			p += ".(added key)"
 		case "appended":
@@ -248,7 +249,8 @@ func TestReadmeStatesTheTamperCounts(t *testing.T) {
 	}
 	for _, want := range []string{
 		fmt.Sprintf("takes\n%s changes and rejects all of them", commaInt(plain.tried)),
-		fmt.Sprintf("%s changes and stops all of them", commaInt(forger.tried)),
+		fmt.Sprintf("takes %s changes; the public log stops %s of them, and strict reading refuses the other %d",
+			commaInt(forger.tried), commaInt(forger.tierCount[tierLog]), forger.tierCount[tierStrict]),
 		fmt.Sprintf("%d of its paths are uncovered", len(hw)),
 		fmt.Sprintf("%d of its paths, among them the decision", len(rewritable)),
 	} {
@@ -273,4 +275,84 @@ func commaInt(n int) string {
 		return s
 	}
 	return s[:len(s)-3] + "," + s[len(s)-3:]
+}
+
+// Round 42: a change counts as stopped by the public log only when a
+// public-log entry or its timestamps catch it, never because the tool's
+// own edit did not decode or because only the actor signature, whose keys
+// Verdifax holds, caught it.
+func TestRecomputeHashesTiersOnACompleteRecord(t *testing.T) {
+	o, ok := tamperRun(readTestRecord(t, "testdata/round18/run-249-production.json"), judgeForTamper, true)
+	if !ok {
+		t.Fatal("the record did not decode")
+	}
+	if o.tierCount[tierActorOnly] != 0 || o.tierCount[tierNot] != 0 {
+		t.Fatalf("tiers %v: a change relied on the actor signature alone or was not stopped", o.tierCount)
+	}
+	for _, r := range o.results {
+		if r.Tier == tierStrict && r.Kind != "added" && r.Path != "$.kind" {
+			t.Errorf("%s %s is refused only by strict reading; a well-formed retry should reach the public log", r.Kind, r.Path)
+		}
+	}
+	if o.tierCount[tierLog] < 1000 {
+		t.Fatalf("only %d changes stopped by the public log: %v", o.tierCount[tierLog], o.tierCount)
+	}
+}
+
+func TestMalformedEditsAreRetriedWellFormed(t *testing.T) {
+	o, _ := tamperRun(readTestRecord(t, "testdata/round18/run-249-production.json"), judgeForTamper, true)
+	for _, r := range o.results {
+		if r.Path == "$.rekor_anchor.input_nonce" && r.Kind == "changed" {
+			if !r.Retried || r.Tier != tierLog {
+				t.Fatalf("the nonce change was not retried as a well-formed number reaching the public log: %+v", r)
+			}
+			return
+		}
+	}
+	t.Fatal("no nonce change found")
+}
+
+func TestActorOnlyCountsAgainstTheRecord(t *testing.T) {
+	actorOnly := func(data []byte) tamperVerdict {
+		v := judgeForTamper(data)
+		if !v.accepted {
+			return tamperVerdict{caughtBy: []string{catchActor}}
+		}
+		return v
+	}
+	var out bytes.Buffer
+	if code := runTamperTestJudged(&out, readTestRecord(t, "testdata/round18/run-249-production.json"), actorOnly, true); code != 1 {
+		t.Fatalf("exit %d: changes stopped only by the actor signature must fail the test", code)
+	}
+}
+
+func TestWellFormedValues(t *testing.T) {
+	for in, want := range map[string]string{
+		"1792344015032211032":  "1792344015032211033",
+		"2026-10-24T15:59:19Z": "2026-10-24T15:59:20Z",
+		"ab12":                 "bb12",
+		"QUJD":                 "RUJD",
+		"run-x":                "run-y",
+	} {
+		if got, ok := tamperWellFormed(in); !ok || got != want {
+			t.Errorf("tamperWellFormed(%q) = %q, %v; want %q", in, got, ok, want)
+		}
+	}
+}
+
+func TestTamperJSONListsEveryChange(t *testing.T) {
+	var out bytes.Buffer
+	runTamperTestOutput(&out, readTestRecord(t, "testdata/round18/run-249-production.json"), judgeForTamper, true, true)
+	var rep tamperReport
+	if err := json.Unmarshal(out.Bytes(), &rep); err != nil {
+		t.Fatal(err)
+	}
+	if rep.Tried == 0 || len(rep.Changes) != rep.Tried || !rep.Passed {
+		t.Fatalf("tried %d, %d changes listed, passed %v", rep.Tried, len(rep.Changes), rep.Passed)
+	}
+	for _, c := range rep.Changes {
+		if c.Tier == "" || (!c.Accepted && len(c.CaughtBy) == 0) {
+			t.Fatalf("change without its checks: %+v", c)
+		}
+	}
 }
