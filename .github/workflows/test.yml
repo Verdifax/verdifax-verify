@@ -36,7 +36,9 @@ jobs:
         run: go build ./...
 
       - name: Test
-        run: go test -race ./...
+        # The tamper tests verify thousands of changed records; under the
+        # race detector that takes longer than go test's 10-minute default.
+        run: go test -race -timeout 30m ./...
 
       # Known-vulnerability scan of the module and its (stdlib-only)
       # dependency surface; fails the build on any reachable vuln.

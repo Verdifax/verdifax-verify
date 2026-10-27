@@ -2,15 +2,40 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Verdifax/verdifax-verify/internal/artifacts"
 )
+
+// memoJudge verifies each distinct candidate record once across the
+// whole test binary: several tests walk the same changes, and CI runs the
+// suite under the race detector.
+var (
+	memoMu    sync.Mutex
+	memoCache = map[[32]byte]tamperVerdict{}
+)
+
+func memoJudge(data []byte) tamperVerdict {
+	key := sha256.Sum256(data)
+	memoMu.Lock()
+	v, found := memoCache[key]
+	memoMu.Unlock()
+	if found {
+		return v
+	}
+	v = judgeForTamper(data)
+	memoMu.Lock()
+	memoCache[key] = v
+	memoMu.Unlock()
+	return v
+}
 
 func readTestRecord(t *testing.T, path string) []byte {
 	t.Helper()
@@ -144,7 +169,7 @@ func TestHardwareRunUncoveredIncludesSectionsAndScaffoldFlags(t *testing.T) {
 
 func TestTamperReportNamesWhichCheckCaughtEachChange(t *testing.T) {
 	var out bytes.Buffer
-	code := runTamperTestJudged(&out, readTestRecord(t, "testdata/round18/run-249-production.json"), judgeForTamper, false)
+	code := runTamperTestJudged(&out, readTestRecord(t, "testdata/round18/run-249-production.json"), memoJudge, false)
 	if code != 0 {
 		t.Fatalf("exit %d, want 0:\n%s", code, out.String())
 	}
@@ -157,7 +182,7 @@ func TestTamperReportNamesWhichCheckCaughtEachChange(t *testing.T) {
 
 func TestRecomputeHashesStopsEveryChangeOnACompleteRecord(t *testing.T) {
 	var out bytes.Buffer
-	code := runTamperTestJudged(&out, readTestRecord(t, "testdata/round18/run-249-production.json"), judgeForTamper, true)
+	code := runTamperTestJudged(&out, readTestRecord(t, "testdata/round18/run-249-production.json"), memoJudge, true)
 	if code != 0 || !strings.Contains(out.String(), "not stopped 0") {
 		t.Fatalf("exit %d, want every change stopped by a check no rewrite can satisfy:\n%s", code, out.String())
 	}
@@ -172,7 +197,7 @@ func TestRecomputeHashesStopsEveryChangeOnACompleteRecord(t *testing.T) {
 // past every other check, and the mode must say so.
 func TestRecomputeHashesReportsACoverageSlip(t *testing.T) {
 	withoutSecondEntry := func(data []byte) tamperVerdict {
-		v := judgeForTamper(data)
+		v := memoJudge(data)
 		var kept []string
 		for _, g := range v.caughtBy {
 			if g != catchCompleteEntry {
@@ -201,7 +226,7 @@ func TestRecomputeHashesReportsACoverageSlip(t *testing.T) {
 }
 
 func TestRecomputeHashesOnTheHardwareRun(t *testing.T) {
-	o, ok := tamperRun(readTestRecord(t, "testdata/round40/hardware-run-2026-10.json"), judgeForTamper, true)
+	o, ok := tamperRun(readTestRecord(t, "testdata/round40/hardware-run-2026-10.json"), memoJudge, true)
 	if !ok {
 		t.Fatal("the record did not decode")
 	}
@@ -231,11 +256,11 @@ func TestRecomputeHashesOnTheHardwareRun(t *testing.T) {
 // stale when the method changed).
 func TestReadmeStatesTheTamperCounts(t *testing.T) {
 	readme := string(readTestRecord(t, "README.md"))
-	plain, _ := tamperRun(readTestRecord(t, "testdata/round18/run-249-production.json"), judgeForTamper, false)
-	forger, _ := tamperRun(readTestRecord(t, "testdata/round18/run-249-production.json"), judgeForTamper, true)
+	plain, _ := tamperRun(readTestRecord(t, "testdata/round18/run-249-production.json"), memoJudge, false)
+	forger, _ := tamperRun(readTestRecord(t, "testdata/round18/run-249-production.json"), memoJudge, true)
 	hw := uncoveredFields(readTestRecord(t, "testdata/round40/hardware-run-2026-10.json"),
 		verify(mustDecode(t, "testdata/round40/hardware-run-2026-10.json")))
-	hwForger, _ := tamperRun(readTestRecord(t, "testdata/round40/hardware-run-2026-10.json"), judgeForTamper, true)
+	hwForger, _ := tamperRun(readTestRecord(t, "testdata/round40/hardware-run-2026-10.json"), memoJudge, true)
 	rewritable := map[string]bool{}
 	for _, r := range hwForger.notStopped() {
 		p := tamperIndex.ReplaceAllString(r.Path, "[]")
@@ -282,7 +307,7 @@ func commaInt(n int) string {
 // own edit did not decode or because only the actor signature, whose keys
 // Verdifax holds, caught it.
 func TestRecomputeHashesTiersOnACompleteRecord(t *testing.T) {
-	o, ok := tamperRun(readTestRecord(t, "testdata/round18/run-249-production.json"), judgeForTamper, true)
+	o, ok := tamperRun(readTestRecord(t, "testdata/round18/run-249-production.json"), memoJudge, true)
 	if !ok {
 		t.Fatal("the record did not decode")
 	}
@@ -300,7 +325,7 @@ func TestRecomputeHashesTiersOnACompleteRecord(t *testing.T) {
 }
 
 func TestMalformedEditsAreRetriedWellFormed(t *testing.T) {
-	o, _ := tamperRun(readTestRecord(t, "testdata/round18/run-249-production.json"), judgeForTamper, true)
+	o, _ := tamperRun(readTestRecord(t, "testdata/round18/run-249-production.json"), memoJudge, true)
 	for _, r := range o.results {
 		if r.Path == "$.rekor_anchor.input_nonce" && r.Kind == "changed" {
 			if !r.Retried || r.Tier != tierLog {
@@ -313,16 +338,21 @@ func TestMalformedEditsAreRetriedWellFormed(t *testing.T) {
 }
 
 func TestActorOnlyCountsAgainstTheRecord(t *testing.T) {
+	original := []byte(`{"kind":"verdifax.audit_bundle.v1","nrep":{"signature":"abc"}}`)
+	root, _ := tamperDecode(original)
+	same, _ := json.Marshal(root)
 	actorOnly := func(data []byte) tamperVerdict {
-		v := judgeForTamper(data)
-		if !v.accepted {
-			return tamperVerdict{caughtBy: []string{catchActor}}
+		if bytes.Equal(data, same) || bytes.Equal(data, original) {
+			return tamperVerdict{accepted: true}
 		}
-		return v
+		return tamperVerdict{caughtBy: []string{catchActor}}
 	}
 	var out bytes.Buffer
-	if code := runTamperTestJudged(&out, readTestRecord(t, "testdata/round18/run-249-production.json"), actorOnly, true); code != 1 {
-		t.Fatalf("exit %d: changes stopped only by the actor signature must fail the test", code)
+	if code := runTamperTestJudged(&out, original, actorOnly, true); code != 1 {
+		t.Fatalf("exit %d: changes stopped only by the actor signature must fail the test:\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "stopped only by the actor signature") {
+		t.Fatalf("the actor-only tier is not reported:\n%s", out.String())
 	}
 }
 
@@ -342,7 +372,7 @@ func TestWellFormedValues(t *testing.T) {
 
 func TestTamperJSONListsEveryChange(t *testing.T) {
 	var out bytes.Buffer
-	runTamperTestOutput(&out, readTestRecord(t, "testdata/round18/run-249-production.json"), judgeForTamper, true, true)
+	runTamperTestOutput(&out, readTestRecord(t, "testdata/round18/run-249-production.json"), memoJudge, true, true)
 	var rep tamperReport
 	if err := json.Unmarshal(out.Bytes(), &rep); err != nil {
 		t.Fatal(err)
