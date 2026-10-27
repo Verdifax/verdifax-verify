@@ -14,6 +14,7 @@ on:
   # The release workflow calls this one and builds nothing unless it
   # passes, so no release ships from a commit whose tests fail.
   workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read

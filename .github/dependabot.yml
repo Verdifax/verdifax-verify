@@ -1,21 +1,51 @@
 # Keeps the two dependency surfaces current: the Go module (today
 # stdlib-only, so this guards the future) and the pinned GitHub
 # Actions SHAs, which Dependabot bumps with the matching version
-# comment kept in sync.
+# comment kept in sync. The actions move as one group, so the init,
+# autobuild and analyze steps of codeql-action always move together.
+#
+# Every ecosystem is checked monthly, and its minor and patch updates
+# come as one grouped pull request once each release is at least 14
+# days old. Major versions are not proposed as version updates: they
+# change behavior and are migrated deliberately. These settings do not
+# delay security updates, and Verdifax's review replay fails on any
+# open Dependabot alert and on any Dependabot pull request open for
+# more than 14 days.
+#
+# .github/workflows/dependabot-merge.yml merges the GitHub Actions group
+# once its CI run passes. Package updates change files the published
+# release is built from, so they are merged with the next release.
 version: 2
 updates:
   - package-ecosystem: gomod
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    cooldown:
+      default-days: 14
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      gomod:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-    # One combined PR per week instead of one per action; prevents
-    # partial bumps of multi-part actions like codeql-action, whose
-    # init, autobuild, and analyze steps must move together.
+      interval: monthly
+    cooldown:
+      default-days: 14
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       actions:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
