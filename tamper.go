@@ -444,6 +444,128 @@ func tamperRecompute(data []byte) []byte {
 	return data
 }
 
+// tamperSpreadCopies makes a forger's change to a value the record
+// stores more than once (boundCopyGroups) in every copy the original
+// record carries, so the copy check cannot be what stops it: the change
+// is stopped only if a check no rewrite can satisfy binds one of the
+// copies. A deleted copy reads as empty, so the other copies are emptied.
+func tamperSpreadCopies(changed []byte, original any, c tamperChange) []byte {
+	if spread, inList := tamperSpreadList(changed, original, c); inList {
+		return spread
+	}
+	if c.kind != "changed" && c.kind != "deleted" {
+		return changed
+	}
+	g, inGroup := boundCopyGroupOf(strings.TrimPrefix(tamperPathString(c.path), "$."))
+	if !inGroup {
+		return changed
+	}
+	root, readErr := tamperDecode(changed)
+	if readErr != nil {
+		return changed
+	}
+	var value any = ""
+	if c.kind == "changed" {
+		value = tamperValueAt(root, c.path)
+	}
+	for _, p := range g.paths {
+		steps := tamperKeySteps(p)
+		if _, carried := tamperValueAt(original, steps).(string); !carried {
+			continue
+		}
+		if next, set := tamperSetAt(changed, steps, value); set {
+			changed = next
+		}
+	}
+	return changed
+}
+
+// tamperSpreadList does the same for a list the record stores more than
+// once (boundListGroups): an item changed, removed or appended in one
+// copy is changed, removed or appended at the same index in every other.
+func tamperSpreadList(changed []byte, original any, c tamperChange) ([]byte, bool) {
+	where := strings.TrimPrefix(tamperPathString(c.path), "$.")
+	index := -1
+	if n := len(c.path); n > 0 && c.path[n-1].list && c.kind != "appended" {
+		index = c.path[n-1].index
+	} else if n > 1 && c.path[n-2].list && (c.kind == "changed" || c.kind == "deleted") {
+		index = c.path[n-2].index
+	}
+	norm := tamperIndex.ReplaceAllString(where, "[]")
+	for _, g := range boundListGroups {
+		hit := false
+		for _, p := range g.paths {
+			base := p[:strings.Index(p, "[]")+2]
+			switch c.kind {
+			case "changed", "deleted":
+				hit = hit || norm == p
+			case "removed":
+				hit = hit || norm == base
+			case "appended":
+				hit = hit || norm+"[]" == base
+			}
+		}
+		if !hit {
+			continue
+		}
+		root, readErr := tamperDecode(changed)
+		if readErr != nil {
+			return changed, true
+		}
+		var value any = ""
+		if c.kind == "changed" {
+			value = tamperValueAt(root, c.path)
+		}
+		for _, p := range g.paths {
+			base, rest := p[:strings.Index(p, "[]")], strings.TrimPrefix(p[strings.Index(p, "[]")+2:], ".")
+			listSteps := tamperKeySteps(base)
+			orig, carried := tamperValueAt(original, listSteps).([]any)
+			if !carried {
+				continue
+			}
+			parent, _ := tamperValueAt(root, listSteps[:len(listSteps)-1]).(map[string]any)
+			list, _ := parent[listSteps[len(listSteps)-1].key].([]any)
+			if parent == nil {
+				continue
+			}
+			switch c.kind {
+			case "changed", "deleted":
+				if index < 0 || index >= len(list) {
+					continue
+				}
+				if rest == "" {
+					list[index] = value
+				} else if item, isObject := list[index].(map[string]any); isObject {
+					item[rest] = value
+				}
+			case "removed":
+				if len(list) == len(orig) && index >= 0 && index < len(list) {
+					parent[listSteps[len(listSteps)-1].key] = append(append([]any{}, list[:index]...), list[index+1:]...)
+				}
+			case "appended":
+				if len(list) == len(orig) && len(list) > 0 {
+					parent[listSteps[len(listSteps)-1].key] = append(list, list[len(list)-1])
+				}
+			}
+		}
+		out, encodeErr := json.Marshal(root)
+		if encodeErr != nil {
+			return changed, true
+		}
+		return out, true
+	}
+	return changed, false
+}
+
+// tamperKeySteps turns a dotted path of object keys into steps.
+func tamperKeySteps(p string) []tamperStep {
+	var steps []tamperStep
+	for _, k := range strings.Split(p, ".") {
+		steps = append(steps, tamperStep{key: k})
+	}
+	return steps
+}
+
 // tamperDerivedHashes returns every hash value the record stores that
 // verification recomputes from the record's own content.
 func tamperDerivedHashes(data []byte) map[string]bool {
@@ -511,11 +633,12 @@ const (
 	tierAMD       = "stopped by AMD's signed report"
 	tierStrict    = "refused by strict reading"
 	tierActorOnly = "stopped only by the actor signature, whose keys Verdifax holds"
+	tierNoRewrite = "rejected only by checks a rewrite might satisfy, no verifying rewrite found"
 	tierRejected  = "rejected"
 	tierNot       = "not stopped"
 )
 
-var tamperTierOrder = []string{tierLog, tierAMD, tierStrict, tierActorOnly, tierRejected, tierNot}
+var tamperTierOrder = []string{tierLog, tierAMD, tierStrict, tierActorOnly, tierNoRewrite, tierRejected, tierNot}
 
 // tamperTier places a verdict: in recompute mode by the strongest check
 // that caught it, otherwise rejected or not.
@@ -540,7 +663,10 @@ func tamperTier(v tamperVerdict, recompute bool) string {
 	case has[catchActor]:
 		return tierActorOnly
 	}
-	return tierNot
+	// Only internal hashes or consistency checks caught it, which a
+	// rewrite can in principle satisfy, yet the rewritten record still
+	// fails: the change is neither shown stopped nor shown rewritable.
+	return tierNoRewrite
 }
 
 // tamperWellFormed returns a different value of the same form as s, for
@@ -624,16 +750,50 @@ type tamperOutcome struct {
 }
 
 // notStopped returns the results that count against the record: accepted
-// changes, and in recompute mode changes no rewrite-proof check stopped
-// or only the actor signature did.
+// changes, and in recompute mode changes no rewrite-proof check stopped,
+// only the actor signature did, or whose rewrite was not found.
 func (o tamperOutcome) notStopped() []tamperResult {
 	var out []tamperResult
 	for _, r := range o.results {
-		if r.Tier == tierNot || r.Tier == tierActorOnly {
+		if r.Tier == tierNot || r.Tier == tierActorOnly || r.Tier == tierNoRewrite {
 			out = append(out, r)
 		}
 	}
 	return out
+}
+
+// rewritable returns, once each and sorted, the paths where a change was
+// accepted: with --recompute-hashes, the paths a forger who rewrites the
+// whole record is shown able to change. Paths are named by tamperPathKey.
+func (o tamperOutcome) rewritable() []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, r := range o.results {
+		if r.Accepted && !seen[tamperPathKey(r.change)] {
+			seen[tamperPathKey(r.change)] = true
+			out = append(out, tamperPathKey(r.change))
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// tamperPathKey names the path a change was made at, the same for every
+// item of a list: list indices read as [], an unknown key added to an
+// object as <object>.(added key), and an item appended to a list as
+// <list>[] (appended item).
+func tamperPathKey(c tamperChange) string {
+	p := strings.TrimPrefix(strings.TrimPrefix(tamperIndex.ReplaceAllString(tamperPathString(c.path), "[]"), "$"), ".")
+	switch c.kind {
+	case "added":
+		p = strings.TrimSuffix(p+".(added key)", ".")
+	case "appended":
+		p += "[] (appended item)"
+	}
+	if p == "" || p == ".(added key)" {
+		p = "(added key)"
+	}
+	return p
 }
 
 // tamperRun runs every change; with recompute, each changed copy is first
@@ -680,6 +840,9 @@ func tamperRun(data []byte, judge tamperJudge, recompute bool) (tamperOutcome, b
 		if !built {
 			continue
 		}
+		if recompute {
+			changed = tamperSpreadCopies(changed, root, c)
+		}
 		changed, real := prepare(changed)
 		if !real {
 			out.unchanged++
@@ -692,6 +855,7 @@ func tamperRun(data []byte, judge tamperJudge, recompute bool) (tamperOutcome, b
 			if s, isString := tamperValueAt(root, c.path).(string); isString {
 				if alt, formed := tamperWellFormed(s); formed {
 					if again, rebuilt := tamperSetAt(data, c.path, alt); rebuilt {
+						again = tamperSpreadCopies(again, root, c)
 						if again, real = prepare(again); real {
 							v, retried = judge(again), true
 						}
@@ -718,7 +882,11 @@ type tamperReport struct {
 	Tiers     map[string]int `json:"tiers"`
 	CaughtBy  map[string]int `json:"caught_by"`
 	Passed    bool           `json:"passed"`
-	Changes   []tamperResult `json:"changes"`
+	// Rewritable lists, by tamperPathKey, the paths where a change was
+	// accepted; with --recompute-hashes, after the rewrite.
+	RewritableCount int            `json:"rewritable_path_count"`
+	Rewritable      []string       `json:"rewritable_paths"`
+	Changes         []tamperResult `json:"changes"`
 }
 
 // runTamperTestJudged prints the test's result and returns its exit code:
@@ -752,7 +920,8 @@ func runTamperTestOutput(w io.Writer, data []byte, judge tamperJudge, recompute,
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		if encodeErr := enc.Encode(tamperReport{Mode: mode, Tried: o.tried, Unchanged: o.unchanged, Tiers: o.tierCount,
-			CaughtBy: o.caughtCount, Passed: code == 0, Changes: o.results}); encodeErr != nil {
+			CaughtBy: o.caughtCount, Passed: code == 0, RewritableCount: len(o.rewritable()), Rewritable: o.rewritable(),
+			Changes: o.results}); encodeErr != nil {
 			return 2
 		}
 		return code
@@ -770,6 +939,8 @@ func runTamperTestOutput(w io.Writer, data []byte, judge tamperJudge, recompute,
 			strings.Join(parts, ", "), o.unchanged)
 		fmt.Fprintf(w, "Stopped by the public log means %s, %s or %s caught it; strict reading refuses an unknown key or a record that no longer reads as a bundle, before any check.\n",
 			catchFirstEntry, catchCompleteEntry, catchEntrySigner)
+		fmt.Fprintf(w, "Rewritable paths, where a change verifies after the rewrite: %d (list indices read as [], an added key as <object>.(added key), an appended item as <list>[] (appended item); --json lists them).\n",
+			len(o.rewritable()))
 	} else {
 		fmt.Fprintf(w, "TAMPER TEST: %d changes tried (%s); %d rejected, %d accepted.\n",
 			o.tried, kinds, o.tried-len(failing), len(failing))
@@ -793,7 +964,12 @@ func runTamperTestOutput(w io.Writer, data []byte, judge tamperJudge, recompute,
 	}
 	for _, r := range failing {
 		label := "ACCEPTED:"
-		if recompute {
+		switch {
+		case recompute && r.Tier == tierNoRewrite:
+			label = "NO REWRITE FOUND:"
+		case recompute && r.Tier == tierActorOnly:
+			label = "ACTOR SIGNATURE ONLY:"
+		case recompute:
 			label = "NOT STOPPED:"
 		}
 		line := fmt.Sprintf("  %s %s %s", label, r.Kind, r.Path)
@@ -822,17 +998,7 @@ func uncoveredFields(data []byte, r *Report) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, c := range accepted {
-		p := strings.TrimPrefix(tamperIndex.ReplaceAllString(tamperPathString(c.path), "[]"), "$")
-		p = strings.TrimPrefix(p, ".")
-		switch c.kind {
-		case "added":
-			p = strings.TrimSuffix(p+".(added key)", ".")
-		case "appended":
-			p += "[] (appended item)"
-		}
-		if p == "" || p == ".(added key)" {
-			p = "(added key)"
-		}
+		p := tamperPathKey(c)
 		if !seen[p] {
 			seen[p] = true
 			out = append(out, p)

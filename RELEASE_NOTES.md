@@ -2,6 +2,31 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.17.9: every copy of a bound value must agree, and the rewritable paths listed
+
+A record stores some values more than once: the envelope identifier in
+three sections, each section's sealed hash again in the final VFA, the
+AER hash in the final VFA, the proof-of-execution section and the
+execution record, the transport, program and payload hashes in the
+execution record, the envelope and the payload, and the six execution
+ids in three lists. The public-log entry or AMD's report binds one copy;
+the others were read by nothing, so a rewrite could change a copy and
+keep the bound value. Verification now fails when any copies disagree.
+This is a new check in normal verification; every public record and
+every readiness record passes it unchanged.
+
+`--tamper-test --recompute-hashes` writes a change to such a value into
+every copy, as a forger would, and lists the rewritable paths (paths
+where a change verifies after the rewrite) with their number, in the
+report and in `--json` as `rewritable_paths`. A change that only an
+internal hash or a consistency check rejects, but whose rewrite still
+fails, now has its own tier instead of counting as not stopped. On the
+October 2026 hardware run the rewritable paths fall from 372 to 320 and
+its uncovered paths from 82 to 72; run 249 takes 1,131 changes (the
+public log stops 1,003, strict reading refuses 128). The release
+workflow now runs the full test suite on the tagged commit and builds
+nothing unless it passes.
+
 ### v0.17.8: strict tiers for `--recompute-hashes`
 
 v0.17.7 counted a change as stopped when a decode failure or the actor
@@ -24,9 +49,10 @@ is unchanged.
 caught it. The new `--recompute-hashes` flag makes the test play a
 forger who recomputes every hash the record stores after each change,
 so only the public-log entries, their signer and timestamps, the actor
-signature and AMD's report signature can stop it. Every complete public
-record stops every change (run 249: 1,133). On the October 2026 hardware
-run a full rewrite can change 372 paths, which the evidence page states.
+signature and AMD's report signature can stop it. It reported every
+change stopped on every complete public record (run 249: 1,133), a count
+v0.17.8 corrected, and 372 rewritable paths on the October 2026 hardware
+run, a count v0.17.9 replaced with 320 under a published counting rule.
 No check, verdict or exit code of normal verification changes.
 
 ### v0.17.6: `--tamper-test` covers empty values, sections and additions

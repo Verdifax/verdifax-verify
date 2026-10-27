@@ -132,16 +132,28 @@ by no hash, and changing one leaves the record verifying with its
 partial-coverage verdict. Since v0.17.5 the normal report lists those
 fields on a `Not hash-covered` line (and `--json` lists them as
 `uncovered_fields`), found by the same method. The October 2026 hardware
-run is such a record: 82 of its paths are uncovered, among them the AI
+run is such a record: 72 of its paths are uncovered, among them the AI
 review summary (`aivp_t4`, which can also be deleted whole), the
 hardware-attestation summary (`hardware_attestation.verification`) and
 certificate text, the actor section (`nrep`), the formal-verification
 section, the scaffold flags of the attestation and proof-of-execution
-sections, the record's status, run number and timestamp, and the labels
-and reference hashes inside each section's seal. Its raw SEV-SNP
+sections, the record's status, run number and timestamp, the label inside
+each section's seal, and the reference hashes in the seals of the five
+category sections and the final VFA. Its raw SEV-SNP
 report (`quote_b64`), which the verifier checks against AMD's root and
 binds to the record's own values, its execution record and its
 anchored identity values are covered.
+
+Since v0.17.9 every value the record stores more than once must hold
+the same value in every copy: the envelope identifier in the envelope,
+transport and AER sections; each section's sealed hash and its copy in
+the final VFA (and, for the envelope, in the transport section); the
+AER hash in the final VFA, the proof-of-execution section and the
+execution record; the transport, program and payload hashes in the
+execution record, the envelope and the payload; and the six execution
+ids in the AER, the EFA steps and the execution record. A record whose
+copies disagree fails, so a reader of any copy reads the value the
+public-log entry or AMD's report binds.
 
 For every change that fails, the report also names the checks that
 caught it, since v0.17.7: an internal hash, the first public-log entry,
@@ -161,31 +173,50 @@ value wherever the old one appeared, until every internal hash agrees.
 What no rewrite can recompute is left as it was: the signed public-log
 entry bodies and their timestamps, the actor signature and AMD's signed
 report. Editing or deleting a stored hash is not counted, since the
-recomputation restores the original record.
+recomputation restores the original record. Since v0.17.9 a change to a
+value the record stores more than once is written into every copy, so
+the copy check is never what stops it.
 
 Since v0.17.8 each change lands in one tier: stopped by the public log
 (the first public-log entry, the complete-record entry, or the entries'
 signer or timestamps caught it), stopped by AMD's signed report, refused
 by strict reading (an unknown key, or a record that no longer reads as a
 bundle, which the verifier refuses before any check), stopped only by
-the actor signature, whose keys Verdifax holds, or not stopped. An edit
+the actor signature, whose keys Verdifax holds, or not stopped. Since
+v0.17.9 a change that only an internal hash or a consistency check
+rejects, but whose rewritten record still fails, lands in its own tier
+(rejected only by checks a rewrite might satisfy, no verifying rewrite
+found) instead of not stopped: it is neither shown stopped nor shown
+rewritable. "Not stopped" now means the rewritten record verifies. An edit
 that no longer decodes is retried once with a well-formed value of the
 same form (a number gains one, a timestamp a second, a hex or base64
 value changes one character within its alphabet), since a forger writes
-values the record can hold. The test exits 0 only when no change is
-left not stopped or stopped only by the actor signature, and `--json`
+values the record can hold. The test exits 0 only when every change is
+stopped by the public log, AMD's report or strict reading, and `--json`
 lists every change with every check that caught it and its tier.
+
+The report also counts the rewritable paths: the paths where a change
+verifies after the rewrite. A path is counted once however many changes
+reach it: list indices read as `[]`, an unknown key added to an object
+as `<object>.(added key)`, and an item appended to a list as
+`<list>[] (appended item)`. `--json` lists them as `rewritable_paths`,
+with their number in `rewritable_path_count`.
 
 On every complete public record no change relies on the actor
 signature and none is left unstopped: run 249 in `testdata/round18`
-takes 1,133 changes; the public log stops 1,005 of them, and strict
+takes 1,131 changes; the public log stops 1,003 of them, and strict
 reading refuses the other 128, each an unknown key added or the record's
 kind removed. On the October 2026 hardware run, which predates the
-complete-record anchor, a full rewrite can change 372 of its paths,
-among them the decision, as the evidence page states; it cannot change
-the raw AMD report or the execution record's inputs that report signs,
-the envelope identifier and the AER and binding seal hashes the
-public-log entry binds, or that entry itself.
+complete-record anchor, a full rewrite can change 320 of its paths,
+among them the decision, as the evidence page states; each is listed
+with its rewritten record verifying. Of its other changes, 41 (mostly a
+whole section or seal deleted) are rejected only by checks a rewrite
+might satisfy, with no verifying rewrite found, and 3 are stopped only
+by the actor signature. It cannot change the raw AMD report
+or the execution record's inputs that report signs, the envelope
+identifier and the AER and binding seal hashes the public-log entry
+binds, any copy of those values elsewhere in the record, or that entry
+itself.
 
 ### `--strict` mode
 

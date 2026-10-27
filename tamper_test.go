@@ -162,8 +162,8 @@ func TestHardwareRunUncoveredIncludesSectionsAndScaffoldFlags(t *testing.T) {
 			t.Errorf("uncovered fields must include %s", want)
 		}
 	}
-	if len(got) != 82 {
-		t.Errorf("the hardware run has %d uncovered fields; the disclosure states 82", len(got))
+	if len(got) != 72 {
+		t.Errorf("the hardware run has %d uncovered fields; the disclosure states 72", len(got))
 	}
 }
 
@@ -231,23 +231,35 @@ func TestRecomputeHashesOnTheHardwareRun(t *testing.T) {
 		t.Fatal("the record did not decode")
 	}
 	paths := map[string]bool{}
-	for _, r := range o.notStopped() {
-		paths[tamperIndex.ReplaceAllString(r.Path, "[]")] = true
+	for _, p := range o.rewritable() {
+		paths[p] = true
 	}
 	// No rewrite can change what AMD's report signs or what the
-	// public-log entry binds.
-	for _, p := range []string{"$.hardware_attestation.quote_b64", "$.envelope.envelope_id", "$.aer.seal.sealed_hash",
-		"$.zksp_binding.seal.sealed_hash", "$.execution_record.input_hash", "$.execution_record.program_hash",
-		"$.execution_record.transport_hash", "$.execution_record.execution_control_hash",
-		"$.execution_record.kernel_output_ids[]", "$.rekor_anchor.leaf_hash"} {
+	// public-log entry binds, nor, since v0.17.9, any copy of those
+	// values elsewhere in the record (round 43).
+	for _, p := range []string{"hardware_attestation.quote_b64", "envelope.envelope_id", "aer.seal.sealed_hash",
+		"zksp_binding.seal.sealed_hash", "execution_record.input_hash", "execution_record.program_hash",
+		"execution_record.transport_hash", "execution_record.execution_control_hash",
+		"execution_record.kernel_output_ids[]", "rekor_anchor.leaf_hash",
+		"aer.envelope_id", "transport.envelope_id", "final_vfa.zksp_binding_hash", "final_vfa.aer_hash",
+		"pote_proof.execution_trace_hash", "execution_record.aer_hash", "transport.seal.sealed_hash",
+		"final_vfa.transport_hash", "envelope.registry_record_hash", "payload.content_hash", "envelope.payload_hash",
+		"aer.execution_ids[]", "efa.steps[].execution_id"} {
 		if paths[p] {
 			t.Errorf("%s changed under a full rewrite", p)
 		}
 	}
 	// The record predates the complete-record anchor, so a full rewrite
 	// can change its decision; the evidence page says so.
-	if !paths["$.aer.decision.result"] {
+	if !paths["aer.decision.result"] {
 		t.Error("expected the decision to be rewritable on a record without a complete-record anchor")
+	}
+	// Every path the mode calls rewritable was shown: a change there
+	// verified after the rewrite.
+	for _, r := range o.results {
+		if paths[tamperPathKey(r.change)] && r.Tier == tierNot && !r.Accepted {
+			t.Errorf("%s %s is listed as rewritable but its rewrite was rejected", r.Kind, r.Path)
+		}
 	}
 }
 
@@ -261,23 +273,15 @@ func TestReadmeStatesTheTamperCounts(t *testing.T) {
 	hw := uncoveredFields(readTestRecord(t, "testdata/round40/hardware-run-2026-10.json"),
 		verify(mustDecode(t, "testdata/round40/hardware-run-2026-10.json")))
 	hwForger, _ := tamperRun(readTestRecord(t, "testdata/round40/hardware-run-2026-10.json"), memoJudge, true)
-	rewritable := map[string]bool{}
-	for _, r := range hwForger.notStopped() {
-		p := tamperIndex.ReplaceAllString(r.Path, "[]")
-		switch r.Kind {
-		case "added":
-			p += ".(added key)"
-		case "appended":
-			p += "[] (appended item)"
-		}
-		rewritable[p] = true
-	}
+	rewritable := hwForger.rewritable()
 	for _, want := range []string{
 		fmt.Sprintf("takes\n%s changes and rejects all of them", commaInt(plain.tried)),
 		fmt.Sprintf("takes %s changes; the public log stops %s of them, and strict reading refuses the other %d",
 			commaInt(forger.tried), commaInt(forger.tierCount[tierLog]), forger.tierCount[tierStrict]),
 		fmt.Sprintf("%d of its paths are uncovered", len(hw)),
 		fmt.Sprintf("%d of its paths, among them the decision", len(rewritable)),
+		fmt.Sprintf("Of its other changes, %d (mostly a whole section or seal deleted) are rejected only by checks a rewrite might satisfy, with no verifying rewrite found, and %d are stopped only by the actor signature",
+			hwForger.tierCount[tierNoRewrite], hwForger.tierCount[tierActorOnly]),
 	} {
 		if !strings.Contains(strings.Join(strings.Fields(readme), " "), strings.Join(strings.Fields(want), " ")) {
 			t.Errorf("README does not state %q", want)

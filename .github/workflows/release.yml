@@ -8,8 +8,10 @@ name: Release
 #   git tag v0.1.5 -m "v0.1.5 — short description"
 #   git push origin v0.1.5
 #
-# Two-stage shape (avoids the race condition that broke v0.1.4):
+# Three-stage shape (avoids the race condition that broke v0.1.4):
 #
+#   0. test            the full test suite (test.yml) on the tagged
+#                      commit; nothing below runs unless it passes.
 #   1. create-release  runs ONCE, creates the GitHub release for the tag.
 #   2. build           matrix job, runs FOUR times (one per platform),
 #                      each builds its binary and uploads to the existing
@@ -51,9 +53,16 @@ permissions:
   contents: read
 
 jobs:
+  # The full test suite, exactly as on every push (test.yml), runs on the
+  # tagged commit first; the release is created only if it passes.
+  test:
+    name: Test ${{ github.ref_name }}
+    uses: ./.github/workflows/test.yml
+
   create-release:
     name: Create release for ${{ github.ref_name }}
     runs-on: ubuntu-latest
+    needs: test
     permissions:
       contents: write
     steps:

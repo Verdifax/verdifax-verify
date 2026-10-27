@@ -66,7 +66,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.17.8"
+const Version = "0.17.9"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -760,7 +760,7 @@ func verify(b *artifacts.AuditBundle) *Report {
 	r.RuntimeTiming = verifyRuntimeTiming(b)
 	r.PreAnchor = verifyPreAnchor(b)
 	r.NrepSignature = sealedByPreAnchor(r.NrepSignature, r.LeafBinding, r.PreAnchor)
-	r.CrossChecks = verifyCrossGeneration(b)
+	r.CrossChecks = append(verifyCrossGeneration(b), verifyBoundCopies(b)...)
 	r.BundleAnchor = verifyBundleAnchor(b)
 	r.CompleteRecordRequirement = verifyCompleteRecordRequirement(b, r.BundleAnchor)
 	r.EntryAuth = verifyEntryAuthentication(b, r)
