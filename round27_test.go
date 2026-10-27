@@ -27,14 +27,36 @@ import (
 // forgeHardwareStory applies the round-27 reviewer's rewrite to the
 // published hardware run: the decision flipped to deny, with the AER
 // hash and the bundle hash recomputed and the public-log anchor kept.
+// Since v0.17.10 the decision is also a copy of the EPA's attested
+// context, so the rewrite reaches both, as a forger's would.
 func forgeHardwareStory(t *testing.T) *artifacts.AuditBundle {
 	t.Helper()
 	b := loadRound8(t, "hardware-run-2026-10.json")
 	b.AER.Decision.Result = "deny"
 	b.AER.Decision.Note = "rewritten by a forger who holds only the published bundle"
+	b.EPA.AttestedContext.DecisionResult = b.AER.Decision.Result
+	b.EPA.AttestedContext.DecisionNote = b.AER.Decision.Note
+	b.EPA.Hash = artifacts.RecomputeEPAHash(b.EPA)
 	b.AER.Hash = artifacts.RecomputeAERHash(b.AER)
 	b.BundleHash = artifacts.RecomputeBundleHash(b)
 	return b
+}
+
+// The reviewer's own round-27 rewrite changed the AER's decision alone;
+// since v0.17.10 the copy in the EPA's attested context disagrees and
+// the record fails outright.
+func TestR27DecisionFlippedInOneSectionOnlyNowFails(t *testing.T) {
+	b := loadRound8(t, "hardware-run-2026-10.json")
+	b.AER.Decision.Result = "deny"
+	b.AER.Hash = artifacts.RecomputeAERHash(b.AER)
+	b.BundleHash = artifacts.RecomputeBundleHash(b)
+	r := verify(b)
+	if r.VerdictTier != "FAILED" || !exitShouldFail(r, true, false) {
+		t.Fatalf("a decision flipped in the AER alone must fail: tier=%s", r.VerdictTier)
+	}
+	if !strings.Contains(strings.Join(r.CrossChecks, "\n"), "epa.attested_context.decision_result does not equal aer.decision.result") {
+		t.Fatalf("the failure must name the copy that disagrees: %v", r.CrossChecks)
+	}
 }
 
 func assertPartialNotVerified(t *testing.T, b *artifacts.AuditBundle, r *Report) {
@@ -79,11 +101,24 @@ func TestR27HardwareStoryRewriteIsNeverReportedAsVerified(t *testing.T) {
 	assertPartialNotVerified(t, b, r)
 }
 
+// The round-6 reviewer's files that flipped the AER decision alone (V1
+// and V6) fail since v0.17.10, because the EPA's attested context still
+// carries the original; the other rewrites, which changed sections the
+// pre-v5 leaf does not bind and left every copy consistent, stay
+// anchored with partial coverage and exit 3.
 func TestR27Round6StoryRewritesExit3(t *testing.T) {
+	flipped := map[string]bool{"V1_aer_decision_flipped_to_deny.json": true, "V6_story_rewrite_all.json": true}
 	for _, name := range round6Forgeries {
 		t.Run(name, func(t *testing.T) {
 			b := loadRound6(t, name)
-			assertPartialNotVerified(t, b, verify(b))
+			r := verify(b)
+			if flipped[name] {
+				if r.VerdictTier != "FAILED" || !exitShouldFail(r, true, false) {
+					t.Fatalf("a decision flipped in one copy must fail: tier=%s", r.VerdictTier)
+				}
+				return
+			}
+			assertPartialNotVerified(t, b, r)
 		})
 	}
 }

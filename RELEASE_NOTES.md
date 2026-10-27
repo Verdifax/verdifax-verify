@@ -2,6 +2,39 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.17.10: every duplicated value accounted for, and the attestation summary compared with the report
+
+Round 44 of the external review found twelve values the record stores
+twice that the v0.17.9 copy check did not cover, each rewritable on the
+October 2026 hardware run while its original was bound: the AIVP
+kernel's output id stated again as the PIA hash, the run entry's
+number, time and checkpoint stated again in the proof-of-execution
+section, the transcript's input hash (a copy of the AER hash), and the
+guest measurement, report id, TCB values, report version and report
+data stated in the attestation's verification block. The copy groups
+now cover the first three kinds and more (the sequence id, the record
+clock, the manifest hash, the server commit, the migration token's
+state hash, the transcript hash and the caller's attested decision, each
+stored twice), and a SEV-SNP record's verification block, measurement
+and report-data fields are compared with the raw AMD report instead of
+being trusted. A test enumerates every value the published records store
+more than once and fails unless each is a copy group, is checked
+another way, or is a listed coincidence of independently declared
+values. Every public record and every readiness record passes
+unchanged; the round-6 and round-27 rewrites that flipped the AER's
+decision alone now fail outright, because the EPA's attested context
+still carries the original.
+
+The forger mode writes a change into every copy that held the same
+value (not into every path of a group), handles list items and numbers
+as copies, and places a change caught by several checks in the first
+tier of the stated order. On the hardware run the rewritable paths fall
+from 320 to 297, the uncovered paths from 72 to 55, and the AMD tier
+grows from 23 to 53 changes; run 249 takes 1,130 changes, the public log
+stops 1,002 and strict reading refuses 128. Internal: the synthetic
+round-7 fixtures carry their test log's entry in the proof-of-execution
+section, as a real record would.
+
 ### v0.17.9: every copy of a bound value must agree, and the rewritable paths listed
 
 A record stores some values more than once: the envelope identifier in

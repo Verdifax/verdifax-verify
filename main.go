@@ -66,7 +66,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.17.9"
+const Version = "0.17.10"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -974,8 +974,40 @@ func verifySevSnpQuote(b *artifacts.AuditBundle) HashCheck {
 		}
 		binding = sevsnp.BindingReportData(envHash, aerHash)
 	}
-	if _, err := sevsnp.Verify(raw, []byte(hwa.VLEKCertPEM), []byte(hwa.CertChainPEM), binding[:]); err != nil {
+	res, err := sevsnp.Verify(raw, []byte(hwa.VLEKCertPEM), []byte(hwa.CertChainPEM), binding[:])
+	if err != nil {
 		return fail(err.Error())
+	}
+	// Round 44: the record's verification block and its measurement and
+	// report-data fields were read by nothing, so a rewrite could show any
+	// measurement while the raw report said another. Each stated value
+	// must equal what the report itself carries.
+	v := hwa.Verification
+	if v == nil {
+		return fail("sev_snp mode claimed but the record carries no verification block to compare with the report")
+	}
+	var differs []string
+	same := func(field, recorded, fromReport string) {
+		if recorded != fromReport {
+			differs = append(differs, field)
+		}
+	}
+	same("verification.report_version", strconv.FormatUint(uint64(v.ReportVersion), 10), strconv.FormatUint(uint64(res.ReportVersion), 10))
+	same("verification.measurement_hex", v.MeasurementHex, res.MeasurementHex)
+	same("verification.report_id_hex", v.ReportIDHex, res.ReportIDHex)
+	same("verification.current_tcb_hex", v.CurrentTCBHex, res.CurrentTCBHex)
+	same("verification.reported_tcb_hex", v.ReportedTCBHex, res.ReportedTCBHex)
+	same("verification.report_data_hex", v.ReportDataHex, res.ReportDataHex)
+	same("verification.signing_key_type", v.SigningKeyType, res.SigningKeyType)
+	same("verification.root_fingerprint_sha256", v.RootFingerprintSHA256, res.RootFingerprintSHA256)
+	same("verification.vlek_leaf_sha256", v.VLEKLeafSHA256, res.VLEKLeafSHA256)
+	same("enclave_measurement", hwa.EnclaveMeasurement, res.MeasurementHex)
+	same("report_data_hex", hwa.ReportDataHex, res.ReportDataHex)
+	if !v.ChainVerified || !v.SignatureVerified || !v.ReportDataBound {
+		differs = append(differs, "verification.chain_verified, signature_verified and report_data_bound (the report verifies, the record says it does not)")
+	}
+	if len(differs) > 0 {
+		return fail("the record's hardware_attestation fields do not match the AMD report: " + strings.Join(differs, ", "))
 	}
 	return HashCheck{Name: name, Recorded: "verified", Computed: "verified", Match: true}
 }

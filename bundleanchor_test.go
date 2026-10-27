@@ -307,6 +307,11 @@ func TestRound6IntactRun237WithoutBundleAnchorIsHonestlyPartial(t *testing.T) {
 	}
 }
 
+// round6DecisionFlips are the reviewer's files that flipped the AER
+// decision alone; since v0.17.10 the EPA's attested context disagrees
+// and they fail outright rather than reading as partial.
+var round6DecisionFlips = map[string]bool{"V1_aer_decision_flipped_to_deny.json": true, "V6_story_rewrite_all.json": true}
+
 func TestRound6ForgeriesWithoutBundleAnchorGetPartialNotFull(t *testing.T) {
 	for _, name := range round6Forgeries {
 		t.Run(name, func(t *testing.T) {
@@ -321,6 +326,12 @@ func TestRound6ForgeriesWithoutBundleAnchorGetPartialNotFull(t *testing.T) {
 			out := captureHumanReport(t, b, r)
 			if strings.Contains(out, "FULL") || strings.Contains(out, "COMPLETE RECORD") {
 				t.Fatalf("verdict overstates coverage:\n%s", out)
+			}
+			if round6DecisionFlips[name] {
+				if r.VerdictTier != "FAILED" || !strings.Contains(out, "epa.attested_context.decision_result does not equal aer.decision.result") {
+					t.Fatalf("a decision flipped in the AER alone must fail on the copy that disagrees:\n%s", out)
+				}
+				return
 			}
 			if !strings.Contains(out, "bundle-sealed, NOT") {
 				t.Fatalf("verdict must say the descriptive sections are bundle-sealed, not anchored:\n%s", out)

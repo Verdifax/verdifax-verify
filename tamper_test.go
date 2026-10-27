@@ -87,13 +87,16 @@ func TestUncoveredFieldsOfThePreV5HardwareRun(t *testing.T) {
 	for _, f := range uncoveredFields(data, r) {
 		got[f] = true
 	}
-	for _, want := range []string{"aivp_t4.decision", "aivp_t4.adapter_id", "hardware_attestation.verification.chain_verified", "status", "run_id", "generated_at"} {
+	for _, want := range []string{"aivp_t4.decision", "aivp_t4.adapter_id", "status", "run_id"} {
 		if !got[want] {
 			t.Errorf("uncovered fields must include %s", want)
 		}
 	}
+	// Since v0.17.10 the verification block is compared with the AMD
+	// report and the record clock is a copy of the envelope's timestamp.
 	for f := range got {
-		if strings.HasPrefix(f, "aer.decision") || f == "hardware_attestation.quote_b64" || f == "hardware_attestation.enclave_measurement" || strings.HasPrefix(f, "execution_record") {
+		if strings.HasPrefix(f, "aer.decision") || f == "hardware_attestation.quote_b64" || f == "hardware_attestation.enclave_measurement" ||
+			strings.HasPrefix(f, "execution_record") || strings.HasPrefix(f, "hardware_attestation.verification.") || f == "generated_at" {
 			t.Errorf("%s is covered and must not be listed", f)
 		}
 	}
@@ -162,8 +165,8 @@ func TestHardwareRunUncoveredIncludesSectionsAndScaffoldFlags(t *testing.T) {
 			t.Errorf("uncovered fields must include %s", want)
 		}
 	}
-	if len(got) != 72 {
-		t.Errorf("the hardware run has %d uncovered fields; the disclosure states 72", len(got))
+	if len(got) != 55 {
+		t.Errorf("the hardware run has %d uncovered fields; the disclosure states 55", len(got))
 	}
 }
 

@@ -446,9 +446,11 @@ func tamperRecompute(data []byte) []byte {
 
 // tamperSpreadCopies makes a forger's change to a value the record
 // stores more than once (boundCopyGroups) in every copy the original
-// record carries, so the copy check cannot be what stops it: the change
-// is stopped only if a check no rewrite can satisfy binds one of the
-// copies. A deleted copy reads as empty, so the other copies are emptied.
+// record carries with the same value, so the copy check cannot be what
+// stops it: the change is stopped only if a check no rewrite can satisfy
+// binds one of the copies. A deleted text copy reads as empty, so the
+// other copies are emptied; a deleted number or object is deleted from
+// its copies too.
 func tamperSpreadCopies(changed []byte, original any, c tamperChange) []byte {
 	if spread, inList := tamperSpreadList(changed, original, c); inList {
 		return spread
@@ -456,21 +458,29 @@ func tamperSpreadCopies(changed []byte, original any, c tamperChange) []byte {
 	if c.kind != "changed" && c.kind != "deleted" {
 		return changed
 	}
-	g, inGroup := boundCopyGroupOf(strings.TrimPrefix(tamperPathString(c.path), "$."))
-	if !inGroup {
+	peers := boundCopyPeers(strings.TrimPrefix(tamperPathString(c.path), "$."))
+	if len(peers) == 0 {
 		return changed
 	}
 	root, readErr := tamperDecode(changed)
 	if readErr != nil {
 		return changed
 	}
+	was := tamperValueAt(original, c.path)
 	var value any = ""
 	if c.kind == "changed" {
 		value = tamperValueAt(root, c.path)
 	}
-	for _, p := range g.paths {
+	for _, p := range peers {
 		steps := tamperKeySteps(p)
-		if _, carried := tamperValueAt(original, steps).(string); !carried {
+		peerWas := tamperValueAt(original, steps)
+		if peerWas == nil || fmt.Sprint(peerWas) != fmt.Sprint(was) {
+			continue
+		}
+		if _, text := peerWas.(string); c.kind == "deleted" && !text {
+			if next, ok := tamperApply(changed, tamperChange{kind: "deleted", path: steps}); ok {
+				changed = next
+			}
 			continue
 		}
 		if next, set := tamperSetAt(changed, steps, value); set {
@@ -538,6 +548,11 @@ func tamperSpreadList(changed []byte, original any, c tamperChange) ([]byte, boo
 				} else if item, isObject := list[index].(map[string]any); isObject {
 					item[rest] = value
 				}
+				for _, extra := range g.extras[index] {
+					if extraSteps := tamperKeySteps(extra); tamperValueAt(original, extraSteps) != nil {
+						tamperSetIn(root, extraSteps, value)
+					}
+				}
 			case "removed":
 				if len(list) == len(orig) && index >= 0 && index < len(list) {
 					parent[listSteps[len(listSteps)-1].key] = append(append([]any{}, list[:index]...), list[index+1:]...)
@@ -557,11 +572,26 @@ func tamperSpreadList(changed []byte, original any, c tamperChange) ([]byte, boo
 	return changed, false
 }
 
-// tamperKeySteps turns a dotted path of object keys into steps.
+// tamperKeySteps turns a dotted path of object keys, with list items
+// written as key[index], into steps.
 func tamperKeySteps(p string) []tamperStep {
 	var steps []tamperStep
 	for _, k := range strings.Split(p, ".") {
-		steps = append(steps, tamperStep{key: k})
+		for strings.HasSuffix(k, "]") {
+			open := strings.LastIndex(k, "[")
+			if open < 0 {
+				break
+			}
+			index, err := strconv.Atoi(k[open+1 : len(k)-1])
+			if err != nil {
+				break
+			}
+			steps = append(steps, tamperStep{key: k[:open]}, tamperStep{index: index, list: true})
+			k = ""
+		}
+		if k != "" {
+			steps = append(steps, tamperStep{key: k})
+		}
 	}
 	return steps
 }
@@ -642,6 +672,9 @@ var tamperTierOrder = []string{tierLog, tierAMD, tierStrict, tierActorOnly, tier
 
 // tamperTier places a verdict: in recompute mode by the strongest check
 // that caught it, otherwise rejected or not.
+// A change caught by several checks lands in the first tier of this
+// order: the public log, AMD's report, strict reading, the actor
+// signature. The JSON report lists every check that caught it.
 func tamperTier(v tamperVerdict, recompute bool) string {
 	if v.accepted {
 		return tierNot
@@ -711,6 +744,27 @@ func tamperWellFormed(s string) (string, bool) {
 }
 
 // tamperSetAt returns the record's JSON with the value at path replaced.
+// tamperSetIn sets value at path inside an already decoded record.
+func tamperSetIn(root any, path []tamperStep, value any) bool {
+	if len(path) == 0 {
+		return false
+	}
+	parent := tamperValueAt(root, path[:len(path)-1])
+	s := path[len(path)-1]
+	switch p := parent.(type) {
+	case map[string]any:
+		p[s.key] = value
+	case []any:
+		if s.index < 0 || s.index >= len(p) {
+			return false
+		}
+		p[s.index] = value
+	default:
+		return false
+	}
+	return true
+}
+
 func tamperSetAt(data []byte, path []tamperStep, value any) ([]byte, bool) {
 	root, readErr := tamperDecode(data)
 	if readErr != nil || len(path) == 0 {

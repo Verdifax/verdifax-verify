@@ -97,6 +97,16 @@ func anchorRun(t *testing.T, l *testLog, b *artifacts.AuditBundle) {
 	a.LogIndex, a.TreeSize, a.RootHashHex = e.LogIndex, e.TreeSize, e.RootHashHex
 	a.InclusionPath, a.Checkpoint = e.InclusionPath, e.Checkpoint
 	a.LogEntryID, a.IntegratedTime, a.SignedEntryTimestamp = e.LogEntryID, e.IntegratedTime, e.SignedEntryTimestamp
+	// The proof-of-execution section repeats the run entry's number, time
+	// and checkpoint (a copy the verifier checks since v0.17.10), so the
+	// record anchored here carries the test log's, with its section hash
+	// and the bundle hash recomputed as the server would. Neither is in
+	// the run leaf, so the entry just made still names this record.
+	b.PoteProof.LogEntryID = a.LogEntryID
+	b.PoteProof.IntegratedTime = a.IntegratedTime
+	b.PoteProof.LedgerCheckpoint = a.Checkpoint
+	b.PoteProof.Hash = artifacts.RecomputePoteProofHash(b.PoteProof)
+	b.BundleHash = artifacts.RecomputeBundleHash(b)
 }
 
 // v6Leaf rebuilds the v6 leaf from the record's own fields.
@@ -162,6 +172,9 @@ func TestV5RecordsKeepTheirV010Verdicts(t *testing.T) {
 		cases = append(cases, struct{ dir, name, tier, coverage, verdict string }{
 			"round7", name, "ANCHORED_PARTIAL_COVERAGE", "partial_descriptive_sections_bundle_sealed", partial})
 	}
+	// The strips that flipped the AER decision alone fail since v0.17.10:
+	// the EPA's attested context still carries the original decision.
+	flipped := map[string]bool{"run-238-STRIP_V1_aer_decision.json": true, "run-238-STRIP_V6_all.json": true}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var b *artifacts.AuditBundle
@@ -171,6 +184,12 @@ func TestV5RecordsKeepTheirV010Verdicts(t *testing.T) {
 				b = loadRound6(t, c.name)
 			}
 			r := verify(b)
+			if flipped[c.name] {
+				if r.VerdictTier != "FAILED" || !exitShouldFail(r, true, false) {
+					t.Fatalf("a decision flipped in the AER alone must fail: tier=%s", r.VerdictTier)
+				}
+				return
+			}
 			if r.VerdictTier != c.tier || r.RecordCoverage != c.coverage || !r.AllPassed {
 				t.Fatalf("tier=%s coverage=%s all_passed=%v, want %s %s true",
 					r.VerdictTier, r.RecordCoverage, r.AllPassed, c.tier, c.coverage)
@@ -222,11 +241,13 @@ func TestV6IntactRecordIsCompleteRecordAnchored(t *testing.T) {
 		t.Fatalf("missing complete verdict:\n%s", out)
 	}
 
-	// The committed fixture is exactly what resealing produces, so it
-	// was not hand-edited.
+	// The committed fixture is what resealing produces, so it was not
+	// hand-edited: the same run leaf, and a record digest that is its own
+	// content's (the digest covers the proof section's copy of the test
+	// log's checkpoint, whose signature differs on each reseal).
 	fresh := resealAsV6(t, l)
 	if fresh.RekorAnchor.LeafHashHex != b.RekorAnchor.LeafHashHex ||
-		fresh.BundleAnchor.AnchoredDigest != b.BundleAnchor.AnchoredDigest {
+		artifacts.ComputeAnchoredRecordDigest(b) != b.BundleAnchor.AnchoredDigest {
 		t.Fatal("fixture drifted from the resealing recipe")
 	}
 }

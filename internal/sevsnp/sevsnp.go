@@ -49,14 +49,23 @@ const (
 	bindingDomain = "verdifax.sevsnp.report_data.v1"
 )
 
-// Result reports what was checked.
+// Result reports what was checked and what the report itself says, in
+// the encodings the orchestrator writes into a record's
+// hardware_attestation.verification block, so a verifier can compare
+// that block with the report instead of trusting it.
 type Result struct {
-	ChainVerified     bool
-	SignatureVerified bool
-	ReportDataBound   bool
-	MeasurementHex    string
-	ReportIDHex       string
-	ReportVersion     uint32
+	ChainVerified         bool
+	SignatureVerified     bool
+	ReportDataBound       bool
+	MeasurementHex        string
+	ReportIDHex           string
+	ReportVersion         uint32
+	ReportDataHex         string
+	CurrentTCBHex         string // %016x of the little-endian CURRENT_TCB
+	ReportedTCBHex        string // %016x of the little-endian REPORTED_TCB
+	SigningKeyType        string // "vlek" or "vcek", from the report's flags
+	RootFingerprintSHA256 string // SHA-256 of the pinned root's DER
+	VLEKLeafSHA256        string // SHA-256 of the leaf certificate's DER
 }
 
 // BindingReportData recomputes the 64-byte run-binding value from the
@@ -88,6 +97,17 @@ func Verify(rawReport, vlekPEM, chainPEM, expectedReportData []byte) (*Result, e
 		ReportVersion:  binary.LittleEndian.Uint32(rawReport[0x00:]),
 		MeasurementHex: hex.EncodeToString(rawReport[0x90:0xC0]),
 		ReportIDHex:    hex.EncodeToString(rawReport[0x140:0x160]),
+		ReportDataHex:  hex.EncodeToString(rawReport[0x50:0x90]),
+		CurrentTCBHex:  fmt.Sprintf("%016x", binary.LittleEndian.Uint64(rawReport[0x38:])),
+		ReportedTCBHex: fmt.Sprintf("%016x", binary.LittleEndian.Uint64(rawReport[0x180:])),
+	}
+	switch (binary.LittleEndian.Uint32(rawReport[0x48:]) >> 2) & 0x7 {
+	case 0:
+		res.SigningKeyType = "vcek"
+	case 1:
+		res.SigningKeyType = "vlek"
+	default:
+		return nil, fmt.Errorf("sevsnp: unknown signing key type %d", (binary.LittleEndian.Uint32(rawReport[0x48:])>>2)&0x7)
 	}
 
 	// 1. Pinned chain.
@@ -118,6 +138,8 @@ func Verify(rawReport, vlekPEM, chainPEM, expectedReportData []byte) (*Result, e
 	if err := leaf.CheckSignatureFrom(intermediate); err != nil {
 		return nil, fmt.Errorf("sevsnp: leaf not signed by intermediate: %w", err)
 	}
+	res.RootFingerprintSHA256 = fingerprint(root)
+	res.VLEKLeafSHA256 = fingerprint(leaf)
 	res.ChainVerified = true
 
 	// 2. Report signature.
