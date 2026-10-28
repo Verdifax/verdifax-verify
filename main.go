@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.17.11"
+const Version = "0.17.12"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {

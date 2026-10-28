@@ -2,6 +2,17 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.17.12: the same verification code; allocation sizes no longer computed
+
+The four digest helpers in internal/artifacts/sealing.go sized their
+part lists from a length times two plus one, which CodeQL reports as an
+allocation size that may overflow (four open alerts on the repository
+since October 26, 2026). The tables are a few dozen rows, so no
+overflow was reachable, but the lists now grow by appending instead of
+being pre-sized, and the alerts close. Every digest is byte-identical;
+the verification code is otherwise unchanged, and only the version
+string changes.
+
 ### v0.17.11: gates named and tested, receipts under every flag, and the forger's best variant
 
 Round 45 of the external review found two copy groups that a field

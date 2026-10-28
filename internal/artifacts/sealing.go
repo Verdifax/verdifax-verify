@@ -47,7 +47,7 @@ type StageTiming struct {
 
 // ComputeRuntimeTimingHash digests the ordered measured durations.
 func ComputeRuntimeTimingHash(stages []StageTiming) string {
-	parts := make([]string, 0, len(stages)+1)
+	var parts []string
 	parts = append(parts, runtimeTimingDomain)
 	for _, s := range stages {
 		parts = append(parts, fmt.Sprintf("%s=%d", s.Stage, s.DurationNanos))
@@ -115,7 +115,7 @@ var PreAnchorNames = []string{
 // ComputePreAnchorDigestFromTable digests the table in its own order;
 // callers must first confirm the order matches PreAnchorNames.
 func ComputePreAnchorDigestFromTable(table []PreAnchorEntry) string {
-	parts := make([]string, 0, len(table)*2+1)
+	var parts []string
 	parts = append(parts, preAnchorDomain)
 	for _, e := range table {
 		parts = append(parts, e.Name, e.Value)
@@ -186,7 +186,7 @@ var PreAnchorNamesV2 = []string{
 // order under the v2 domain; callers must first confirm the order
 // matches PreAnchorNamesV2.
 func ComputePreAnchorDigestV2FromTable(table []PreAnchorEntry) string {
-	parts := make([]string, 0, len(table)*2+1)
+	var parts []string
 	parts = append(parts, PreAnchorFormV2)
 	for _, e := range table {
 		parts = append(parts, e.Name, e.Value)
@@ -232,7 +232,7 @@ var PreAnchorNamesV3 = append(append([]string(nil), PreAnchorNamesV2...), Anchor
 // order under the v3 domain; callers must first confirm the order
 // matches PreAnchorNamesV3.
 func ComputePreAnchorDigestV3FromTable(table []PreAnchorEntry) string {
-	parts := make([]string, 0, len(table)*2+1)
+	var parts []string
 	parts = append(parts, PreAnchorFormV3)
 	for _, e := range table {
 		parts = append(parts, e.Name, e.Value)
