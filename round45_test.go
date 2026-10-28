@@ -252,7 +252,7 @@ var gateDeclarationRecords = append(append([]string{}, gateRecords...), "testdat
 // R82: a group returns no value for a path the record carries only
 // through a declared gate.
 func TestEveryGateIsDeclared(t *testing.T) {
-	for _, path := range gateDeclarationRecords {
+	for _, path := range withGenuineFixtures(gateDeclarationRecords) {
 		b := mustDecode(t, path)
 		root, _ := tamperDecode(readTestRecord(t, path))
 		for _, g := range boundCopyGroups {
@@ -271,7 +271,7 @@ func TestEveryGateIsDeclared(t *testing.T) {
 // generation, unless that record already discloses every path of the
 // group as uncovered.
 func TestEveryGateIsBound(t *testing.T) {
-	for _, path := range gateRecords {
+	for _, path := range withGenuineFixtures(gateRecords) {
 		data := readTestRecord(t, path)
 		b := mustDecode(t, path)
 		root, _ := tamperDecode(data)
@@ -309,7 +309,7 @@ func TestEveryGateIsBound(t *testing.T) {
 					changed, built = tamperApply(data, c)
 				} else {
 					c = tamperChange{"changed", steps}
-					changed, built = tamperSetAt(data, steps, gate.off)
+					changed, built = tamperSetAt(data, steps, gateOffValue(root, steps, gate.off))
 				}
 				if !built {
 					t.Fatalf("%s: could not switch %s off", path, gate.path)
@@ -516,4 +516,32 @@ func requireStaleSealCopyFails(t *testing.T, name string, b *artifacts.AuditBund
 	b.SystemProvenance.Seal.SealedHash = b.SystemProvenance.Hash
 	b.BundleHash = artifacts.RecomputeBundleHash(b)
 	return b
+}
+
+// Round 46: the forger test on each anchored receipt in testdata/round10.
+// Run 241's receipt carries a v1 anchor, which binds the receipt's kind,
+// envelope id and hash but not the document's run number, so run_id is
+// its one rewritable path (the README and the docs guide say so); the
+// four receipts with a v2 anchor have none.
+func TestReceiptForgerResults(t *testing.T) {
+	cases := map[string][]string{
+		"testdata/round10/deny-receipt-run241-production.json":       {"run_id"},
+		"testdata/round10/deny-receipt-run242-production-v2.json":    {},
+		"testdata/round10/deny-receipt-run243-production-batch.json": {},
+		"testdata/round10/deny-receipt-run245-production-batch.json": {},
+		"testdata/round10/deny-receipt-run247-production-batch.json": {},
+	}
+	for path, want := range cases {
+		o, ok := tamperRun(readTestRecord(t, path), judgeReceiptForTamper, true)
+		if !ok {
+			t.Fatalf("%s: the receipt did not run", path)
+		}
+		if got := o.rewritable(); strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("%s: rewritable paths %v, want %v", path, got, want)
+		}
+	}
+	readme := strings.Join(strings.Fields(string(readTestRecord(t, "README.md"))), " ")
+	if !strings.Contains(readme, "run 241's receipt, whose v1 anchor does not bind the run number, has one rewritable path, `run_id`") {
+		t.Error("README does not state run 241's receipt's rewritable path")
+	}
 }

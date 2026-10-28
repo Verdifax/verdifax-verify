@@ -2,6 +2,32 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.17.13: every generation of record verifies as it did before the copy groups
+
+v0.17.10 to v0.17.12 rejected genuine records as rewrites. Three copy
+groups describe values the server began writing equal only at a known
+point, and they were applied to every record: the PIA hash as the fifth
+execution id (written from October 2, 2026, evening), the proof
+section's ledger name and Rekor time (from May 28, 2026) and its
+checkpoint (from June 3, 2026). Run 208 (June 2, 2026), kept in
+internal/artifacts/testdata, failed with exit 1 where v0.17.9 gave it
+partial coverage and exit 3, and so did records of the same generations
+the server holds. Each group now applies from the time the public log
+signed the record's first entry, which the log's signed entry timestamp
+covers, so a rewrite cannot move a record across a boundary without
+failing the anchor check. Each boundary is the anchoring time of the
+first record that wrote those copies equal, found by running the
+verifier read-only over every record the server has stored (the server
+repository's cmd/verdifax-verdict-map): every stored record now earns
+the verdict v0.17.9 gave it. A new test lists every record and receipt
+fixture in the repository with its class and the verdict and exit code
+it must earn, fails on any fixture it does not list, and supplies every
+genuine record to the copy, duplicate and gate tests. A test also pins
+each anchored receipt's forger result: run 241's receipt, whose v1
+anchor does not bind the run number, has one rewritable path, run_id;
+the four with a v2 anchor have none. The counts on the October 2026
+hardware run and run 249 are unchanged.
+
 ### v0.17.12: the same verification code; allocation sizes no longer computed
 
 The four digest helpers in internal/artifacts/sealing.go sized their

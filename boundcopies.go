@@ -95,11 +95,50 @@ func listItem(l []string, i int) *string {
 // names any other ledger is unanchored and fails by default.
 func rekorAnchored(b *artifacts.AuditBundle) bool { return b.RekorAnchor.Backend == "rekor" }
 
-// aivpRan reports whether the AI review ran: the server writes the PIA
-// hash into the fifth execution id only then. The outcome is a row of
+// aivpRan reports whether the AI review ran. The outcome is a row of
 // the anchored pre-anchor table.
 func aivpRan(b *artifacts.AuditBundle) bool {
 	return b.AivpT4.Outcome != "" && b.AivpT4.Outcome != "skipped"
+}
+
+// Record generations, by the time the public log signed the record's
+// first entry (rekor_anchor.integrated_time). The log's signed entry
+// timestamp covers that time, so a rewrite cannot move a record across a
+// boundary without failing the anchor check. Each boundary is the
+// anchoring time of the first record that wrote the copies equal, found
+// by running the verifier read-only over every record the server has
+// stored (scripts/refresh-verdict-map.sh, round 46): every stored record
+// anchored before it wrote them differently, every one after it equal.
+const (
+	// The proof section's ledger name and Rekor time equal the anchor's
+	// from run 192 (anchored 2026-05-28T20:59:51Z); runs 177 to 191 left
+	// them empty or held the sealing-time values.
+	poteLedgerCopiesSince int64 = 1780001991
+	// The proof section's checkpoint equals the anchor's from run 217
+	// (anchored 2026-06-03T17:36:21Z); runs up to 216 kept the
+	// checkpoint seen at sealing.
+	poteCheckpointCopiesSince int64 = 1780508181
+	// The PIA hash is the fifth execution id from the October 2026
+	// hardware run (anchored 2026-10-03T15:00:47Z) on; the server began
+	// writing it there in commit 8e0b434 that evening, after run 233.
+	piaInExecutionIDsSince int64 = 1791039647
+)
+
+// anchoredSince reports whether the record's first entry names the
+// public log and was logged at or after t.
+func anchoredSince(t int64) func(b *artifacts.AuditBundle) bool {
+	return func(b *artifacts.AuditBundle) bool {
+		return rekorAnchored(b) && b.RekorAnchor.IntegratedTime >= t
+	}
+}
+
+// piaInExecutionIDs reports whether the record is of the generation in
+// which the server writes the AI review's PIA hash into the fifth
+// execution id and the review ran. Round 46: the gate read the outcome
+// alone and failed run 208 (and every record from May 6 to October 2,
+// 2026) as a rewrite.
+func piaInExecutionIDs(b *artifacts.AuditBundle) bool {
+	return aivpRan(b) && anchoredSince(piaInExecutionIDsSince)(b)
 }
 
 // sevSnp reports whether the record claims a SEV-SNP report, which the
@@ -150,7 +189,7 @@ func transcriptFromProof(b *artifacts.AuditBundle) bool {
 var (
 	rekorGate = copyGate{path: "rekor_anchor.backend", off: "mock", active: rekorAnchored,
 		why: "the verifier dispatches on the anchor's ledger name; any other value leaves the record unanchored, which fails by default"}
-	aivpGate = copyGate{path: "aivp_t4.outcome", off: "skipped", active: aivpRan,
+	aivpGate = copyGate{path: "aivp_t4.outcome", off: "skipped", active: piaInExecutionIDs,
 		why: "the outcome is the aivp_outcome row of the anchored pre-anchor table; on the hardware run, which predates the table, the whole AI-review section is disclosed as uncovered"}
 	sevGate = copyGate{path: "hardware_attestation.attestation_mode", off: "policy_scaffold", active: sevSnp,
 		why: "the mode selects the AMD check; a record relabelled as hosted contradicts its execution record's hardware row, whose preimage the AER hash the entry binds commits to, so no rewrite verifies"}
@@ -158,6 +197,12 @@ var (
 		why: "a SEV-SNP record without a verification block fails the AMD check"}
 	hostedGate = copyGate{path: "hardware_attestation.attestation_mode", off: "sev_snp", active: func(b *artifacts.AuditBundle) bool { return !sevSnp(b) },
 		why: "a hosted record relabelled as SEV-SNP carries no report and fails the AMD check"}
+	ledgerGenerationGate = copyGate{path: "rekor_anchor.integrated_time", off: "1779000000", active: anchoredSince(poteLedgerCopiesSince),
+		why: "the time the log signed the first entry; its signed entry timestamp covers it, so it cannot be moved before the boundary without failing the anchor check"}
+	checkpointGenerationGate = copyGate{path: "rekor_anchor.integrated_time", off: "1779000000", active: anchoredSince(poteCheckpointCopiesSince),
+		why: "the time the log signed the first entry; its signed entry timestamp covers it"}
+	piaGenerationGate = copyGate{path: "rekor_anchor.integrated_time", off: "1779000000", active: anchoredSince(piaInExecutionIDsSince),
+		why: "the time the log signed the first entry; its signed entry timestamp covers it"}
 	executionRecordGate = copyGate{path: "execution_record", deleted: true, active: hasExecutionRecord,
 		why: "the execution record's rows are bound by the public-log entry from leaf v5 on and by the report-data recipe on the hardware run"}
 	clockGate = copyGate{path: "envelope.timestamp", off: "2026-10-17T00:00:00Z", active: transcriptFromProof,
@@ -239,8 +284,11 @@ var boundCopyGroups = []boundCopyGroup{
 	// the AI review ran, the PIA hash must be carried and equal (round
 	// 45: a deleted PIA hash was skipped, so its deletion verified).
 	{paths: []string{"aivp_t4.pia_hash", "aer.execution_ids[4]", "efa.steps[4].execution_id", "execution_record.kernel_output_ids[4]"},
-		gates: []copyGate{aivpGate},
+		gates: []copyGate{aivpGate, piaGenerationGate},
 		value: func(b *artifacts.AuditBundle) []*string {
+			if !piaInExecutionIDs(b) {
+				return []*string{nil, nil, nil, nil}
+			}
 			var kernel []string
 			if b.ExecutionRecord != nil {
 				kernel = b.ExecutionRecord.KernelOutputIDs
@@ -249,16 +297,16 @@ var boundCopyGroups = []boundCopyGroup{
 			if len(b.EFA.Steps) > 4 {
 				step = &b.EFA.Steps[4].ExecutionID
 			}
-			return []*string{whenCarried(aivpRan(b), b.AivpT4.PiaHash), listItem(b.AER.ExecutionIDs, 4), step, listItem(kernel, 4)}
+			return []*string{&b.AivpT4.PiaHash, listItem(b.AER.ExecutionIDs, 4), step, listItem(kernel, 4)}
 		}},
 	// The proof-of-execution section repeats the run entry's number,
 	// Rekor time and checkpoint from the anchor the verifier checks, and
 	// names the same ledger. The anchor's own ledger name is the gate
 	// (round 45: the section's name was, so a section renamed to another
 	// ledger escaped the comparison).
-	{paths: []string{"rekor_anchor.backend", "pote_proof.ledger_backend"}, gates: []copyGate{rekorGate},
+	{paths: []string{"rekor_anchor.backend", "pote_proof.ledger_backend"}, gates: []copyGate{rekorGate, ledgerGenerationGate},
 		value: func(b *artifacts.AuditBundle) []*string {
-			on := rekorAnchored(b)
+			on := anchoredSince(poteLedgerCopiesSince)(b)
 			return []*string{whenCarried(on, b.RekorAnchor.Backend), whenCarried(on, b.PoteProof.LedgerBackend)}
 		}},
 	{paths: []string{"rekor_anchor.log_entry_id", "pote_proof.log_entry_id"}, gates: []copyGate{rekorGate},
@@ -266,15 +314,15 @@ var boundCopyGroups = []boundCopyGroup{
 			on := rekorAnchored(b)
 			return []*string{whenCarried(on, b.RekorAnchor.LogEntryID), whenCarried(on, b.PoteProof.LogEntryID)}
 		}},
-	{paths: []string{"rekor_anchor.integrated_time", "pote_proof.integrated_time"}, gates: []copyGate{rekorGate},
+	{paths: []string{"rekor_anchor.integrated_time", "pote_proof.integrated_time"}, gates: []copyGate{rekorGate, ledgerGenerationGate},
 		value: func(b *artifacts.AuditBundle) []*string {
-			on := rekorAnchored(b)
+			on := anchoredSince(poteLedgerCopiesSince)(b)
 			return []*string{whenCarried(on, strconv.FormatInt(b.RekorAnchor.IntegratedTime, 10)),
 				whenCarried(on, strconv.FormatInt(b.PoteProof.IntegratedTime, 10))}
 		}},
-	{paths: []string{"rekor_anchor.checkpoint", "pote_proof.ledger_checkpoint"}, gates: []copyGate{rekorGate},
+	{paths: []string{"rekor_anchor.checkpoint", "pote_proof.ledger_checkpoint"}, gates: []copyGate{rekorGate, checkpointGenerationGate},
 		value: func(b *artifacts.AuditBundle) []*string {
-			on := rekorAnchored(b)
+			on := anchoredSince(poteCheckpointCopiesSince)(b)
 			return []*string{whenCarried(on, b.RekorAnchor.Checkpoint), whenCarried(on, b.PoteProof.LedgerCheckpoint)}
 		}},
 	// The transcript records the hash the ZK stage ran over. From run

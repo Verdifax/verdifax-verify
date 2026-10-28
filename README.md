@@ -185,7 +185,7 @@ record already publishes the field as rewritable, and a group that
 reads no value for a path the record carries without a declared gate
 fails the build. Round 45 of the external review found two groups a
 declared field could switch off (the entry copies read the proof
-section's own ledger name; a deleted PIA hash was skipped).
+section's own ledger name; a deleted PIA hash was skipped). Three groups describe what the server began writing only at a known point, so since v0.17.13 each applies from the time the public log signed the record's first entry, which the log's signed entry timestamp covers: the proof section's ledger name and Rekor time from 2026-05-28T20:59:51Z, its checkpoint from 2026-06-03T17:36:21Z, and the PIA hash as the fifth execution id from 2026-10-03T15:00:47Z (the hardware run). Each boundary is the anchoring time of the first record that wrote those copies equal, found by running the verifier read-only over every record the server has stored; v0.17.10 to v0.17.12 applied the groups to every record and so rejected genuine records sealed before those points, run 208 (June 2, 2026) in `internal/artifacts/testdata` among them, which v0.17.13 corrects. Since v0.17.13 a test lists every record and receipt fixture in the repository with the verdict it must earn and fails on any fixture it does not list, and the copy, duplicate and gate tests read every genuine record from that list.
 
 For every change that fails, the report also names the checks that
 caught it, since v0.17.7: an internal hash, the first public-log entry,
@@ -563,7 +563,7 @@ receipt document: it changes every value as it does for a bundle and
 judges each change by the receipt's hash, its public-log entry and the
 entry's signer and timestamps; the forger's recompute rebuilds the
 receipt's hash and writes it wherever the old one appeared, the anchor's
-copy included.
+copy included. On the anchored receipts in `testdata/round10`, run 241's receipt, whose v1 anchor does not bind the run number, has one rewritable path, `run_id`, and the forger test exits 1 on it; the four receipts with a v2 anchor have none.
 
 **Also checks, since v0.10.0:** that each logged entry body names the
 leaf the bundle claims for it. The Merkle proof covers the hashedrekord

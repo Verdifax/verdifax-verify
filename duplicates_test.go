@@ -148,7 +148,7 @@ func groupedPaths() map[string]bool {
 
 func TestEveryDuplicatedValueIsAccountedFor(t *testing.T) {
 	grouped := groupedPaths()
-	for _, file := range duplicateRecords {
+	for _, file := range withGenuineFixtures(duplicateRecords) {
 		raw, readErr := os.ReadFile(file)
 		if readErr != nil {
 			t.Fatal(readErr)
@@ -275,7 +275,7 @@ func allGrouped(paths []string, odd string, grouped map[string]bool) bool {
 // list cannot silently excuse a path that no longer exists.
 func TestListedCoincidencesStillOccur(t *testing.T) {
 	seen := map[string]bool{}
-	for _, file := range duplicateRecords {
+	for _, file := range withGenuineFixtures(duplicateRecords) {
 		raw, _ := os.ReadFile(file)
 		var root any
 		if err := json.Unmarshal(raw, &root); err != nil {

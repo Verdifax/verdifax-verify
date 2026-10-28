@@ -19,7 +19,7 @@ var boundCopyRecords = []string{
 }
 
 func TestPublishedRecordsHaveConsistentCopies(t *testing.T) {
-	for _, path := range boundCopyRecords {
+	for _, path := range withGenuineFixtures(boundCopyRecords) {
 		if failures := verifyBoundCopies(mustDecode(t, path)); len(failures) > 0 {
 			t.Errorf("%s: %v", path, failures)
 		}
@@ -27,7 +27,7 @@ func TestPublishedRecordsHaveConsistentCopies(t *testing.T) {
 }
 
 func TestEveryCopyOfABoundValueMustAgree(t *testing.T) {
-	for _, path := range boundCopyRecords {
+	for _, path := range withGenuineFixtures(boundCopyRecords) {
 		data := readTestRecord(t, path)
 		root, readErr := tamperDecode(data)
 		if readErr != nil {
@@ -37,6 +37,17 @@ func TestEveryCopyOfABoundValueMustAgree(t *testing.T) {
 		b0 := mustDecode(t, path)
 		for _, g := range boundCopyGroups {
 			vals := g.value(b0)
+			// A group with fewer than two copies on this record (run 208
+			// carries no execution record) compares nothing here.
+			carriedCopies := 0
+			for _, v := range vals {
+				if v != nil {
+					carriedCopies++
+				}
+			}
+			if carriedCopies < 2 {
+				continue
+			}
 			for i, p := range g.paths {
 				steps := tamperKeySteps(p)
 				old, carried := tamperValueAt(root, steps).(string)

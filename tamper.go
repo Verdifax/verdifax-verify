@@ -474,6 +474,23 @@ func tamperRecompute(data []byte) []byte {
 	return data
 }
 
+// gateOffValue is a gate's off value in the form the field holds in the
+// original record: a number where the record holds a number, so the
+// switched-off record still decodes and is judged by its checks.
+func gateOffValue(root any, steps []tamperStep, off string) any {
+	switch tamperValueAt(root, steps).(type) {
+	case json.Number:
+		if _, parseErr := strconv.ParseFloat(off, 64); parseErr == nil {
+			return json.Number(off)
+		}
+	case float64:
+		if n, parseErr := strconv.ParseFloat(off, 64); parseErr == nil {
+			return n
+		}
+	}
+	return off
+}
+
 // tamperRecomputeReceipt rewrites a receipt the way a forger would: the
 // receipt's hash is rebuilt from its fields and written wherever the old
 // hash appears, the anchor's copy included. The public-log entry's leaf
@@ -1014,7 +1031,7 @@ func tamperRun(data []byte, judge tamperJudge, recompute bool) (tamperOutcome, b
 					if gate.deleted {
 						off, built = tamperApply(base, tamperChange{"deleted", steps})
 					} else {
-						off, built = tamperSetAt(base, steps, gate.off)
+						off, built = tamperSetAt(base, steps, gateOffValue(root, steps, gate.off))
 					}
 					if built {
 						add(off, "in one copy with "+gate.path+" switched off")
