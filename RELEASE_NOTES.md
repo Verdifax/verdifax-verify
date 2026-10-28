@@ -2,6 +2,25 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.17.14: copy groups switched off only where the server wrote them differently
+
+v0.17.13 switched each of three copy groups off for every record
+anchored before one boundary, but the server's stored records show it
+wrote some of those copies equal before the boundary too: runs 202 to
+212 wrote the proof section's checkpoint equal to the anchor's, and
+runs 132 to 139 wrote the PIA hash as the fifth execution id. On run 208
+(June 2, 2026) in internal/artifacts/testdata the checkpoint copy,
+written equal, was left uncompared, so a rewrite of it alone verified;
+v0.17.12 had compared it. Each group is now switched off only inside the
+windows, by the time the public log signed the record's first entry,
+that span a run of consecutive stored records which all wrote the copies
+differently (the README lists them), and compared everywhere else. A
+test fails if any window switches off copies a genuine fixture wrote
+equal, and the forger's rewritable-path count on every genuine fixture
+is pinned (run 208: 287, one fewer than under v0.17.13). Every stored
+record keeps the verdict v0.17.13 gave it, and the counts on the
+October 2026 hardware run and run 249 are unchanged.
+
 ### v0.17.13: every generation of record verifies as it did before the copy groups
 
 v0.17.10 to v0.17.12 rejected genuine records as rewrites. Three copy

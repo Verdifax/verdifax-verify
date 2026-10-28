@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -175,4 +176,74 @@ func withGenuineFixtures(list []string) []string {
 		}
 	}
 	return out
+}
+
+// Round 47: a copy group switched off by an anchoring window must never
+// be off on a genuine record that wrote its copies equal; the windows
+// hold only records that wrote them differently.
+func TestNoWindowSwitchesOffCopiesThatAgree(t *testing.T) {
+	for _, path := range genuineRecordFixtures() {
+		b := mustDecode(t, path)
+		root, _ := tamperDecode(readTestRecord(t, path))
+		for _, g := range boundCopyGroups {
+			for _, gate := range g.gates {
+				if gate.path != "rekor_anchor.integrated_time" || !rekorAnchored(b) || gate.active(b) {
+					continue
+				}
+				var carried []string
+				for _, p := range g.paths {
+					if v := tamperValueAt(root, tamperKeySteps(p)); v != nil {
+						carried = append(carried, fmt.Sprint(v))
+					}
+				}
+				same := len(carried) >= 2
+				for _, v := range carried {
+					same = same && v == carried[0]
+				}
+				if same {
+					t.Errorf("%s: the group %v is switched off by an anchoring window, yet the record wrote its copies equal", path, g.paths)
+				}
+			}
+		}
+	}
+}
+
+// Round 47: the forger's rewritable-path count on every genuine record
+// fixture is pinned, so a change that frees or binds a path on any
+// record generation (run 208's checkpoint copy, freed by a boundary in
+// v0.17.13 before this test existed) fails here. Run 238 predates the
+// requirement for a complete-record anchor, so deleting its anchor or
+// renaming its backend earns partial coverage, as the security page
+// says; runs 208 and 237 and the hardware run predate leaf v5.
+var genuineForgerRewritable = map[string]int{
+	"internal/artifacts/testdata/golden-bundle-run-208.json": 287,
+	"testdata/round18/run-249-production.json":               0,
+	"testdata/round22/run-253-production.json":               0,
+	"testdata/round40/hardware-run-2026-10.json":             291,
+	"testdata/round45/run-248-production.json":               0,
+	"testdata/round6/run-237-intact.json":                    245,
+	"testdata/round7/run-238-intact.json":                    2,
+	"testdata/round8/hardware-run-2026-10.json":              291,
+	"testdata/round8/run-239-intact.json":                    0,
+}
+
+func TestEveryGenuineFixtureKeepsItsForgerResult(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs the forger mode on every genuine record")
+	}
+	genuine := genuineRecordFixtures()
+	for _, path := range genuine {
+		if _, pinned := genuineForgerRewritable[path]; !pinned {
+			t.Errorf("%s is a genuine record fixture without a pinned forger result", path)
+		}
+	}
+	for path, want := range genuineForgerRewritable {
+		o, ok := tamperRun(readTestRecord(t, path), memoJudge, true)
+		if !ok {
+			t.Fatalf("%s: the record did not run", path)
+		}
+		if got := len(o.rewritable()); got != want {
+			t.Errorf("%s: %d rewritable paths, pinned %d", path, got, want)
+		}
+	}
 }

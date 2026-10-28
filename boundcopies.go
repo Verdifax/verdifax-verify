@@ -103,32 +103,52 @@ func aivpRan(b *artifacts.AuditBundle) bool {
 
 // Record generations, by the time the public log signed the record's
 // first entry (rekor_anchor.integrated_time). The log's signed entry
-// timestamp covers that time, so a rewrite cannot move a record across a
-// boundary without failing the anchor check. Each boundary is the
-// anchoring time of the first record that wrote the copies equal, found
-// by running the verifier read-only over every record the server has
-// stored (scripts/refresh-verdict-map.sh, round 46): every stored record
-// anchored before it wrote them differently, every one after it equal.
-const (
-	// The proof section's ledger name and Rekor time equal the anchor's
-	// from run 192 (anchored 2026-05-28T20:59:51Z); runs 177 to 191 left
-	// them empty or held the sealing-time values.
-	poteLedgerCopiesSince int64 = 1780001991
-	// The proof section's checkpoint equals the anchor's from run 217
-	// (anchored 2026-06-03T17:36:21Z); runs up to 216 kept the
-	// checkpoint seen at sealing.
-	poteCheckpointCopiesSince int64 = 1780508181
-	// The PIA hash is the fifth execution id from the October 2026
-	// hardware run (anchored 2026-10-03T15:00:47Z) on; the server began
-	// writing it there in commit 8e0b434 that evening, after run 233.
-	piaInExecutionIDsSince int64 = 1791039647
+// timestamp covers that time, so a rewrite cannot move a record into or
+// out of a window without failing the anchor check. Each window spans,
+// from first to last, a run of consecutive stored records that wrote a
+// pair of copies differently, found by running the verifier read-only
+// over every record the server has stored (scripts/refresh-verdict-map.sh,
+// round 46): every stored record inside a window wrote them differently,
+// and every stored record outside every window wrote them equal, so the
+// copies are compared everywhere the server is known to have written
+// them equal. Round 47: a single boundary per group left them
+// uncompared on earlier records that had written them equal (run 208's
+// checkpoint).
+type anchoringWindow struct {
+	from, to int64
+}
+
+var (
+	// The proof section's ledger name and Rekor time: runs 132 to 191
+	// (2026-05-05T23:18:36Z to 2026-05-28T20:28:03Z) left them empty or
+	// held the values seen at sealing.
+	poteLedgerDiffers = []anchoringWindow{{1778023116, 1780000083}}
+	// The proof section's checkpoint: runs 132 to 201
+	// (2026-05-05T23:18:36Z to 2026-05-29T14:12:37Z) and runs 213 to 216
+	// (2026-06-03T07:40:00Z to 17:26:01Z) kept the checkpoint seen at
+	// sealing; runs 202 to 212 between them wrote it equal.
+	poteCheckpointDiffers = []anchoringWindow{{1778023116, 1780063957}, {1780472400, 1780507561}}
+	// The PIA hash as the fifth execution id: runs 140 to 233
+	// (2026-05-06T09:40:55Z to 2026-10-02T16:25:46Z) held another value
+	// there; the server began writing the PIA hash there in commit
+	// 8e0b434 that evening.
+	piaDiffers = []anchoringWindow{{1778060455, 1790958346}}
 )
 
-// anchoredSince reports whether the record's first entry names the
-// public log and was logged at or after t.
-func anchoredSince(t int64) func(b *artifacts.AuditBundle) bool {
+// anchoredOutside reports whether the record's first entry names the
+// public log and was logged outside every window.
+func anchoredOutside(windows []anchoringWindow) func(b *artifacts.AuditBundle) bool {
 	return func(b *artifacts.AuditBundle) bool {
-		return rekorAnchored(b) && b.RekorAnchor.IntegratedTime >= t
+		if !rekorAnchored(b) {
+			return false
+		}
+		t := b.RekorAnchor.IntegratedTime
+		for _, w := range windows {
+			if t >= w.from && t <= w.to {
+				return false
+			}
+		}
+		return true
 	}
 }
 
@@ -138,7 +158,7 @@ func anchoredSince(t int64) func(b *artifacts.AuditBundle) bool {
 // alone and failed run 208 (and every record from May 6 to October 2,
 // 2026) as a rewrite.
 func piaInExecutionIDs(b *artifacts.AuditBundle) bool {
-	return aivpRan(b) && anchoredSince(piaInExecutionIDsSince)(b)
+	return aivpRan(b) && anchoredOutside(piaDiffers)(b)
 }
 
 // sevSnp reports whether the record claims a SEV-SNP report, which the
@@ -197,11 +217,11 @@ var (
 		why: "a SEV-SNP record without a verification block fails the AMD check"}
 	hostedGate = copyGate{path: "hardware_attestation.attestation_mode", off: "sev_snp", active: func(b *artifacts.AuditBundle) bool { return !sevSnp(b) },
 		why: "a hosted record relabelled as SEV-SNP carries no report and fails the AMD check"}
-	ledgerGenerationGate = copyGate{path: "rekor_anchor.integrated_time", off: "1779000000", active: anchoredSince(poteLedgerCopiesSince),
-		why: "the time the log signed the first entry; its signed entry timestamp covers it, so it cannot be moved before the boundary without failing the anchor check"}
-	checkpointGenerationGate = copyGate{path: "rekor_anchor.integrated_time", off: "1779000000", active: anchoredSince(poteCheckpointCopiesSince),
+	ledgerGenerationGate = copyGate{path: "rekor_anchor.integrated_time", off: "1779000000", active: anchoredOutside(poteLedgerDiffers),
+		why: "the time the log signed the first entry; its signed entry timestamp covers it, so it cannot be moved into a window without failing the anchor check"}
+	checkpointGenerationGate = copyGate{path: "rekor_anchor.integrated_time", off: "1779000000", active: anchoredOutside(poteCheckpointDiffers),
 		why: "the time the log signed the first entry; its signed entry timestamp covers it"}
-	piaGenerationGate = copyGate{path: "rekor_anchor.integrated_time", off: "1779000000", active: anchoredSince(piaInExecutionIDsSince),
+	piaGenerationGate = copyGate{path: "rekor_anchor.integrated_time", off: "1779000000", active: anchoredOutside(piaDiffers),
 		why: "the time the log signed the first entry; its signed entry timestamp covers it"}
 	executionRecordGate = copyGate{path: "execution_record", deleted: true, active: hasExecutionRecord,
 		why: "the execution record's rows are bound by the public-log entry from leaf v5 on and by the report-data recipe on the hardware run"}
@@ -306,7 +326,7 @@ var boundCopyGroups = []boundCopyGroup{
 	// ledger escaped the comparison).
 	{paths: []string{"rekor_anchor.backend", "pote_proof.ledger_backend"}, gates: []copyGate{rekorGate, ledgerGenerationGate},
 		value: func(b *artifacts.AuditBundle) []*string {
-			on := anchoredSince(poteLedgerCopiesSince)(b)
+			on := anchoredOutside(poteLedgerDiffers)(b)
 			return []*string{whenCarried(on, b.RekorAnchor.Backend), whenCarried(on, b.PoteProof.LedgerBackend)}
 		}},
 	{paths: []string{"rekor_anchor.log_entry_id", "pote_proof.log_entry_id"}, gates: []copyGate{rekorGate},
@@ -316,13 +336,13 @@ var boundCopyGroups = []boundCopyGroup{
 		}},
 	{paths: []string{"rekor_anchor.integrated_time", "pote_proof.integrated_time"}, gates: []copyGate{rekorGate, ledgerGenerationGate},
 		value: func(b *artifacts.AuditBundle) []*string {
-			on := anchoredSince(poteLedgerCopiesSince)(b)
+			on := anchoredOutside(poteLedgerDiffers)(b)
 			return []*string{whenCarried(on, strconv.FormatInt(b.RekorAnchor.IntegratedTime, 10)),
 				whenCarried(on, strconv.FormatInt(b.PoteProof.IntegratedTime, 10))}
 		}},
 	{paths: []string{"rekor_anchor.checkpoint", "pote_proof.ledger_checkpoint"}, gates: []copyGate{rekorGate, checkpointGenerationGate},
 		value: func(b *artifacts.AuditBundle) []*string {
-			on := anchoredSince(poteCheckpointCopiesSince)(b)
+			on := anchoredOutside(poteCheckpointDiffers)(b)
 			return []*string{whenCarried(on, b.RekorAnchor.Checkpoint), whenCarried(on, b.PoteProof.LedgerCheckpoint)}
 		}},
 	// The transcript records the hash the ZK stage ran over. From run
