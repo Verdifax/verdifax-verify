@@ -183,6 +183,9 @@ func TestV5RecordsKeepTheirV010Verdicts(t *testing.T) {
 			} else {
 				b = loadRound6(t, c.name)
 			}
+			if !flipped[c.name] {
+				b = requireStaleSealCopyFails(t, c.name, b)
+			}
 			r := verify(b)
 			if flipped[c.name] {
 				if r.VerdictTier != "FAILED" || !exitShouldFail(r, true, false) {

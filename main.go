@@ -53,6 +53,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -66,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.17.10"
+const Version = "0.17.11"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -160,19 +161,39 @@ type Report struct {
 	passedExceptRequirement bool
 }
 
+// options are the command-line flags. They are defined on a FlagSet so
+// a test can enumerate them (TestEveryFlagNamesItsInputKinds).
+type options struct {
+	jsonOutput      *bool
+	strictMode      *bool
+	allowPartial    *bool
+	allowUnanchored *bool
+	showVersion     *bool
+	selfHosted      *bool
+	policyFile      *string
+	tamperTest      *bool
+	recomputeHashes *bool
+	showEvidence    *bool
+}
+
+func defineFlags(fs *flag.FlagSet) options {
+	return options{
+		jsonOutput:      fs.Bool("json", false, "emit machine-readable JSON instead of human report"),
+		strictMode:      fs.Bool("strict", false, "fail (exit 1) on any scaffold-flagged value"),
+		allowPartial:    fs.Bool("allow-partial", false, "exit 0 for a record whose public-log anchor binds only part of it (a record sealed before leaf v5, or one without a verified complete-record anchor); without this flag such a record exits 3, because its unanchored sections could have been rewritten together with their hashes"),
+		allowUnanchored: fs.Bool("allow-unanchored", false, "exit 0 for a bundle with no public-log anchor; without this flag, unanchored bundles fail, because every sealing property this tool checks hangs off the anchor and an attacker can strip an anchor claim by editing one unprotected field (the documented downgrade attack)"),
+		showVersion:     fs.Bool("version", false, "print version and exit"),
+		selfHosted:      fs.Bool("self-hosted-receipt", false, "the receipt was issued by a test or self-hosted deployment that does not anchor receipts on the public log, not by the Verdifax API; exempts it from the rules that receipts dated from run 241 on must carry a public-log anchor and receipts dated from run 242 on must seal anchor_required"),
+		policyFile:      fs.String("policy", "", "a policy document (JSON) to check against the policy gate the record seals: its recomputed policy hash, identifier, name and version must equal the sealed values, or verification fails"),
+		tamperTest:      fs.Bool("tamper-test", false, "change every value one at a time, delete every key holding a value, remove and append list items and add unknown keys, and report any change the verifier accepts and which checks caught the rest; exit 0 only if every change fails"),
+		recomputeHashes: fs.Bool("recompute-hashes", false, "with --tamper-test, play a forger who rewrites the whole record: after each change, recompute every hash the record itself determines, and count a change as stopped only when a check no rewrite can satisfy catches it (the public-log entries, their signer and timestamps, the actor signature or AMD's report signature)"),
+		showEvidence:    fs.Bool("show-evidence-summary", false, "print a one-glance maturity summary (real vs scaffold counts, Rekor anchor status, PoTE preimage version, strict-mode gate disposition) and exit; combine with --json for machine-readable form"),
+	}
+}
+
 func main() {
-	var (
-		jsonOutput      = flag.Bool("json", false, "emit machine-readable JSON instead of human report")
-		strictMode      = flag.Bool("strict", false, "fail (exit 1) on any scaffold-flagged value")
-		allowPartial    = flag.Bool("allow-partial", false, "exit 0 for a record whose public-log anchor binds only part of it (a record sealed before leaf v5, or one without a verified complete-record anchor); without this flag such a record exits 3, because its unanchored sections could have been rewritten together with their hashes")
-		allowUnanchored = flag.Bool("allow-unanchored", false, "exit 0 for a bundle with no public-log anchor; without this flag, unanchored bundles fail, because every sealing property this tool checks hangs off the anchor and an attacker can strip an anchor claim by editing one unprotected field (the documented downgrade attack)")
-		showVersion     = flag.Bool("version", false, "print version and exit")
-		selfHosted      = flag.Bool("self-hosted-receipt", false, "the receipt was issued by a test or self-hosted deployment that does not anchor receipts on the public log, not by the Verdifax API; exempts it from the rules that receipts dated from run 241 on must carry a public-log anchor and receipts dated from run 242 on must seal anchor_required")
-		policyFile      = flag.String("policy", "", "a policy document (JSON) to check against the policy gate the record seals: its recomputed policy hash, identifier, name and version must equal the sealed values, or verification fails")
-		tamperTest      = flag.Bool("tamper-test", false, "change every value one at a time, delete every key holding a value, remove and append list items and add unknown keys, and report any change the verifier accepts and which checks caught the rest; exit 0 only if every change fails")
-		recomputeHashes = flag.Bool("recompute-hashes", false, "with --tamper-test, play a forger who rewrites the whole record: after each change, recompute every hash the record itself determines, and count a change as stopped only when a check no rewrite can satisfy catches it (the public-log entries, their signer and timestamps, the actor signature or AMD's report signature)")
-		showEvidence    = flag.Bool("show-evidence-summary", false, "print a one-glance maturity summary (real vs scaffold counts, Rekor anchor status, PoTE preimage version, strict-mode gate disposition) and exit; combine with --json for machine-readable form")
-	)
+	o := defineFlags(flag.CommandLine)
+	jsonOutput, strictMode, allowPartial, allowUnanchored, showVersion, selfHosted, policyFile, tamperTest, recomputeHashes, showEvidence := o.jsonOutput, o.strictMode, o.allowPartial, o.allowUnanchored, o.showVersion, o.selfHosted, o.policyFile, o.tamperTest, o.recomputeHashes, o.showEvidence
 	flag.Usage = printUsage
 	flag.Parse()
 
@@ -197,8 +218,25 @@ func main() {
 		fmt.Fprintln(os.Stderr, "verdifax-verify:", inputErr)
 		os.Exit(2)
 	}
-	// A refused or halted run's receipt document (v0.13.0).
+	if *recomputeHashes && !*tamperTest {
+		fmt.Fprintln(os.Stderr, "verdifax-verify: --recompute-hashes only applies with --tamper-test")
+		os.Exit(2)
+	}
+	// Round 45 (R82): a flag that does not apply to this kind of input
+	// is refused, never ignored.
+	inputKind := inputBundle
 	if isReceiptDocument(data) {
+		inputKind = inputReceipt
+	}
+	if refused := flagsRefusedFor(inputKind); len(refused) > 0 {
+		fmt.Fprintln(os.Stderr, "verdifax-verify:", refusedFlagsMessage(refused, inputKind))
+		os.Exit(2)
+	}
+	// A refused or halted run's receipt document (v0.13.0).
+	if inputKind == inputReceipt {
+		if *tamperTest {
+			os.Exit(runTamperTestOutput(os.Stdout, data, judgeReceiptForTamper, *recomputeHashes, *jsonOutput))
+		}
 		doc, docErr := artifacts.DecodeReceiptStrict(data)
 		if errors.Is(docErr, artifacts.ErrNotStrictJSON) {
 			reportAmbiguousJSON(docErr, "receipt", *jsonOutput)
@@ -232,10 +270,6 @@ func main() {
 		os.Exit(2)
 	}
 
-	if *recomputeHashes && !*tamperTest {
-		fmt.Fprintln(os.Stderr, "verdifax-verify: --recompute-hashes only applies with --tamper-test")
-		os.Exit(2)
-	}
 	if *tamperTest {
 		os.Exit(runTamperTestOutput(os.Stdout, data, judgeForTamper, *recomputeHashes, *jsonOutput))
 	}
@@ -595,6 +629,51 @@ func readInput() ([]byte, error) {
 // exactly, and only the first JSON value is read, so data after it is
 // refused by the strict decoder of the right kind rather than routing
 // the input elsewhere; the strict decoder then judges the whole document.
+// The kinds of input the verifier reads, and which flags apply to each.
+// A flag listed for one kind is refused with exit 2 on the other, never
+// ignored (round 45: --policy, --strict, --allow-partial,
+// --show-evidence-summary and --tamper-test were ignored on a receipt,
+// and --self-hosted-receipt on a bundle). Every flag the binary defines
+// must appear here (TestEveryFlagNamesItsInputKinds).
+const (
+	inputBundle  = "an audit bundle"
+	inputReceipt = "a receipt document"
+	inputBoth    = "both"
+)
+
+var flagInputKinds = map[string]string{
+	"json": inputBoth, "version": inputBoth, "allow-unanchored": inputBoth,
+	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
+	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBundle, "show-evidence-summary": inputBundle,
+	"self-hosted-receipt": inputReceipt,
+}
+
+// flagsRefusedFor returns the flags set on the command line that do not
+// apply to the input kind, sorted. A flag this table does not know is
+// refused too, so a new flag cannot ship unclassified.
+func flagsRefusedFor(kind string) []string {
+	var refused []string
+	flag.Visit(func(f *flag.Flag) {
+		if applies, known := flagInputKinds[f.Name]; !known || (applies != inputBoth && applies != kind) {
+			refused = append(refused, "--"+f.Name)
+		}
+	})
+	sort.Strings(refused)
+	return refused
+}
+
+func refusedFlagsMessage(refused []string, kind string) string {
+	other := inputReceipt
+	if kind == inputReceipt {
+		other = inputBundle
+	}
+	verb := "applies"
+	if len(refused) > 1 {
+		verb = "apply"
+	}
+	return fmt.Sprintf("%s %s only to %s; this input is %s", strings.Join(refused, " and "), verb, other, kind)
+}
+
 func isReceiptDocument(data []byte) bool {
 	var top map[string]json.RawMessage
 	if json.NewDecoder(bytes.NewReader(data)).Decode(&top) != nil {

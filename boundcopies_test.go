@@ -34,17 +34,18 @@ func TestEveryCopyOfABoundValueMustAgree(t *testing.T) {
 			t.Fatal(readErr)
 		}
 		checked := 0
+		b0 := mustDecode(t, path)
 		for _, g := range boundCopyGroups {
+			vals := g.value(b0)
 			for i, p := range g.paths {
 				steps := tamperKeySteps(p)
 				old, carried := tamperValueAt(root, steps).(string)
-				if !carried {
-					continue
-				}
-				// In an anyOf group only the copy (the first path) and the
-				// source it was written from are bound to each other; the
-				// other source may differ on its own.
-				if g.anyOf && i > 0 && fmt.Sprint(tamperValueAt(root, tamperKeySteps(g.paths[0]))) != old {
+				// A path the group reads no value from on this record is
+				// behind a declared gate (TestEveryGateIsDeclared); a path
+				// that is itself the gate switches the group off when it
+				// changes, and the record fails elsewhere
+				// (TestEveryGateIsBound).
+				if !carried || vals[i] == nil || isGatePath(g, p) {
 					continue
 				}
 				changed, set := tamperSetAt(data, steps, tamperAltered(old))
@@ -274,8 +275,20 @@ func TestForgerSpreadsTheNewCopies(t *testing.T) {
 // checks; the number must be the list's length, not a remembered count.
 func TestReadmeStatesTheCopyGroupCount(t *testing.T) {
 	readme := strings.Join(strings.Fields(string(readTestRecord(t, "README.md"))), " ")
-	want := fmt.Sprintf("the %d groups listed in `boundcopies.go`", len(boundCopyGroups))
+	if len(boundListGroups) != 1 {
+		t.Fatalf("%d list groups; the README says one", len(boundListGroups))
+	}
+	want := fmt.Sprintf("the %d copy groups and one list group listed in `boundcopies.go`", len(boundCopyGroups))
 	if !strings.Contains(readme, want) {
 		t.Errorf("README does not state %q", want)
 	}
+}
+
+func isGatePath(g boundCopyGroup, p string) bool {
+	for _, gate := range g.gates {
+		if gate.path == p {
+			return true
+		}
+	}
+	return false
 }

@@ -123,49 +123,12 @@ func verifyPreAnchor(b *artifacts.AuditBundle) PreAnchorCheck {
 		}
 	}
 
-	// 3. CONSISTENCY, entry by entry against the displaying section.
-	expect := func(name, displayed, where string) {
-		if v, ok := table[name]; ok && v != displayed {
-			fail("%s: anchored %q, but %s displays %q", name, safePrefix(v), where, safePrefix(displayed))
+	// 3. CONSISTENCY, row by row against the displaying section.
+	for _, row := range preAnchorDisplayedRows(b, table) {
+		if v, ok := table[row.name]; ok && v != row.displayed {
+			fail("%s: anchored %q, but %s displays %q", row.name, safePrefix(v), row.where, safePrefix(row.displayed))
 		}
 	}
-	expect("program_id", b.Envelope.ProgramID, "envelope.program_id")
-	expect("route_id", b.Envelope.RouteID, "envelope.route_id")
-	expect("registry_record_hash", b.Envelope.RegistryRecordHash, "envelope.registry_record_hash")
-	expect("envelope_id", b.Envelope.EnvelopeID, "envelope.envelope_id")
-	expect("input_hash", b.Payload.ContentHash, "payload.content_hash")
-	expect("envelope_hash", b.Envelope.Seal.SealedHash, "envelope.seal")
-	expect("transport_hash", b.Transport.Seal.SealedHash, "transport.seal")
-	expect("epa_hash", b.EPA.Seal.SealedHash, "epa.seal")
-	expect("efa_hash", b.EFA.Seal.SealedHash, "efa.seal")
-	expect("aer_hash", b.AER.Seal.SealedHash, "aer.seal")
-	expect("execution_ids", strings.Join(b.AER.ExecutionIDs, ","), "aer.execution_ids")
-	expect("aivp_outcome", b.AivpT4.Outcome, "aivp_t4.outcome")
-	expect("aivp_adapter_id", b.AivpT4.AdapterID, "aivp_t4.adapter_id")
-	expect("aivp_pia_hash", b.AivpT4.PiaHash, "aivp_t4.pia_hash")
-	expect("aivp_ai_output_hash", b.AivpT4.AiOutputHash, "aivp_t4.ai_output_hash")
-	expect("aivp_halt_receipt_hash", b.AivpT4.HaltReceiptHash, "aivp_t4.halt_receipt_hash")
-	expect("transcript_hash", b.Transcript.Seal.SealedHash, "transcript.seal")
-	expect("hardware_attestation_hash", b.HardwareAttestation.Seal.SealedHash, "hardware_attestation.seal")
-	expect("leakage_bundle_hash", b.LeakageBundle.Seal.SealedHash, "leakage_bundle.seal")
-	expect("zksp_binding_hash", b.ZkspBinding.Seal.SealedHash, "zksp_binding.seal")
-	expect("formal_verifier_status", b.ZkspBinding.VerificationStatus, "zksp_binding.verification_status")
-	expect("migration_token_hash", b.MigrationToken.Seal.SealedHash, "migration_token.seal")
-	expect("replay_fingerprint", b.ReplayFingerprint.Seal.SealedHash, "replay_fingerprint.seal")
-	expect("nrep_actor_id", b.Nrep.ActorID, "nrep.actor_id")
-	expect("nrep_public_key", b.Nrep.PublicKey, "nrep.public_key")
-	expect("nrep_signature", b.Nrep.Signature, "nrep.signature")
-	expect("nrep_signed_at", b.Nrep.SignedAt, "nrep.signed_at")
-	expect("attested_digest",
-		artifacts.ComputeAttestedContextDigest(b.EPA.AttestedContext),
-		"epa.attested_context (recomputed digest)")
-	expect("scaffold_flags_hash",
-		artifacts.ComputeScaffoldFlagsHash(
-			b.Transcript.Scaffold.IsScaffold,
-			b.HardwareAttestation.Scaffold.IsScaffold,
-			b.ZkspBinding.Scaffold.IsScaffold,
-			b.LeakageBundle.Scaffold.IsScaffold),
-		"the four scaffold flags (recomputed digest)")
 
 	out := PreAnchorCheck{Performed: true, Form: form, Rows: len(b.PreAnchor), Failures: failures}
 	out.Match = len(failures) == 0
@@ -173,6 +136,83 @@ func verifyPreAnchor(b *artifacts.AuditBundle) PreAnchorCheck {
 		out.Reason = "the record's contents disagree with its anchored pre-anchor table"
 	}
 	return out
+}
+
+// preAnchorRow is one table row and the value the record displays for it.
+type preAnchorRow struct{ name, displayed, where string }
+
+// preAnchorDisplayedRows lists every table row the verifier compares with
+// the record, with the value the record displays for it. Round 45
+// (R82): this list is the one source for the check and for the
+// enumeration test's account of which rows are compared, and every row
+// of the frozen table is either here or in preAnchorRowKinds. Round 45
+// added the policy gate's outcome, the run clock and the deny-receipt
+// row, which the table carried and nothing compared.
+func preAnchorDisplayedRows(b *artifacts.AuditBundle, table map[string]string) []preAnchorRow {
+	rows := []preAnchorRow{
+		{"program_id", b.Envelope.ProgramID, "envelope.program_id"},
+		{"route_id", b.Envelope.RouteID, "envelope.route_id"},
+		{"registry_record_hash", b.Envelope.RegistryRecordHash, "envelope.registry_record_hash"},
+		{"envelope_id", b.Envelope.EnvelopeID, "envelope.envelope_id"},
+		{"input_hash", b.Payload.ContentHash, "payload.content_hash"},
+		{"envelope_hash", b.Envelope.Seal.SealedHash, "envelope.seal"},
+		{"transport_hash", b.Transport.Seal.SealedHash, "transport.seal"},
+		{"epa_hash", b.EPA.Seal.SealedHash, "epa.seal"},
+		{"efa_hash", b.EFA.Seal.SealedHash, "efa.seal"},
+		{"aer_hash", b.AER.Seal.SealedHash, "aer.seal"},
+		{"execution_ids", strings.Join(b.AER.ExecutionIDs, ","), "aer.execution_ids"},
+		{"aivp_outcome", b.AivpT4.Outcome, "aivp_t4.outcome"},
+		{"aivp_adapter_id", b.AivpT4.AdapterID, "aivp_t4.adapter_id"},
+		{"aivp_pia_hash", b.AivpT4.PiaHash, "aivp_t4.pia_hash"},
+		{"aivp_ai_output_hash", b.AivpT4.AiOutputHash, "aivp_t4.ai_output_hash"},
+		{"aivp_halt_receipt_hash", b.AivpT4.HaltReceiptHash, "aivp_t4.halt_receipt_hash"},
+		// A sealed run was not refused, so it has no deny receipt: the
+		// row must be empty.
+		{"deny_receipt_hash", "", "a sealed run, which carries no deny receipt"},
+		{"transcript_hash", b.Transcript.Seal.SealedHash, "transcript.seal"},
+		{"hardware_attestation_hash", b.HardwareAttestation.Seal.SealedHash, "hardware_attestation.seal"},
+		{"leakage_bundle_hash", b.LeakageBundle.Seal.SealedHash, "leakage_bundle.seal"},
+		{"zksp_binding_hash", b.ZkspBinding.Seal.SealedHash, "zksp_binding.seal"},
+		{"formal_verifier_status", b.ZkspBinding.VerificationStatus, "zksp_binding.verification_status"},
+		{"migration_token_hash", b.MigrationToken.Seal.SealedHash, "migration_token.seal"},
+		{"replay_fingerprint", b.ReplayFingerprint.Seal.SealedHash, "replay_fingerprint.seal"},
+		{"nrep_actor_id", b.Nrep.ActorID, "nrep.actor_id"},
+		{"nrep_public_key", b.Nrep.PublicKey, "nrep.public_key"},
+		{"nrep_signature", b.Nrep.Signature, "nrep.signature"},
+		{"nrep_signed_at", b.Nrep.SignedAt, "nrep.signed_at"},
+		{"attested_digest", artifacts.ComputeAttestedContextDigest(b.EPA.AttestedContext), "epa.attested_context (recomputed digest)"},
+		{"scaffold_flags_hash", artifacts.ComputeScaffoldFlagsHash(
+			b.Transcript.Scaffold.IsScaffold,
+			b.HardwareAttestation.Scaffold.IsScaffold,
+			b.ZkspBinding.Scaffold.IsScaffold,
+			b.LeakageBundle.Scaffold.IsScaffold), "the four scaffold flags (recomputed digest)"},
+	}
+	// The run clock is the clock the actor signature covers; the server
+	// writes one value into both. Compared when the anchored table says
+	// an actor signed; otherwise the record displays the clock nowhere.
+	if table["nrep_signed_at"] != "" {
+		rows = append(rows, preAnchorRow{"clock_epoch", b.Nrep.SignedAt, "nrep.signed_at"})
+	}
+	// The policy gate's outcome is displayed in the EPA's policy_gate
+	// block, which records from run 253 on carry; the EPA hash is a row
+	// of this table, so the block's presence is anchored too.
+	if b.EPA.PolicyGate != nil {
+		rows = append(rows, preAnchorRow{"pepg_outcome", b.EPA.PolicyGate.Outcome, "epa.policy_gate.outcome"})
+	}
+	return rows
+}
+
+// preAnchorRowKinds names every row of the frozen table that
+// preAnchorDisplayedRows does not compare with a displayed value, and
+// how the verifier treats it: checked for its one defined value, or
+// table-only, bound by the entry's leaf and displayed nowhere in the
+// record.
+var preAnchorRowKinds = map[string]string{
+	artifacts.CompleteRecordAnchorRow: "value: the only defined value is " + artifacts.CompleteRecordAnchorRequired,
+	artifacts.AnchoringWindowRow:      "value: a whole number of seconds the verifier enforces",
+	"allow_token_hash":                "table-only: the hash of the allow token the caller received, which the record displays nowhere; the token's holder compares it",
+	"clock_epoch":                     "compared with nrep.signed_at when the table's nrep_signed_at row is set; table-only in a record without an actor signature",
+	"pepg_outcome":                    "compared with epa.policy_gate.outcome when the EPA carries its policy_gate block (anchored through the epa_hash row); table-only before that block existed",
 }
 
 // verifyCrossGeneration holds the checks every bundle generation must

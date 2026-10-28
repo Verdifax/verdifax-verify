@@ -1,11 +1,11 @@
 package main
 
-// Copy consistency (v0.17.9, extended in v0.17.10), the answer to rounds
-// 43 and 44 of the external review. A record stores some values more
-// than once: the envelope identifier in three sections, each section's
-// sealed hash in the final VFA, the AER, transport, program and payload
-// hashes again in the execution record and the proof sections, the
-// public-log entry's number, time and checkpoint in the
+// Copy consistency (v0.17.9, extended in v0.17.10 and v0.17.11), the
+// answer to rounds 43, 44 and 45 of the external review. A record stores
+// some values more than once: the envelope identifier in three sections,
+// each section's sealed hash in the final VFA, the AER, transport,
+// program and payload hashes again in the execution record and the proof
+// sections, the public-log entry's number, time and checkpoint in the
 // proof-of-execution section, the AIVP kernel's output id as the PIA
 // hash, and so on. The public-log entry or AMD's report binds one copy
 // of each. Before this check the other copies were read by nothing, so a
@@ -19,26 +19,51 @@ package main
 // of these groups, is checked another way, or is a listed coincidence
 // of independently declared values. Round 44 found twelve copies the
 // first list missed.
+//
+// Round 45 found two groups that a field the record itself declares
+// could switch off: the entry groups read the proof section's own
+// ledger name, and the PIA-hash group skipped a deleted PIA hash. A
+// group that compares nothing under some condition now names that
+// condition as a gate (copyGate): the field a forger would have to
+// change, and the value that switches the group off. A test switches
+// every gate off on every record generation and requires the public log
+// or AMD's report to catch it, unless the record already discloses the
+// group's paths as uncovered (TestEveryGateIsBound), and another test
+// fails any group that returns no value for a path the record carries
+// without a declared gate (TestEveryGateIsDeclared).
 
 import (
 	"fmt"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Verdifax/verdifax-verify/internal/artifacts"
 )
 
 // boundCopyGroup is one value the record stores in several places, named
 // by JSON path. The first path is the copy the public-log entry or AMD's
-// report binds in at least one record generation. With anyOf, the first
-// copy is written from one of the other sources and must equal at least
-// one of them (the transcript records the execution record's proof hash,
-// or, in records built before that hash existed, the AER hash).
+// report binds in at least one record generation.
 type boundCopyGroup struct {
 	paths []string
 	value func(b *artifacts.AuditBundle) []*string
-	anyOf bool
+	// gates are the conditions under which the group compares nothing
+	// although the record carries its paths; empty when it always
+	// compares. Each names the field that decides it.
+	gates []copyGate
+}
+
+// copyGate is one field whose value switches a copy group off. off is
+// the value a forger would write there (or the key is deleted when
+// deleted is true), active reports whether the group is on for a
+// record, and why says what binds the field.
+type copyGate struct {
+	path    string
+	off     string
+	deleted bool
+	active  func(b *artifacts.AuditBundle) bool
+	why     string
 }
 
 func nonEmpty(s string) *string {
@@ -62,6 +87,83 @@ func listItem(l []string, i int) *string {
 	return &l[i]
 }
 
+// The conditions the gates read. Each reads a field the public log or
+// AMD's report binds, or whose change fails the record on its own.
+
+// rekorAnchored reports whether the record's anchor names the public
+// log. The verifier dispatches on this field: a record whose anchor
+// names any other ledger is unanchored and fails by default.
+func rekorAnchored(b *artifacts.AuditBundle) bool { return b.RekorAnchor.Backend == "rekor" }
+
+// aivpRan reports whether the AI review ran: the server writes the PIA
+// hash into the fifth execution id only then. The outcome is a row of
+// the anchored pre-anchor table.
+func aivpRan(b *artifacts.AuditBundle) bool {
+	return b.AivpT4.Outcome != "" && b.AivpT4.Outcome != "skipped"
+}
+
+// sevSnp reports whether the record claims a SEV-SNP report, which the
+// verifier then checks against AMD's root; a record that claims one and
+// carries no verification block fails that check.
+func sevSnp(b *artifacts.AuditBundle) bool { return b.HardwareAttestation.AttestationMode == "sev_snp" }
+
+func hasVerificationBlock(b *artifacts.AuditBundle) bool {
+	return sevSnp(b) && b.HardwareAttestation.Verification != nil
+}
+
+func hasExecutionRecord(b *artifacts.AuditBundle) bool { return b.ExecutionRecord != nil }
+
+// transcriptProofSourceSince is the anchored clock of run 248
+// (2026-10-18), the first public record built by orchestrator 32d7122,
+// from which the transcript records the execution record's proof hash
+// as the hash the ZK stage ran over. Every record built before it
+// recorded the AER hash there. The clock is read from the anchored
+// pre-anchor table when the record has one, else from the envelope.
+const transcriptProofSourceSince = "2026-10-18T14:13:04.127240866Z"
+
+// recordClock is the record's run clock: the anchored table's
+// clock_epoch row when the record carries a table, else the envelope's
+// timestamp.
+func recordClock(b *artifacts.AuditBundle) string {
+	for _, row := range b.PreAnchor {
+		if row.Name == "clock_epoch" {
+			return row.Value
+		}
+	}
+	return b.Envelope.Timestamp
+}
+
+// transcriptFromProof reports whether the transcript's input hash is
+// the execution record's proof hash (records from run 248 on) rather
+// than the AER hash. A record whose clock is missing or does not parse
+// reads as the older generation; every record from run 248 on carries
+// its clock in the anchored table, which the entry's leaf binds.
+func transcriptFromProof(b *artifacts.AuditBundle) bool {
+	clock, clockErr := time.Parse(time.RFC3339Nano, recordClock(b))
+	if clockErr != nil {
+		return false
+	}
+	since, _ := time.Parse(time.RFC3339Nano, transcriptProofSourceSince)
+	return !clock.Before(since)
+}
+
+var (
+	rekorGate = copyGate{path: "rekor_anchor.backend", off: "mock", active: rekorAnchored,
+		why: "the verifier dispatches on the anchor's ledger name; any other value leaves the record unanchored, which fails by default"}
+	aivpGate = copyGate{path: "aivp_t4.outcome", off: "skipped", active: aivpRan,
+		why: "the outcome is the aivp_outcome row of the anchored pre-anchor table; on the hardware run, which predates the table, the whole AI-review section is disclosed as uncovered"}
+	sevGate = copyGate{path: "hardware_attestation.attestation_mode", off: "policy_scaffold", active: sevSnp,
+		why: "the mode selects the AMD check; a record relabelled as hosted contradicts its execution record's hardware row, whose preimage the AER hash the entry binds commits to, so no rewrite verifies"}
+	verificationGate = copyGate{path: "hardware_attestation.verification", deleted: true, active: hasVerificationBlock,
+		why: "a SEV-SNP record without a verification block fails the AMD check"}
+	hostedGate = copyGate{path: "hardware_attestation.attestation_mode", off: "sev_snp", active: func(b *artifacts.AuditBundle) bool { return !sevSnp(b) },
+		why: "a hosted record relabelled as SEV-SNP carries no report and fails the AMD check"}
+	executionRecordGate = copyGate{path: "execution_record", deleted: true, active: hasExecutionRecord,
+		why: "the execution record's rows are bound by the public-log entry from leaf v5 on and by the report-data recipe on the hardware run"}
+	clockGate = copyGate{path: "envelope.timestamp", off: "2026-10-17T00:00:00Z", active: transcriptFromProof,
+		why: "the clock is read from the anchored table's clock_epoch row when the record has one (bound by the entry's leaf); the envelope timestamp is one copy of the record clock, whose copies the EPA hash in the table binds"}
+)
+
 // boundCopyGroups lists every value the record stores more than once by
 // design. Each group's values are read from the decoded record, in the
 // order of its paths; a value the record does not carry (an absent
@@ -83,7 +185,7 @@ var boundCopyGroups = []boundCopyGroup{
 		value: func(b *artifacts.AuditBundle) []*string {
 			return []*string{execRecordField(b, "transport_hash"), &b.Transport.Seal.SealedHash, &b.FinalVFA.TransportHash}
 		}},
-	{paths: []string{"execution_record.program_hash", "envelope.registry_record_hash"},
+	{paths: []string{"execution_record.program_hash", "envelope.registry_record_hash"}, gates: []copyGate{executionRecordGate},
 		value: func(b *artifacts.AuditBundle) []*string {
 			return []*string{execRecordField(b, "program_hash"), &b.Envelope.RegistryRecordHash}
 		}},
@@ -133,8 +235,11 @@ var boundCopyGroups = []boundCopyGroup{
 	// entry or AMD's report.
 
 	// The AIVP kernel's output id is the PIA hash the AI-review section
-	// shows; the three lists of execution ids hold it at index 4.
+	// shows; the three lists of execution ids hold it at index 4. When
+	// the AI review ran, the PIA hash must be carried and equal (round
+	// 45: a deleted PIA hash was skipped, so its deletion verified).
 	{paths: []string{"aivp_t4.pia_hash", "aer.execution_ids[4]", "efa.steps[4].execution_id", "execution_record.kernel_output_ids[4]"},
+		gates: []copyGate{aivpGate},
 		value: func(b *artifacts.AuditBundle) []*string {
 			var kernel []string
 			if b.ExecutionRecord != nil {
@@ -144,36 +249,51 @@ var boundCopyGroups = []boundCopyGroup{
 			if len(b.EFA.Steps) > 4 {
 				step = &b.EFA.Steps[4].ExecutionID
 			}
-			return []*string{nonEmpty(b.AivpT4.PiaHash), listItem(b.AER.ExecutionIDs, 4), step, listItem(kernel, 4)}
+			return []*string{whenCarried(aivpRan(b), b.AivpT4.PiaHash), listItem(b.AER.ExecutionIDs, 4), step, listItem(kernel, 4)}
 		}},
 	// The proof-of-execution section repeats the run entry's number,
-	// Rekor time and checkpoint from the anchor the verifier checks.
-	{paths: []string{"rekor_anchor.log_entry_id", "pote_proof.log_entry_id"},
+	// Rekor time and checkpoint from the anchor the verifier checks, and
+	// names the same ledger. The anchor's own ledger name is the gate
+	// (round 45: the section's name was, so a section renamed to another
+	// ledger escaped the comparison).
+	{paths: []string{"rekor_anchor.backend", "pote_proof.ledger_backend"}, gates: []copyGate{rekorGate},
 		value: func(b *artifacts.AuditBundle) []*string {
-			on := b.PoteProof.LedgerBackend == "rekor"
+			on := rekorAnchored(b)
+			return []*string{whenCarried(on, b.RekorAnchor.Backend), whenCarried(on, b.PoteProof.LedgerBackend)}
+		}},
+	{paths: []string{"rekor_anchor.log_entry_id", "pote_proof.log_entry_id"}, gates: []copyGate{rekorGate},
+		value: func(b *artifacts.AuditBundle) []*string {
+			on := rekorAnchored(b)
 			return []*string{whenCarried(on, b.RekorAnchor.LogEntryID), whenCarried(on, b.PoteProof.LogEntryID)}
 		}},
-	{paths: []string{"rekor_anchor.integrated_time", "pote_proof.integrated_time"},
+	{paths: []string{"rekor_anchor.integrated_time", "pote_proof.integrated_time"}, gates: []copyGate{rekorGate},
 		value: func(b *artifacts.AuditBundle) []*string {
-			on := b.PoteProof.LedgerBackend == "rekor"
+			on := rekorAnchored(b)
 			return []*string{whenCarried(on, strconv.FormatInt(b.RekorAnchor.IntegratedTime, 10)),
 				whenCarried(on, strconv.FormatInt(b.PoteProof.IntegratedTime, 10))}
 		}},
-	{paths: []string{"rekor_anchor.checkpoint", "pote_proof.ledger_checkpoint"},
+	{paths: []string{"rekor_anchor.checkpoint", "pote_proof.ledger_checkpoint"}, gates: []copyGate{rekorGate},
 		value: func(b *artifacts.AuditBundle) []*string {
-			on := b.PoteProof.LedgerBackend == "rekor"
+			on := rekorAnchored(b)
 			return []*string{whenCarried(on, b.RekorAnchor.Checkpoint), whenCarried(on, b.PoteProof.LedgerCheckpoint)}
 		}},
-	// The transcript records the hash the ZK stage ran over: the
-	// execution record's proof hash, or, in records built before that
-	// hash existed, the AER hash.
-	{paths: []string{"transcript.proof_hash_input", "execution_record.proof_hash", "aer.seal.sealed_hash"}, anyOf: true,
+	// The transcript records the hash the ZK stage ran over. From run
+	// 248 on (transcriptProofSourceSince) that is the execution record's
+	// proof hash; every record built before it recorded the AER hash.
+	// The record's anchored clock decides which, so neither source can be
+	// swapped for the other (round 45: a copy that could equal either
+	// source let a forger switch it).
+	{paths: []string{"transcript.proof_hash_input", "execution_record.proof_hash", "aer.seal.sealed_hash"},
+		gates: []copyGate{clockGate, executionRecordGate},
 		value: func(b *artifacts.AuditBundle) []*string {
+			if !transcriptFromProof(b) {
+				return []*string{&b.Transcript.ProofHashInput, nil, &b.AER.Seal.SealedHash}
+			}
 			var proof *string
 			if b.ExecutionRecord != nil {
-				proof = nonEmpty(b.ExecutionRecord.ProofHash)
+				proof = &b.ExecutionRecord.ProofHash
 			}
-			return []*string{&b.Transcript.ProofHashInput, proof, &b.AER.Seal.SealedHash}
+			return []*string{&b.Transcript.ProofHashInput, proof, nil}
 		}},
 	// A SEV-SNP record shows the guest's launch measurement, the platform
 	// label and the report data twice: in the section and in its
@@ -181,35 +301,36 @@ var boundCopyGroups = []boundCopyGroup{
 	// report). A hosted record's measurement field holds the section's
 	// sealed hash.
 	{paths: []string{"hardware_attestation.verification.measurement_hex", "hardware_attestation.enclave_measurement"},
+		gates: []copyGate{sevGate, verificationGate},
 		value: func(b *artifacts.AuditBundle) []*string {
-			v := b.HardwareAttestation.Verification
-			if v == nil {
+			if !hasVerificationBlock(b) {
 				return []*string{nil, nil}
 			}
-			return []*string{&v.MeasurementHex, &b.HardwareAttestation.EnclaveMeasurement}
+			return []*string{&b.HardwareAttestation.Verification.MeasurementHex, &b.HardwareAttestation.EnclaveMeasurement}
 		}},
 	{paths: []string{"hardware_attestation.seal.sealed_hash", "hardware_attestation.enclave_measurement"},
+		gates: []copyGate{hostedGate},
 		value: func(b *artifacts.AuditBundle) []*string {
-			if b.HardwareAttestation.AttestationMode == "sev_snp" {
+			if sevSnp(b) {
 				return []*string{nil, nil}
 			}
 			return []*string{&b.HardwareAttestation.Seal.SealedHash, &b.HardwareAttestation.EnclaveMeasurement}
 		}},
 	{paths: []string{"hardware_attestation.verification.platform", "hardware_attestation.platform"},
+		gates: []copyGate{sevGate, verificationGate},
 		value: func(b *artifacts.AuditBundle) []*string {
-			v := b.HardwareAttestation.Verification
-			if v == nil {
+			if !hasVerificationBlock(b) {
 				return []*string{nil, nil}
 			}
-			return []*string{&v.Platform, &b.HardwareAttestation.Platform}
+			return []*string{&b.HardwareAttestation.Verification.Platform, &b.HardwareAttestation.Platform}
 		}},
 	{paths: []string{"hardware_attestation.verification.report_data_hex", "hardware_attestation.report_data_hex"},
+		gates: []copyGate{sevGate, verificationGate},
 		value: func(b *artifacts.AuditBundle) []*string {
-			v := b.HardwareAttestation.Verification
-			if v == nil {
+			if !hasVerificationBlock(b) {
 				return []*string{nil, nil}
 			}
-			return []*string{&v.ReportDataHex, &b.HardwareAttestation.ReportDataHex}
+			return []*string{&b.HardwareAttestation.Verification.ReportDataHex, &b.HardwareAttestation.ReportDataHex}
 		}},
 	// One sequence id, one clock and one manifest hash, written into
 	// several sections.
@@ -223,10 +344,12 @@ var boundCopyGroups = []boundCopyGroup{
 		value: func(b *artifacts.AuditBundle) []*string {
 			return []*string{&b.ManifestHash, &b.ReplayFingerprint.ExpectedOutputHash}
 		}},
-	// The server's own commit, stated twice in the provenance section.
+	// The server's own commit, stated twice in the provenance section
+	// since the section first shipped (round 45: a deleted second copy
+	// was skipped).
 	{paths: []string{"system_provenance.orchestrator_git_sha", "system_provenance.build_provenance.source_commit_sha"},
 		value: func(b *artifacts.AuditBundle) []*string {
-			return []*string{&b.SystemProvenance.OrchestratorGitSHA, nonEmpty(b.SystemProvenance.BuildProvenance.SourceCommitSHA)}
+			return []*string{&b.SystemProvenance.OrchestratorGitSHA, &b.SystemProvenance.BuildProvenance.SourceCommitSHA}
 		}},
 	// The caller's attested decision, copied from the EPA's attested
 	// context into the AER's decision record.
@@ -241,6 +364,30 @@ var boundCopyGroups = []boundCopyGroup{
 	{paths: []string{"aer.decision.note", "epa.attested_context.decision_note"},
 		value: func(b *artifacts.AuditBundle) []*string {
 			return []*string{&b.AER.Decision.Note, &b.EPA.AttestedContext.DecisionNote}
+		}},
+	// Round 45: each category section's own hash, which the verifier
+	// recomputes, and the copy inside its seal, which nothing compared.
+	// Every seal must name the record's manifest hash, so a record
+	// without one fails before this check.
+	{paths: []string{"request_substance.hash", "request_substance.seal.sealed_hash"},
+		value: func(b *artifacts.AuditBundle) []*string {
+			return []*string{&b.RequestSubstance.Hash, &b.RequestSubstance.Seal.SealedHash}
+		}},
+	{paths: []string{"authorization_chain.hash", "authorization_chain.seal.sealed_hash"},
+		value: func(b *artifacts.AuditBundle) []*string {
+			return []*string{&b.AuthorizationChain.Hash, &b.AuthorizationChain.Seal.SealedHash}
+		}},
+	{paths: []string{"regulatory_scaffolding.hash", "regulatory_scaffolding.seal.sealed_hash"},
+		value: func(b *artifacts.AuditBundle) []*string {
+			return []*string{&b.RegulatoryScaffolding.Hash, &b.RegulatoryScaffolding.Seal.SealedHash}
+		}},
+	{paths: []string{"causal_graph.hash", "causal_graph.seal.sealed_hash"},
+		value: func(b *artifacts.AuditBundle) []*string {
+			return []*string{&b.CausalGraph.Hash, &b.CausalGraph.Seal.SealedHash}
+		}},
+	{paths: []string{"system_provenance.hash", "system_provenance.seal.sealed_hash"},
+		value: func(b *artifacts.AuditBundle) []*string {
+			return []*string{&b.SystemProvenance.Hash, &b.SystemProvenance.Seal.SealedHash}
 		}},
 }
 
@@ -321,31 +468,10 @@ func boundCopyPeers(path string) []string {
 func verifyBoundCopies(b *artifacts.AuditBundle) []string {
 	var failures []string
 	for _, g := range boundCopyGroups {
-		vals := g.value(b)
-		if g.anyOf {
-			if vals[0] == nil {
-				continue
-			}
-			var others []string
-			matched := false
-			for i, v := range vals[1:] {
-				if v == nil {
-					continue
-				}
-				others = append(others, g.paths[i+1])
-				matched = matched || *v == *vals[0]
-			}
-			if len(others) > 0 && !matched {
-				failures = append(failures, fmt.Sprintf(
-					"%s equals neither %s: the record copies this value from one of them and the copy disagrees",
-					g.paths[0], strings.Join(others, " nor ")))
-			}
-			continue
-		}
 		var differ []string
 		var first *string
 		firstPath := ""
-		for i, v := range vals {
+		for i, v := range g.value(b) {
 			if v == nil {
 				continue
 			}

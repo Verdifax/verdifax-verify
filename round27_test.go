@@ -111,6 +111,9 @@ func TestR27Round6StoryRewritesExit3(t *testing.T) {
 	for _, name := range round6Forgeries {
 		t.Run(name, func(t *testing.T) {
 			b := loadRound6(t, name)
+			if !flipped[name] {
+				b = requireStaleSealCopyFails(t, name, b)
+			}
 			r := verify(b)
 			if flipped[name] {
 				if r.VerdictTier != "FAILED" || !exitShouldFail(r, true, false) {

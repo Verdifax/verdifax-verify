@@ -319,6 +319,7 @@ func TestRound6ForgeriesWithoutBundleAnchorGetPartialNotFull(t *testing.T) {
 			if b.BundleAnchor != nil {
 				t.Fatal("reviewer fixture unexpectedly carries a bundle_anchor")
 			}
+			b = requireStaleSealCopyFails(t, name, b)
 			r := verify(b)
 			if r.RecordCoverage == "complete_record_anchored" {
 				t.Fatal("a rewritten record without bundle_anchor must not read as complete")

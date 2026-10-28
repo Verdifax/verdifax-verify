@@ -31,6 +31,7 @@ var duplicateRecords = []string{
 	"testdata/round8/run-239-intact.json",
 	"testdata/round7/v6-intact-test-log.json",
 	"testdata/policy-gate/orchestrator-mock-allowed-run.json",
+	"testdata/round45/run-248-production.json",
 }
 
 // checkedOtherwise explains a duplicate without a copy group. Each entry
@@ -39,8 +40,6 @@ var checkedOtherwise = []struct {
 	why   string
 	match func(path string) bool
 }{
-	{"the pre-anchor table, which the verifier compares with the record's values",
-		func(p string) bool { return strings.HasPrefix(p, "pre_anchor[]") }},
 	{"the complete-record anchor, which the verifier checks against the log entry it names",
 		func(p string) bool { return strings.HasPrefix(p, "bundle_anchor.") }},
 	{"the inclusion proof and log identity of each anchor, which the verifier checks against the log",
@@ -53,14 +52,27 @@ var checkedOtherwise = []struct {
 		}},
 }
 
-// sectionHashPair reports whether paths are a section's own hash and its
-// seal, which repeat one value the verifier recomputes from the section.
-func sectionHashPair(paths []string) bool {
-	if len(paths) != 2 {
-		return false
+// comparedPreAnchorRows names the rows of a record's pre-anchor table the
+// verifier compares with a displayed value or checks for its one defined
+// value (round 45, R82). Any other row that repeats a record value is a
+// duplicate to explain like any other.
+func comparedPreAnchorRows(t *testing.T, file string) map[string]bool {
+	t.Helper()
+	b := mustDecode(t, file)
+	table := map[string]string{}
+	for _, row := range b.PreAnchor {
+		table[row.Name] = row.Value
 	}
-	section := strings.TrimSuffix(paths[0], ".hash")
-	return !strings.Contains(section, ".") && paths[1] == section+".seal.sealed_hash"
+	out := map[string]bool{}
+	for _, row := range preAnchorDisplayedRows(b, table) {
+		out[row.name] = true
+	}
+	for name, kind := range preAnchorRowKinds {
+		if strings.HasPrefix(kind, "value:") {
+			out[name] = true
+		}
+	}
+	return out
 }
 
 // coincidences are values that are equal on a record without one being
@@ -145,6 +157,20 @@ func TestEveryDuplicatedValueIsAccountedFor(t *testing.T) {
 		if err := json.Unmarshal(raw, &root); err != nil {
 			t.Fatal(err)
 		}
+		// The pre-anchor table is read by row name, so each row is
+		// excused only if the verifier compares that row.
+		compared := comparedPreAnchorRows(t, file)
+		if m, isMap := root.(map[string]any); isMap {
+			if rows, isList := m["pre_anchor"].([]any); isList {
+				byName := map[string]any{}
+				for _, r := range rows {
+					if row, ok := r.(map[string]any); ok {
+						byName[fmt.Sprint(row["name"])] = row["value"]
+					}
+				}
+				m["pre_anchor"] = byName
+			}
+		}
 		keys := map[string]bool{}
 		keyNames(root, keys)
 		byValue := map[string][]string{}
@@ -175,7 +201,7 @@ func TestEveryDuplicatedValueIsAccountedFor(t *testing.T) {
 			// the log, whatever else repeats their values.
 			var rest []string
 			for _, p := range paths {
-				covered := false
+				covered := strings.HasPrefix(p, "pre_anchor.") && compared[strings.TrimPrefix(p, "pre_anchor.")]
 				for _, rule := range checkedOtherwise {
 					covered = covered || rule.match(p)
 				}
@@ -183,7 +209,7 @@ func TestEveryDuplicatedValueIsAccountedFor(t *testing.T) {
 					rest = append(rest, p)
 				}
 			}
-			if len(rest) < 2 || sectionHashPair(rest) {
+			if len(rest) < 2 {
 				continue
 			}
 			var open []string

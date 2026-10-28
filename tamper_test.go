@@ -165,8 +165,8 @@ func TestHardwareRunUncoveredIncludesSectionsAndScaffoldFlags(t *testing.T) {
 			t.Errorf("uncovered fields must include %s", want)
 		}
 	}
-	if len(got) != 55 {
-		t.Errorf("the hardware run has %d uncovered fields; the disclosure states 55", len(got))
+	if len(got) != 48 {
+		t.Errorf("the hardware run has %d uncovered fields; the disclosure states 48", len(got))
 	}
 }
 

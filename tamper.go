@@ -25,10 +25,13 @@ import (
 	"io"
 	"math/big"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Verdifax/verdifax-verify/internal/artifacts"
 )
 
 var tamperHex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -316,6 +319,7 @@ type tamperJudge func([]byte) tamperVerdict
 const (
 	catchFirstEntry    = "the first public-log entry"
 	catchCompleteEntry = "the complete-record entry"
+	catchReceiptEntry  = "the receipt's public-log entry"
 	catchEntrySigner   = "the entries' signer or timestamps"
 	catchActor         = "the actor signature"
 	catchAMD           = "AMD's report signature"
@@ -324,7 +328,7 @@ const (
 	catchConsistency   = "a consistency check"
 )
 
-var tamperCatchOrder = []string{catchCompleteEntry, catchFirstEntry, catchEntrySigner, catchActor, catchAMD,
+var tamperCatchOrder = []string{catchCompleteEntry, catchFirstEntry, catchReceiptEntry, catchEntrySigner, catchActor, catchAMD,
 	catchDecode, catchInternal, catchConsistency}
 
 // acceptsJudge wraps a plain accept/reject function, for callers that do
@@ -352,6 +356,29 @@ func judgeForTamper(data []byte) tamperVerdict {
 		return tamperVerdict{accepted: true}
 	}
 	return tamperVerdict{caughtBy: tamperCatchers(r)}
+}
+
+// judgeReceiptForTamper does the same for a receipt document (round 45:
+// --tamper-test was ignored on a receipt). A receipt that is not
+// anchored on the public log is a failure here, as a bundle without an
+// anchor is for judgeForTamper.
+func judgeReceiptForTamper(data []byte) tamperVerdict {
+	doc, decodeErr := artifacts.DecodeReceiptStrict(data)
+	if decodeErr != nil {
+		return tamperVerdict{caughtBy: []string{catchDecode}}
+	}
+	rr := verifyReceiptDocumentWith(doc, receiptOptions{})
+	if !receiptExitShouldFail(rr, false) {
+		return tamperVerdict{accepted: true}
+	}
+	caught := []string{rr.caught}
+	if rr.caught == "" {
+		caught = []string{catchReceiptEntry}
+	}
+	if rr.caught != catchReceiptEntry && rr.caught != catchDecode && !receiptEntryBinds(doc) {
+		caught = append(caught, catchReceiptEntry)
+	}
+	return tamperVerdict{caughtBy: caught}
 }
 
 // tamperCatchers names the check groups that failed in a report.
@@ -409,6 +436,9 @@ func tamperCatchers(r *Report) []string {
 // actor signature and AMD's report cannot be recomputed and are left as
 // they are.
 func tamperRecompute(data []byte) []byte {
+	if isReceiptDocument(data) {
+		return tamperRecomputeReceipt(data)
+	}
 	for round := 0; round < 12; round++ {
 		b, decodeErr := decodeBundle(data)
 		if decodeErr != nil {
@@ -442,6 +472,30 @@ func tamperRecompute(data []byte) []byte {
 		data = next
 	}
 	return data
+}
+
+// tamperRecomputeReceipt rewrites a receipt the way a forger would: the
+// receipt's hash is rebuilt from its fields and written wherever the old
+// hash appears, the anchor's copy included. The public-log entry's leaf
+// and signed body cannot be rebuilt and are left as they are.
+func tamperRecomputeReceipt(data []byte) []byte {
+	doc, decodeErr := artifacts.DecodeReceiptStrict(data)
+	if decodeErr != nil {
+		return data
+	}
+	recorded, computed, hashErr := receiptHashes(doc)
+	if hashErr != nil || recorded == computed || !tamperHex64.MatchString(recorded) || !tamperHex64.MatchString(computed) {
+		return data
+	}
+	root, readErr := tamperDecode(data)
+	if readErr != nil {
+		return data
+	}
+	next, encodeErr := json.Marshal(tamperReplaceValues(root, map[string]string{recorded: computed}))
+	if encodeErr != nil {
+		return data
+	}
+	return next
 }
 
 // tamperSpreadCopies makes a forger's change to a value the record
@@ -600,6 +654,14 @@ func tamperKeySteps(p string) []tamperStep {
 // verification recomputes from the record's own content.
 func tamperDerivedHashes(data []byte) map[string]bool {
 	out := map[string]bool{}
+	if isReceiptDocument(data) {
+		if doc, decodeErr := artifacts.DecodeReceiptStrict(data); decodeErr == nil {
+			if recorded, computed, hashErr := receiptHashes(doc); hashErr == nil && recorded == computed && tamperHex64.MatchString(recorded) {
+				out[recorded] = true
+			}
+		}
+		return out
+	}
 	b, decodeErr := decodeBundle(data)
 	if decodeErr != nil {
 		return out
@@ -670,6 +732,31 @@ const (
 
 var tamperTierOrder = []string{tierLog, tierAMD, tierStrict, tierActorOnly, tierNoRewrite, tierRejected, tierNot}
 
+// tamperForgerRank orders tiers by how far a variant of a change got
+// for the forger: a verifying variant first, then one stopped only by
+// the actor signature, then by strict reading, AMD's report or the
+// public log. A variant rejected only by checks a rewrite might satisfy
+// is the forger's least complete attempt (the copy check, which the
+// spread variant satisfies, is the usual case), so it names the tier
+// only when every variant lands there.
+func tamperForgerRank(tier string) int {
+	switch tier {
+	case tierNot:
+		return 6
+	case tierRejected:
+		return 5
+	case tierActorOnly:
+		return 4
+	case tierStrict:
+		return 3
+	case tierAMD:
+		return 2
+	case tierLog:
+		return 1
+	}
+	return 0
+}
+
 // tamperTier places a verdict: in recompute mode by the strongest check
 // that caught it, otherwise rejected or not.
 // A change caught by several checks lands in the first tier of this
@@ -687,7 +774,7 @@ func tamperTier(v tamperVerdict, recompute bool) string {
 		has[g] = true
 	}
 	switch {
-	case has[catchFirstEntry] || has[catchCompleteEntry] || has[catchEntrySigner]:
+	case has[catchFirstEntry] || has[catchCompleteEntry] || has[catchReceiptEntry] || has[catchEntrySigner]:
 		return tierLog
 	case has[catchAMD]:
 		return tierAMD
@@ -792,7 +879,11 @@ type tamperResult struct {
 	CaughtBy []string `json:"caught_by,omitempty"`
 	Tier     string   `json:"tier"`
 	Retried  bool     `json:"retried_well_formed,omitempty"`
-	change   tamperChange
+	// Variant names the form of the change the verdict belongs to, in
+	// recompute mode: made in every copy that held the value, in one
+	// copy alone, or in one copy with a gate of its group switched off.
+	Variant string `json:"variant,omitempty"`
+	change  tamperChange
 }
 
 // tamperOutcome is the result of one run of the test.
@@ -881,6 +972,73 @@ func tamperRun(data []byte, judge tamperJudge, recompute bool) (tamperOutcome, b
 		// to the original: it is not a change.
 		return changed, !bytes.Equal(changed, same)
 	}
+	// candidates builds the variants of one change a forger could make:
+	// in every copy that held the same value (recompute mode), in one
+	// copy alone, and, for a copy whose group a declared field can
+	// switch off, in one copy with that gate switched off (round 45).
+	// Each is prepared; a variant the recomputation undoes is not a
+	// change.
+	type candidate struct {
+		data    []byte
+		variant string
+	}
+	original, originalErr := decodeBundle(same)
+	candidates := func(base []byte, c tamperChange) []candidate {
+		var out []candidate
+		add := func(x []byte, variant string) {
+			if ready, real := prepare(x); real {
+				out = append(out, candidate{ready, variant})
+			}
+		}
+		if !recompute {
+			add(base, "")
+			return out
+		}
+		if spread := tamperSpreadCopies(base, root, c); !bytes.Equal(spread, base) {
+			add(spread, "in every copy")
+		}
+		add(base, "in one copy")
+		if originalErr == nil && (c.kind == "changed" || c.kind == "deleted") {
+			where := strings.TrimPrefix(tamperPathString(c.path), "$.")
+			for _, g := range boundCopyGroups {
+				if !slices.Contains(g.paths, where) {
+					continue
+				}
+				for _, gate := range g.gates {
+					if !gate.active(original) || gate.path == where {
+						continue
+					}
+					steps := tamperKeySteps(gate.path)
+					var off []byte
+					var built bool
+					if gate.deleted {
+						off, built = tamperApply(base, tamperChange{"deleted", steps})
+					} else {
+						off, built = tamperSetAt(base, steps, gate.off)
+					}
+					if built {
+						add(off, "in one copy with "+gate.path+" switched off")
+					}
+				}
+			}
+		}
+		return out
+	}
+	// weakest judges every variant and keeps the verdict most favourable
+	// to the forger (round 45: a change whose spread variant was caught
+	// while the lone variant verified was reported as stopped).
+	weakest := func(variants []candidate) (tamperVerdict, string) {
+		var best tamperVerdict
+		variant := ""
+		rank := -1
+		for _, x := range variants {
+			v := judge(x.data)
+			if r := tamperForgerRank(tamperTier(v, recompute)); r > rank {
+				best, variant, rank = v, x.variant, r
+			}
+		}
+		return best, variant
+	}
 	for _, c := range changes {
 		// A forger recomputes a stored hash rather than deleting it, so
 		// deleting one is no more a change than editing it is.
@@ -890,28 +1048,30 @@ func tamperRun(data []byte, judge tamperJudge, recompute bool) (tamperOutcome, b
 				continue
 			}
 		}
-		changed, built := tamperApply(data, c)
+		base, built := tamperApply(data, c)
 		if !built {
 			continue
 		}
-		if recompute {
-			changed = tamperSpreadCopies(changed, root, c)
-		}
-		changed, real := prepare(changed)
-		if !real {
+		variants := candidates(base, c)
+		if len(variants) == 0 {
 			out.unchanged++
 			continue
 		}
 		out.tried++
-		v := judge(changed)
+		v, variant := weakest(variants)
+		// A crude edit that no longer decodes, or that only checks a
+		// rewrite might satisfy reject (round 45: a clock edited into a
+		// value no generation produces), is retried once with a
+		// well-formed value of the same form: a forger writes values the
+		// record can hold.
 		retried := false
-		if c.kind == "changed" && len(v.caughtBy) == 1 && v.caughtBy[0] == catchDecode {
+		if c.kind == "changed" && (tamperTier(v, recompute) == tierNoRewrite || (len(v.caughtBy) == 1 && v.caughtBy[0] == catchDecode)) {
 			if s, isString := tamperValueAt(root, c.path).(string); isString {
 				if alt, formed := tamperWellFormed(s); formed {
 					if again, rebuilt := tamperSetAt(data, c.path, alt); rebuilt {
-						again = tamperSpreadCopies(again, root, c)
-						if again, real = prepare(again); real {
-							v, retried = judge(again), true
+						if more := candidates(again, c); len(more) > 0 {
+							v, variant = weakest(more)
+							retried = true
 						}
 					}
 				}
@@ -923,7 +1083,7 @@ func tamperRun(data []byte, judge tamperJudge, recompute bool) (tamperOutcome, b
 		tier := tamperTier(v, recompute)
 		out.tierCount[tier]++
 		out.results = append(out.results, tamperResult{Kind: c.kind, Path: tamperPathString(c.path), Accepted: v.accepted,
-			CaughtBy: v.caughtBy, Tier: tier, Retried: retried, change: c})
+			CaughtBy: v.caughtBy, Tier: tier, Retried: retried, Variant: variant, change: c})
 	}
 	return out, true
 }
@@ -991,8 +1151,8 @@ func runTamperTestOutput(w io.Writer, data []byte, judge tamperJudge, recompute,
 		}
 		fmt.Fprintf(w, "Tiers: %s. %d changes left the record unchanged once its hashes were recomputed and are not counted.\n",
 			strings.Join(parts, ", "), o.unchanged)
-		fmt.Fprintf(w, "Stopped by the public log means %s, %s or %s caught it; strict reading refuses an unknown key or a record that no longer reads as a bundle, before any check.\n",
-			catchFirstEntry, catchCompleteEntry, catchEntrySigner)
+		fmt.Fprintf(w, "Stopped by the public log means %s, %s or %s caught it (for a receipt, %s); strict reading refuses an unknown key or a record that no longer reads as a bundle or receipt, before any check.\n",
+			catchFirstEntry, catchCompleteEntry, catchEntrySigner, catchReceiptEntry)
 		fmt.Fprintf(w, "Rewritable paths, where a change verifies after the rewrite: %d (list indices read as [], an added key as <object>.(added key), an appended item as <list>[] (appended item); --json lists them).\n",
 			len(o.rewritable()))
 	} else {

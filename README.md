@@ -100,7 +100,7 @@ misplaced `--policy` can never pass as "checked".
 |---|---|
 | 0 | Every check passed, and the public log covers the complete record (or the input is a receipt, which its entry covers whole). |
 | 1 | One or more verification checks failed (or `--strict` + scaffold), including JSON that strict reading refuses as malformed or ambiguous. |
-| 2 | The input could not be read (a missing file or a failed download), or it was read but could not be decoded as a bundle or receipt. |
+| 2 | The input could not be read (a missing file or a failed download), it was read but could not be decoded as a bundle or receipt, or a flag was given that does not apply to the input's kind (since v0.17.11, instead of being ignored). |
 | 3 | Every check passed, but the public log covers only part of the record (a record sealed before leaf v5, or one without a verified complete-record anchor), and `--allow-partial` was not given. Since v0.16.0. |
 
 A script that treats exit 0 as a pass accepts only complete-record
@@ -132,14 +132,15 @@ by no hash, and changing one leaves the record verifying with its
 partial-coverage verdict. Since v0.17.5 the normal report lists those
 fields on a `Not hash-covered` line (and `--json` lists them as
 `uncovered_fields`), found by the same method. The October 2026 hardware
-run is such a record: 55 of its paths are uncovered, among them the AI
+run is such a record: 48 of its paths are uncovered, among them the AI
 review summary (`aivp_t4`, which can also be deleted whole), the
 attestation's report-data recipe and certificate text, the actor section
 (`nrep`), the formal-verification section, the scaffold flags of the
 attestation and proof-of-execution sections, the record's status and run
 number, the label inside
-each section's seal, and the reference hashes in the seals of the five
-category sections and the final VFA. Its raw SEV-SNP
+each section's seal, and the reference hash in the final VFA's seal (the
+five category sections' seal copies are compared with each section's
+own hash since v0.17.11). Its raw SEV-SNP
 report (`quote_b64`), which the verifier checks against AMD's root and
 binds to the record's own values, its execution record and its
 anchored identity values are covered.
@@ -147,7 +148,7 @@ anchored identity values are covered.
 Since v0.17.9 the verifier checks that copies of a value the record
 stores more than once agree, and a record whose copies disagree fails,
 so a reader of any checked copy reads the value the public-log entry or
-AMD's report binds. The copies it checks are the 31 groups listed in
+AMD's report binds. The copies it checks are the 37 copy groups and one list group listed in
 `boundcopies.go`: the envelope identifier in the envelope, transport and
 AER sections; each section's sealed hash and its copy in the final VFA
 (and, for the envelope, in the transport section); the AER hash in the
@@ -155,14 +156,15 @@ final VFA, the proof-of-execution section and the execution record; the
 transport, program and payload hashes in the execution record, the
 envelope and the payload; the six execution ids in the AER, the EFA
 steps and the execution record, with the AIVP kernel's id again as the
-PIA hash of the AI-review section; the run entry's number, time and
-checkpoint again in the proof-of-execution section; the transcript's
-input hash (the execution record's proof hash, or the AER hash in older
-records); a SEV-SNP record's measurement, platform and report data
+PIA hash of the AI-review section; the run entry's number, time, checkpoint and
+ledger name again in the proof-of-execution section; the transcript's
+input hash (the execution record's proof hash from run 248 on, the AER
+hash before it, decided by the record's anchored clock); a SEV-SNP record's measurement, platform and report data
 again in its verification block; the sequence id, the record clock,
 the manifest hash, the server commit, the migration token's state hash
-and the transcript hash each stated twice; and the caller's attested
-decision in the EPA and the AER. Round 44 of the external review found
+and the transcript hash each stated twice; the caller's attested
+decision in the EPA and the AER; and each category section's own hash
+in its seal. Round 44 of the external review found
 twelve copies the first list missed, so since v0.17.10 a test
 enumerates every value the published records store more than once and
 fails unless each is one of these groups, is checked another way (the
@@ -172,7 +174,18 @@ independently declared values with its reason. A SEV-SNP record's
 verification block (report version, measurement, report id, TCB values,
 report data, signing key type and certificate fingerprints) is compared
 with the raw AMD report since v0.17.10, with the section's measurement
-and report-data fields, instead of being trusted.
+and report-data fields, instead of being trusted. A group that compares
+nothing under some condition (an anchor that names no public log, an AI
+review that did not run, a record without a SEV-SNP report or an
+execution record, a record built before run 248) names the field that
+decides it as a gate, since v0.17.11, with the value that switches the
+group off; a test switches every gate off on every record generation
+and requires the public log or AMD's report to catch it, unless that
+record already publishes the field as rewritable, and a group that
+reads no value for a path the record carries without a declared gate
+fails the build. Round 45 of the external review found two groups a
+declared field could switch off (the entry copies read the proof
+section's own ledger name; a deleted PIA hash was skipped).
 
 For every change that fails, the report also names the checks that
 caught it, since v0.17.7: an internal hash, the first public-log entry,
@@ -194,7 +207,12 @@ entry bodies and their timestamps, the actor signature and AMD's signed
 report. Editing or deleting a stored hash is not counted, since the
 recomputation restores the original record. Since v0.17.9 a change to a
 value the record stores more than once is written into every copy that
-held the same value, so the copy check is never what stops it.
+held the same value, so the copy check is never what stops it. Since
+v0.17.11 the forger tries each change in every copy that held the value,
+in one copy alone, and in one copy with each gate of its group switched
+off, and reports the variant it got furthest with (`--json` names it as
+`variant`), so a change that verifies in one copy is never shown as
+stopped because its spread form was caught.
 
 Since v0.17.8 each change lands in one tier: stopped by the public log
 (the first public-log entry, the complete-record entry, or the entries'
@@ -207,7 +225,8 @@ rejects, but whose rewritten record still fails, lands in its own tier
 (rejected only by checks a rewrite might satisfy, no verifying rewrite
 found) instead of not stopped: it is neither shown stopped nor shown
 rewritable. "Not stopped" now means the rewritten record verifies. An edit
-that no longer decodes is retried once with a well-formed value of the
+that no longer decodes, or that only checks a rewrite might satisfy
+reject, is retried once with a well-formed value of the
 same form (a number gains one, a timestamp a second, a hex or base64
 value changes one character within its alphabet), since a forger writes
 values the record can hold. The test exits 0 only when every change is
@@ -226,12 +245,12 @@ with their number in `rewritable_path_count`.
 
 On every complete public record no change relies on the actor
 signature and none is left unstopped: run 249 in `testdata/round18`
-takes 1,130 changes; the public log stops 1,002 of them, and strict
+takes 1,134 changes; the public log stops 1,006 of them, and strict
 reading refuses the other 128, each an unknown key added or the record's
 kind removed. On the October 2026 hardware run, which predates the
-complete-record anchor, a full rewrite can change 297 of its paths,
+complete-record anchor, a full rewrite can change 291 of its paths,
 among them the decision, as the evidence page states; each is listed
-with its rewritten record verifying. Of its other changes, 44 (mostly a
+with its rewritten record verifying. Of its other changes, 51 (mostly a
 whole section or seal deleted) are rejected only by checks a rewrite
 might satisfy, with no verifying rewrite found, and 3 are stopped only
 by the actor signature. It cannot change the raw AMD report
@@ -240,7 +259,11 @@ report id, TCB values and report data the attestation summary states,
 the envelope
 identifier and the AER and binding seal hashes the public-log entry
 binds, any copy of those values elsewhere in the record, or that entry
-itself.
+itself, with one exception: the AI review's PIA hash equals the fifth
+execution id only while the review's outcome says the review ran, and
+this record binds that outcome nowhere, so a rewrite that declares the
+review skipped frees the PIA hash with the rest of the AI review summary
+(since v0.17.11 the tool tries that rewrite and lists the path).
 
 ### `--strict` mode
 
@@ -311,7 +334,15 @@ catch. Pre-v3 bundles report every one of these states explicitly
 instead of pretending.
 
 **Also proves, since v0.9.0:** that the 33 values in a version-5
-bundle's pre-anchor table are the ones that were anchored. The v5 ledger
+bundle's pre-anchor table are the ones that were anchored. Since
+v0.17.11 every row of the table is compared with the value the record
+displays for it (the policy gate's outcome when the EPA carries its
+block, the run clock the actor signature covers, and the deny-receipt
+row, empty in a sealed run, included), checked for its one defined value
+(the complete-record requirement and the anchoring window), or named
+table-only with its reason (the allow token's hash, which the record
+displays nowhere); the rows come from one list the check and the
+enumeration test share. The v5 ledger
 leaf binds the run's identity values (`envelope_id`, `aer_hash`,
 `zksp_binding_hash`, `input_nonce`) and the digest of that table. The
 table holds the program and route identifiers, the clock epoch, the
@@ -339,7 +370,12 @@ that a party able to rewrite the whole bundle has not changed them, and
 v0.10.0 says so in the verdict: `VERIFIED AND ANCHORED, PARTIAL
 COVERAGE`, naming the descriptive sections as bundle-sealed, NOT
 anchored. The six round-six forgeries are kept in `testdata/round6/` and
-received exactly that verdict. Since v0.16.0 the partial verdict no
+received exactly that verdict until v0.17.9; since v0.17.10 the two that
+flipped the decision in the AER alone fail on the EPA's copy of the
+decision, and since v0.17.11 the four that rewrote a category section
+and left its seal's copy of the section hash stale fail on that copy,
+while the fuller rewrite that also updates the seal copy still earns the
+partial verdict, as the tests show. Since v0.16.0 the partial verdict no
 longer says VERIFIED: it reads `ANCHORED, PARTIAL COVERAGE`, the JSON
 tier is `ANCHORED_PARTIAL_COVERAGE`, and the exit code is 3 unless
 `--allow-partial` is given.
@@ -514,9 +550,20 @@ invented from nothing with any run number, envelope or reason code, is
 reported as self-consistent only and fails by default, but passes with
 `--allow-unanchored`; it is only as trustworthy as whoever handed it to
 you. A stripped receipt can no longer carry its real date. The document's `ok` field is the API's response
-flag; it is not checked and is not reported. Receipts issued with
+flag; since v0.17.11 a document with `ok` false is refused as not one
+the API serves (it serves every receipt document with `ok` true), and
+the flag is not reported. Receipts issued with
 `anchor_required` need v0.14.0 or a later release, since earlier releases do not
-model that field.
+model that field. Since v0.17.11 the flags that apply only to audit
+bundles (`--strict`, `--allow-partial`, `--policy`,
+`--show-evidence-summary`) are refused on a receipt document with exit
+2, as `--self-hosted-receipt` is on a bundle, instead of being ignored,
+and `--tamper-test`, with or without `--recompute-hashes`, runs on a
+receipt document: it changes every value as it does for a bundle and
+judges each change by the receipt's hash, its public-log entry and the
+entry's signer and timestamps; the forger's recompute rebuilds the
+receipt's hash and writes it wherever the old one appeared, the anchor's
+copy included.
 
 **Also checks, since v0.10.0:** that each logged entry body names the
 leaf the bundle claims for it. The Merkle proof covers the hashedrekord

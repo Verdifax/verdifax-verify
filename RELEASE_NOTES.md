@@ -2,6 +2,67 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.17.11: gates named and tested, receipts under every flag, and the forger's best variant
+
+Round 45 of the external review found two copy groups that a field
+the record itself declares could switch off: the proof-of-execution
+section's entry number, time and checkpoint were compared with the
+anchor only while the section's own ledger name said rekor, and the
+PIA hash was compared with the execution ids only while it was present,
+so a deleted PIA hash verified in plain mode while the forger mode
+reported the same deletion as stopped by AMD's report. The entry
+groups now read the anchor's ledger name, which the verifier dispatches
+on, and the section's name is a copy of it; the PIA hash must be
+carried and equal whenever the AI review's outcome says it ran. Every
+condition under which a group compares nothing is now a named gate in
+boundcopies.go, with the field a forger would change and the value that
+switches the group off; a test switches every gate off on every record
+generation and requires the public log or AMD's report to catch it
+unless the record already publishes that field as rewritable, and
+another fails any group that returns no value for a path the record
+carries without a declared gate.
+
+The transcript's input hash no longer has two acceptable sources: from
+run 248 (2026-10-18, the first public record built by orchestrator
+32d7122) it must equal the execution record's proof hash, and before it
+the AER hash, decided by the record's anchored clock. Each category
+section's own hash and the copy in its seal are a group (the previous
+excuse, that the verifier recomputed both, was false for the seal
+copy), and the anchor's ledger name is stated again in the proof
+section. The pre-anchor table's rows are compared from one list the
+check and the enumeration test share: the policy gate's outcome (when
+the EPA carries its block), the run clock (the clock the actor
+signature covers) and the deny-receipt row (empty in a sealed run) are
+compared now, the two value-checked rows are named as such, and the
+allow token's hash is named table-only, since the record displays the
+token nowhere.
+
+The flags that apply only to audit bundles (--strict, --allow-partial,
+--policy, --show-evidence-summary) were silently ignored on a receipt
+document, as --self-hosted-receipt was on a bundle, and --tamper-test
+did nothing on a receipt. Every flag now names the inputs it applies to
+and is refused with exit 2 on the others, and the tamper test runs on a
+receipt document, plain and as a forger who recomputes the receipt's
+hash, judging each change by the receipt's hash, its public-log entry
+and the entry's signer and timestamps. A receipt document whose ok flag
+is false is refused as not one the API serves.
+
+The forger mode tries each change in every copy that held the value,
+in one copy alone, and in one copy with each gate of its group switched
+off, and reports the variant the forger got furthest with (--json names
+it); an edit that only checks a rewrite might satisfy reject is retried
+once with a well-formed value, as one that no longer decodes already
+was. On the October 2026 hardware run the uncovered paths fall from 55
+to 48 and the rewritable paths from 297 to 291: the five category seal
+copies, the proof section's ledger name and the provenance block are no
+longer rewritable, and the PIA hash is, through the AI-review outcome,
+which that record never bound. Run 249 takes 1,134 forger changes; the
+public log stops 1,006 and strict reading refuses 128. Every public
+record and every readiness record passes unchanged; the round-6 and
+round-7 category rewrites in testdata, which left a seal's copy of the
+section hash stale, now fail on that copy, and the fuller rewrite that
+updates the copy keeps the partial verdict those records earned.
+
 ### v0.17.10: every duplicated value accounted for, and the attestation summary compared with the report
 
 Round 44 of the external review found twelve values the record stores

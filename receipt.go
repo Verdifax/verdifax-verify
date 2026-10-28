@@ -91,6 +91,10 @@ type ReceiptReport struct {
 	VerdictTier      string            `json:"verdict_tier"`
 	Reason           string            `json:"reason,omitempty"`
 	StaleEntryNumber bool              `json:"stale_entry_number,omitempty"`
+	// caught names the check group that failed, for the tamper test:
+	// the receipt's hash, its public-log entry, the entry's signer or
+	// timestamps, or a consistency rule. Not part of the JSON report.
+	caught string
 }
 
 // receiptFacts is the kind-independent view of one receipt.
@@ -137,6 +141,41 @@ func factsOf(d *artifacts.ReceiptDocument) ([]receiptFacts, error) {
 // receiptAnchorRequiredSince is the deny_clock of run 242, the first
 // receipt the Verdifax API issued under receipt anchor v2; every
 // receipt it has issued since seals anchor_required.
+// receiptHashes returns the receipt's recorded hash and the hash rebuilt
+// from its own fields, for the tamper test's forger mode.
+func receiptHashes(d *artifacts.ReceiptDocument) (recorded, computed string, err error) {
+	// Each builder hashes the receipt with its hash field blank, as the
+	// Verify functions do.
+	switch {
+	case d.DenyReceipt != nil:
+		r := *d.DenyReceipt
+		r.Hash = ""
+		computed, err = artifacts.BuildDenyReceiptHash(&r)
+		return d.DenyReceipt.Hash, computed, err
+	case d.CCVHaltReceipt != nil:
+		r := *d.CCVHaltReceipt
+		r.Hash = ""
+		computed, err = artifacts.BuildCCVHaltReceiptHash(&r)
+		return d.CCVHaltReceipt.Hash, computed, err
+	case d.MACCHaltReceipt != nil:
+		r := *d.MACCHaltReceipt
+		r.Hash = ""
+		computed, err = artifacts.BuildMACCHaltReceiptHash(&r)
+		return d.MACCHaltReceipt.Hash, computed, err
+	case d.AivpT4HaltReceipt != nil:
+		r := *d.AivpT4HaltReceipt
+		r.Hash = ""
+		computed, err = artifacts.BuildAivpT4HaltReceiptHash(&r)
+		return d.AivpT4HaltReceipt.Hash, computed, err
+	case d.AttestationGapReceipt != nil:
+		r := *d.AttestationGapReceipt
+		r.Hash = ""
+		computed, err = artifacts.BuildAttestationGapReceiptHash(&r)
+		return d.AttestationGapReceipt.Hash, computed, err
+	}
+	return "", "", fmt.Errorf("a receipt document must carry one receipt")
+}
+
 const receiptAnchorRequiredSince = "2026-10-16T23:48:35.104252967Z"
 
 // receiptAnchorExpectedSince is the deny_clock of run 241, the first
@@ -165,17 +204,39 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		rep.AllPassed = false
 		rep.VerdictTier = "FAILED"
 		rep.Reason = fmt.Sprintf(format, args...)
+		if rep.caught == "" {
+			rep.caught = catchConsistency
+		}
 		return rep
 	}
+	failBy := func(group string) func(format string, args ...any) *ReceiptReport {
+		return func(format string, args ...any) *ReceiptReport {
+			rep.caught = group
+			return fail(format, args...)
+		}
+	}
+	failInternal, failEntry, failSigner := failBy(catchInternal), failBy(catchReceiptEntry), failBy(catchEntrySigner)
 	all, shapeErr := factsOf(d)
 	if shapeErr != nil {
+		// A document with no receipt, or more than one, is not a receipt
+		// document: refused by strict reading.
+		rep.caught = catchDecode
 		return fail("%v", shapeErr)
 	}
 	f := all[0]
 	rep.ReceiptKind, rep.EnvelopeID, rep.ReceiptClock, rep.ReceiptHash, rep.Summary =
 		f.kind, f.envelopeID, f.clock, f.hash, f.summary
+	// The API serves every receipt document with ok true (its response
+	// flag); a document that says otherwise is not one it served, and is
+	// refused as strict reading refuses a malformed one (round 45: the
+	// flag was the one value of a receipt document a change left
+	// verifying).
+	if !d.OK {
+		rep.caught = catchDecode
+		return fail("the document's ok flag is false; the Verdifax API serves a receipt document only with ok true, so this is not a document it served")
+	}
 	if f.hashErr != nil {
-		return fail("the receipt's hash does not recompute from its own fields: %v", f.hashErr)
+		return failInternal("the receipt's hash does not recompute from its own fields: %v", f.hashErr)
 	}
 	rep.HashOK = true
 	required := anchorRequiredOf(d)
@@ -203,17 +264,17 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 	a := d.ReceiptAnchor
 	if a == nil {
 		if required {
-			return fail("this receipt seals anchor_required, so it must carry a public-log receipt_anchor, " +
+			return failEntry("this receipt seals anchor_required, so it must carry a public-log receipt_anchor, " +
 				"and it carries none: the entry was removed, or anchoring failed when the receipt was issued")
 		}
 		if anchorExpected {
-			return fail("this receipt is dated %s, at or after %s, when the Verdifax API began anchoring "+
+			return failEntry("this receipt is dated %s, at or after %s, when the Verdifax API began anchoring "+
 				"receipts on the public log, and it carries no anchor: it was stripped or invented, its anchoring "+
 				"failed when it was issued, or it came from a deployment that does not anchor receipts "+
 				"(pass --self-hosted-receipt only if you know it did)",
 				datedUTC(f.clock), receiptAnchorExpectedSince)
 		}
-		rep.AllPassed, rep.VerdictTier = true, "SELF_CONSISTENT_NOT_ANCHORED"
+		rep.AllPassed, rep.VerdictTier, rep.caught = true, "SELF_CONSISTENT_NOT_ANCHORED", catchReceiptEntry
 		rep.Reason = "the receipt carries no receipt_anchor, so nothing shows who issued it or when"
 		return rep
 	}
@@ -222,15 +283,15 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 	v2 := a.Kind == artifacts.ReceiptAnchorKindV2
 	switch {
 	case a.Kind != artifacts.ReceiptAnchorKind && !v2:
-		return fail("receipt_anchor is kind %q; this verifier knows %q and %q", a.Kind,
+		return failEntry("receipt_anchor is kind %q; this verifier knows %q and %q", a.Kind,
 			artifacts.ReceiptAnchorKind, artifacts.ReceiptAnchorKindV2)
 	case required && !v2:
-		return fail("this receipt seals anchor_required, which only a %s anchor satisfies; it carries %q",
+		return failEntry("this receipt seals anchor_required, which only a %s anchor satisfies; it carries %q",
 			artifacts.ReceiptAnchorKindV2, a.Kind)
 	case a.ReceiptKind != f.kind:
-		return fail("receipt_anchor names a %s, but this document carries a %s", a.ReceiptKind, f.kind)
+		return failEntry("receipt_anchor names a %s, but this document carries a %s", a.ReceiptKind, f.kind)
 	case a.ReceiptHash != f.hash:
-		return fail("receipt_anchor names receipt hash %s, not this receipt's %s",
+		return failEntry("receipt_anchor names receipt hash %s, not this receipt's %s",
 			truncate(a.ReceiptHash, 16), truncate(f.hash, 16))
 	}
 	leafErr := artifacts.ValidateReceiptLeafFields(f.kind, f.envelopeID, f.hash)
@@ -242,25 +303,25 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		bound = "kind, envelope_id, hash and run_id"
 	}
 	if leafErr != nil {
-		return fail("%v", leafErr)
+		return failEntry("%v", leafErr)
 	}
 	if !strings.EqualFold(a.LeafHashHex, want) {
-		return fail("the receipt leaf rebuilt from this document's %s is %s, not the anchored %s",
+		return failEntry("the receipt leaf rebuilt from this document's %s is %s, not the anchored %s",
 			bound, truncate(want, 16), truncate(a.LeafHashHex, 16))
 	}
 	if a.Backend != "rekor" {
 		if required {
-			return fail("this receipt seals anchor_required, but its receipt_anchor backend is %q, "+
+			return failEntry("this receipt seals anchor_required, but its receipt_anchor backend is %q, "+
 				"not the public log", a.Backend)
 		}
 		if anchorExpected {
-			return fail("this receipt is dated %s, at or after %s, when the Verdifax API began anchoring "+
+			return failEntry("this receipt is dated %s, at or after %s, when the Verdifax API began anchoring "+
 				"receipts on the public log, but its receipt_anchor backend is %q: the anchor was altered, "+
 				"or it came from a deployment that does not anchor receipts "+
 				"(pass --self-hosted-receipt only if you know it did)",
 				datedUTC(f.clock), receiptAnchorExpectedSince, a.Backend)
 		}
-		rep.AllPassed, rep.VerdictTier = true, "SELF_CONSISTENT_NOT_ANCHORED"
+		rep.AllPassed, rep.VerdictTier, rep.caught = true, "SELF_CONSISTENT_NOT_ANCHORED", catchReceiptEntry
 		rep.Reason = fmt.Sprintf("receipt_anchor backend is %q: consistent, but not on a public log", a.Backend)
 		return rep
 	}
@@ -274,24 +335,24 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 	if anchorErr != nil {
 		if stale, isStale := staleIndexReason(anchorErr, a.LogEntryID, a.LogIndex); isStale {
 			rep.StaleEntryNumber = true
-			return fail("the receipt's public-log entry: %s", stale)
+			return failEntry("the receipt's public-log entry: %s", stale)
 		}
-		return fail("the receipt's public-log entry does not verify: %v", anchorErr)
+		return failEntry("the receipt's public-log entry does not verify: %v", anchorErr)
 	}
 	signer, signerErr := entrySignerOf(a.EntryBody)
 	if signerErr != nil {
-		return fail("the receipt's public-log entry has no valid signer: %v", signerErr)
+		return failSigner("the receipt's public-log entry has no valid signer: %v", signerErr)
 	}
 	rep.SignerFP = signer
 	key, pinned := pinnedEntrySigners[signer]
 	if !pinned {
-		return fail("the receipt's public-log entry was logged by key %s, which is not a published "+
+		return failSigner("the receipt's public-log entry was logged by key %s, which is not a published "+
 			"Verdifax log-signing key: anyone can add entries to the public log", truncate(signer, 16))
 	}
 	rep.SignerName = key.Name
 	rep.AnchoredAt = utc(a.IntegratedTime)
 	if !signerAcceptsAt(key, a.IntegratedTime) {
-		return fail("the receipt's entry was logged at %s, outside the period in which %s is accepted",
+		return failSigner("the receipt's entry was logged at %s, outside the period in which %s is accepted",
 			rep.AnchoredAt, key.Name)
 	}
 	clock, clockErr := time.Parse(time.RFC3339Nano, f.clock)
@@ -302,7 +363,7 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 	rep.GapSeconds = &gap
 	rep.WindowSeconds = artifacts.ReceiptAnchoringWindowSeconds
 	if float64(gap) < -anchoringClockSkew.Seconds() || gap > artifacts.ReceiptAnchoringWindowSeconds {
-		return fail("the receipt's entry was logged at %s, outside the %d-second window after the "+
+		return failSigner("the receipt's entry was logged at %s, outside the %d-second window after the "+
 			"receipt's clock (%s): the entry was made later than the receipt claims",
 			rep.AnchoredAt, artifacts.ReceiptAnchoringWindowSeconds, f.clock)
 	}
@@ -421,4 +482,37 @@ func sortedKeys(m map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// receiptEntryBinds reports whether the document's public-log anchor
+// still binds the receipt as it stands: the anchor names the public
+// log, its leaf is the one rebuilt from the receipt's kind, envelope,
+// hash (and run number under v2), and the entry verifies. The receipt
+// check stops at its first failure, so the tamper test asks this
+// separately: a change that a consistency rule catches first is also
+// caught by the entry when the entry no longer binds the rewritten
+// receipt.
+func receiptEntryBinds(d *artifacts.ReceiptDocument) bool {
+	a := d.ReceiptAnchor
+	if a == nil || a.Backend != "rekor" {
+		return false
+	}
+	all, shapeErr := factsOf(d)
+	if shapeErr != nil {
+		return false
+	}
+	f := all[0]
+	want := artifacts.ComputeReceiptLeafHash(f.kind, f.envelopeID, f.hash)
+	if a.Kind == artifacts.ReceiptAnchorKindV2 {
+		want = artifacts.ComputeReceiptLeafHashV2(f.kind, f.envelopeID, f.hash, d.RunID)
+	}
+	if a.ReceiptKind != f.kind || a.ReceiptHash != f.hash || !strings.EqualFold(a.LeafHashHex, want) {
+		return false
+	}
+	return rekorAnchorVerifier(rekorverify.AnchorInput{
+		LeafHashHex: a.LeafHashHex, EntryBody: a.EntryBody, LogIndex: a.LogIndex,
+		TreeSize: a.TreeSize, RootHashHex: a.RootHashHex, InclusionPath: a.InclusionPath,
+		Checkpoint: a.Checkpoint, LogID: a.LogID, LogEntryID: a.LogEntryID,
+		IntegratedTime: a.IntegratedTime, SignedEntryTimestamp: a.SignedEntryTimestamp,
+	}) == nil
 }
