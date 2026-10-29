@@ -11,8 +11,9 @@ stays as it is. v0.17.15 has the same verification code as v0.17.14;
 only the version string and the test workflow change. The workflow now
 runs the suite twice: under the race detector with -short, which skips
 the forger-mode tests (they start no goroutines and run thousands of
-verifications each), and then in full without the race detector. Both
-runs take under four minutes together.
+verifications each), and then in full without the race detector. In CI
+on the v0.17.15 commit the two steps took 1 minute 40 seconds and 4
+minutes 11 seconds.
 
 ### v0.17.14: copy groups switched off only where the server wrote them differently
 

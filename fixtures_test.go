@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -208,23 +210,32 @@ func TestNoWindowSwitchesOffCopiesThatAgree(t *testing.T) {
 	}
 }
 
-// Round 47: the forger's rewritable-path count on every genuine record
-// fixture is pinned, so a change that frees or binds a path on any
-// record generation (run 208's checkpoint copy, freed by a boundary in
-// v0.17.13 before this test existed) fails here. Run 238 predates the
-// requirement for a complete-record anchor, so deleting its anchor or
-// renaming its backend earns partial coverage, as the security page
-// says; runs 208 and 237 and the hardware run predate leaf v5.
-var genuineForgerRewritable = map[string]int{
-	"internal/artifacts/testdata/golden-bundle-run-208.json": 287,
-	"testdata/round18/run-249-production.json":               0,
-	"testdata/round22/run-253-production.json":               0,
-	"testdata/round40/hardware-run-2026-10.json":             291,
-	"testdata/round45/run-248-production.json":               0,
-	"testdata/round6/run-237-intact.json":                    245,
-	"testdata/round7/run-238-intact.json":                    2,
-	"testdata/round8/hardware-run-2026-10.json":              291,
-	"testdata/round8/run-239-intact.json":                    0,
+// Round 47: the forger's result on every genuine record fixture is
+// pinned, so a change that frees or binds a path on any record generation
+// (run 208's checkpoint copy, freed by a boundary in v0.17.13 before this
+// test existed) fails here. Round 48: the pin is the count and the
+// SHA-256 of the sorted path list, one path per line, so a change that
+// frees one path and binds another on the same record fails too. Run 238
+// predates the requirement for a complete-record anchor, so deleting its
+// anchor or renaming its backend earns partial coverage, as the security
+// page says; runs 208 and 237 and the hardware run predate leaf v5.
+type forgerPin struct {
+	count int
+	paths string // SHA-256 of the sorted rewritable paths joined by newlines
+}
+
+const noPaths = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+var genuineForgerRewritable = map[string]forgerPin{
+	"internal/artifacts/testdata/golden-bundle-run-208.json": {287, "32559da3bac751db6722947ff1d8fd1e762da1f2c38e728a412515ffd04a1048"},
+	"testdata/round18/run-249-production.json":               {0, noPaths},
+	"testdata/round22/run-253-production.json":               {0, noPaths},
+	"testdata/round40/hardware-run-2026-10.json":             {291, "dce55fc168ad92eea3886fd0d161b5a3f5efdb7851085d30d33c57939487f54b"},
+	"testdata/round45/run-248-production.json":               {0, noPaths},
+	"testdata/round6/run-237-intact.json":                    {245, "2da206e050c1915a8b6ed616aa97945c438853a39a5d9a3d21500a3cdfe00a20"},
+	"testdata/round7/run-238-intact.json":                    {2, "182fec3ff095b6c2e27f7aa941adccd1ca7882f7437cf3d8a585d93578d37cd6"},
+	"testdata/round8/hardware-run-2026-10.json":              {291, "dce55fc168ad92eea3886fd0d161b5a3f5efdb7851085d30d33c57939487f54b"},
+	"testdata/round8/run-239-intact.json":                    {0, noPaths},
 }
 
 func TestEveryGenuineFixtureKeepsItsForgerResult(t *testing.T) {
@@ -242,8 +253,11 @@ func TestEveryGenuineFixtureKeepsItsForgerResult(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s: the record did not run", path)
 		}
-		if got := len(o.rewritable()); got != want {
-			t.Errorf("%s: %d rewritable paths, pinned %d", path, got, want)
+		paths := append([]string(nil), o.rewritable()...)
+		sort.Strings(paths)
+		sum := sha256.Sum256([]byte(strings.Join(paths, "\n")))
+		if got := hex.EncodeToString(sum[:]); len(paths) != want.count || got != want.paths {
+			t.Errorf("%s: %d rewritable paths with list hash %s, pinned %d with %s", path, len(paths), got, want.count, want.paths)
 		}
 	}
 }
