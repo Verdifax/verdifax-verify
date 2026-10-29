@@ -111,6 +111,7 @@ func TestEveryCopyOfTheExecutionIdsMustAgree(t *testing.T) {
 // envelope id copies are stopped by the log and the envelope hash copies
 // stay rewritable.
 func TestForgerRewritesEveryCopyTogether(t *testing.T) {
+	forgerHeavy(t)
 	data := readTestRecord(t, "testdata/round40/hardware-run-2026-10.json")
 	root, _ := tamperDecode(data)
 	c := tamperChange{"changed", tamperKeySteps("aer.envelope_id")}
@@ -152,6 +153,7 @@ func TestForgerRewritesEveryCopyTogether(t *testing.T) {
 // rewritable: it has its own tier, counts against the record, and is
 // not listed among the rewritable paths.
 func TestUnfoundRewritesHaveTheirOwnTier(t *testing.T) {
+	forgerHeavy(t)
 	o, ok := tamperRun(readTestRecord(t, "testdata/round40/hardware-run-2026-10.json"), memoJudge, true)
 	if !ok {
 		t.Fatal("the record did not decode")

@@ -2,6 +2,18 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.17.15: the same verification code as v0.17.14, released
+
+v0.17.14 was tagged but never released: its release workflow runs the
+full test suite first, and under the race detector the suite took
+longer than the 30-minute limit, so no binaries were built. The tag
+stays as it is. v0.17.15 has the same verification code as v0.17.14;
+only the version string and the test workflow change. The workflow now
+runs the suite twice: under the race detector with -short, which skips
+the forger-mode tests (they start no goroutines and run thousands of
+verifications each), and then in full without the race detector. Both
+runs take under four minutes together.
+
 ### v0.17.14: copy groups switched off only where the server wrote them differently
 
 v0.17.13 switched each of three copy groups off for every record

@@ -271,6 +271,7 @@ func TestEveryGateIsDeclared(t *testing.T) {
 // generation, unless that record already discloses every path of the
 // group as uncovered.
 func TestEveryGateIsBound(t *testing.T) {
+	forgerHeavy(t)
 	for _, path := range withGenuineFixtures(gateRecords) {
 		data := readTestRecord(t, path)
 		b := mustDecode(t, path)

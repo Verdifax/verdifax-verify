@@ -247,3 +247,17 @@ func TestEveryGenuineFixtureKeepsItsForgerResult(t *testing.T) {
 		}
 	}
 }
+
+// forgerHeavy marks a test that runs the forger mode over a whole record
+// (thousands of verifications). CI runs the suite twice (round 47): once
+// under the race detector with -short, which skips these, and once
+// without the race detector, which runs everything. The forger mode
+// starts no goroutines, so the race detector finds nothing in these
+// tests; under it they took most of the 30-minute budget and the
+// v0.17.14 release test timed out.
+func forgerHeavy(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("runs the forger mode over a whole record; CI runs it in the suite without the race detector")
+	}
+}

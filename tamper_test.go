@@ -77,6 +77,7 @@ func TestTamperTestRefusesARecordThatDoesNotVerify(t *testing.T) {
 // summary and the attestation summary, and must not name fields that are
 // covered (the execution record's decision, the raw SEV-SNP report).
 func TestUncoveredFieldsOfThePreV5HardwareRun(t *testing.T) {
+	forgerHeavy(t)
 	data := readTestRecord(t, "testdata/round40/hardware-run-2026-10.json")
 	b, err := decodeBundle(data)
 	if err != nil {
@@ -151,6 +152,7 @@ func TestTamperTestCoversEmptyValuesSectionsAndAdditions(t *testing.T) {
 }
 
 func TestHardwareRunUncoveredIncludesSectionsAndScaffoldFlags(t *testing.T) {
+	forgerHeavy(t)
 	data := readTestRecord(t, "testdata/round40/hardware-run-2026-10.json")
 	b, decodeErr := decodeBundle(data)
 	if decodeErr != nil {
@@ -184,6 +186,7 @@ func TestTamperReportNamesWhichCheckCaughtEachChange(t *testing.T) {
 }
 
 func TestRecomputeHashesStopsEveryChangeOnACompleteRecord(t *testing.T) {
+	forgerHeavy(t)
 	var out bytes.Buffer
 	code := runTamperTestJudged(&out, readTestRecord(t, "testdata/round18/run-249-production.json"), memoJudge, true)
 	if code != 0 || !strings.Contains(out.String(), "not stopped 0") {
@@ -199,6 +202,7 @@ func TestRecomputeHashesStopsEveryChangeOnACompleteRecord(t *testing.T) {
 // record, rewriting the record's own hashes would carry most changes
 // past every other check, and the mode must say so.
 func TestRecomputeHashesReportsACoverageSlip(t *testing.T) {
+	forgerHeavy(t)
 	withoutSecondEntry := func(data []byte) tamperVerdict {
 		v := memoJudge(data)
 		var kept []string
@@ -229,6 +233,7 @@ func TestRecomputeHashesReportsACoverageSlip(t *testing.T) {
 }
 
 func TestRecomputeHashesOnTheHardwareRun(t *testing.T) {
+	forgerHeavy(t)
 	o, ok := tamperRun(readTestRecord(t, "testdata/round40/hardware-run-2026-10.json"), memoJudge, true)
 	if !ok {
 		t.Fatal("the record did not decode")
@@ -270,6 +275,7 @@ func TestRecomputeHashesOnTheHardwareRun(t *testing.T) {
 // they must be the counts the tool produces (round 41: a stated count went
 // stale when the method changed).
 func TestReadmeStatesTheTamperCounts(t *testing.T) {
+	forgerHeavy(t)
 	readme := string(readTestRecord(t, "README.md"))
 	plain, _ := tamperRun(readTestRecord(t, "testdata/round18/run-249-production.json"), memoJudge, false)
 	forger, _ := tamperRun(readTestRecord(t, "testdata/round18/run-249-production.json"), memoJudge, true)
@@ -314,6 +320,7 @@ func commaInt(n int) string {
 // own edit did not decode or because only the actor signature, whose keys
 // Verdifax holds, caught it.
 func TestRecomputeHashesTiersOnACompleteRecord(t *testing.T) {
+	forgerHeavy(t)
 	o, ok := tamperRun(readTestRecord(t, "testdata/round18/run-249-production.json"), memoJudge, true)
 	if !ok {
 		t.Fatal("the record did not decode")
@@ -332,6 +339,7 @@ func TestRecomputeHashesTiersOnACompleteRecord(t *testing.T) {
 }
 
 func TestMalformedEditsAreRetriedWellFormed(t *testing.T) {
+	forgerHeavy(t)
 	o, _ := tamperRun(readTestRecord(t, "testdata/round18/run-249-production.json"), memoJudge, true)
 	for _, r := range o.results {
 		if r.Path == "$.rekor_anchor.input_nonce" && r.Kind == "changed" {
@@ -378,6 +386,7 @@ func TestWellFormedValues(t *testing.T) {
 }
 
 func TestTamperJSONListsEveryChange(t *testing.T) {
+	forgerHeavy(t)
 	var out bytes.Buffer
 	runTamperTestOutput(&out, readTestRecord(t, "testdata/round18/run-249-production.json"), memoJudge, true, true)
 	var rep tamperReport

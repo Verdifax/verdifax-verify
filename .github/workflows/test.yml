@@ -39,10 +39,16 @@ jobs:
       - name: Build
         run: go build ./...
 
+      - name: Test under the race detector
+        # Every test except the forger-mode tests, which start no
+        # goroutines and run thousands of verifications each (-short
+        # skips them); under the race detector they took most of the
+        # 30-minute budget.
+        run: go test -race -short -timeout 30m ./...
+
       - name: Test
-        # The tamper tests verify thousands of changed records; under the
-        # race detector that takes longer than go test's 10-minute default.
-        run: go test -race -timeout 30m ./...
+        # The whole suite, the forger-mode tests included.
+        run: go test -timeout 30m ./...
 
       # Known-vulnerability scan of the module and its (stdlib-only)
       # dependency surface; fails the build on any reachable vuln.
