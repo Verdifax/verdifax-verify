@@ -495,7 +495,7 @@ human report now also prints the decision-bearing values it checked
 so a reader can compare them with any other view of the record.
 
 **Also checks, since v0.13.0:** a refused or halted run's receipt.
-Such a run produces a sealed receipt (deny, CCV halt, MACC halt, AIVP-T4
+Such a run produces a sealed receipt (deny, CCV halt, MACC halt, AIVP
 halt or attestation gap) instead of an audit bundle. Pass the receipt
 document the Verdifax API serves (`GET /runs/{id}/deny-receipt` and its
 siblings) and the verifier recomputes the receipt's hash from its own
