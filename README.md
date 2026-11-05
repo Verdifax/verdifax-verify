@@ -84,6 +84,7 @@ cat bundle.json | verdifax-verify     # verify from stdin
 verdifax-verify --json bundle.json    # machine-readable JSON output
 verdifax-verify --strict bundle.json  # also fail on any scaffold-flagged value
 verdifax-verify --policy policy.json bundle.json  # also check a policy document against the sealed policy gate
+verdifax-verify --signer-key key.txt bundle.json  # also confirm the request was signed by this public key
 verdifax-verify --allow-partial bundle.json       # exit 0 for a record the public log covers only in part
 verdifax-verify --tamper-test bundle.json         # change every sealed value one at a time and confirm each change fails
 verdifax-verify --tamper-test --recompute-hashes bundle.json  # the same, as a forger who also recomputes every hash the record stores
@@ -673,6 +674,24 @@ record with no policy gate, `--policy` fails rather than passing
 silently. `epa.policy_hash`, a separate field, is a fixed value (the
 SHA-256 of `orchestrator.policy.v1`) kept for record stability; it does
 not identify a policy.
+
+### `--signer-key`: confirming who requested a run
+
+A customer can register a public key and sign each request on its own
+machine, so Verdifax never holds the private key. The record seals the
+signature in `nrep.request_signature`. The report prints a "Request
+signature" line, and a signature that does not match the run's request
+fails verification.
+
+The record supplies the key, so on its own a passing check is
+consistency. `--signer-key FILE` names the signer: the file holds the
+base64 Ed25519 public key you expect, and verification fails unless the
+record carries a valid signature from that key. Against a record with no
+request signature, it fails rather than passing silently.
+
+The signature covers the request, so it was made before the run existed.
+It shows who requested the run, not that the key holder accepted the
+outcome.
 
 ## Supported versions
 

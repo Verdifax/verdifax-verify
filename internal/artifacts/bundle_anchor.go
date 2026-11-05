@@ -164,7 +164,7 @@ func AnchoredRecordPairs(b *AuditBundle) []AnchoredRecordPair {
 	values := []string{
 		RecomputeBundleHash(b),
 		ComputePreAnchorDigestFromTable(b.PreAnchor),
-		ComputeNrepSectionHash(b.Nrep.ActorID, b.Nrep.PublicKey, b.Nrep.Signature, b.Nrep.SignedAt),
+		b.Nrep.SectionHash(),
 		ComputeAivpT4SectionHash(b.AivpT4),
 		RecomputeFormalVerificationHash(b.FormalVerification),
 		ComputeExecutionRecordSectionHash(b.ExecutionRecord),

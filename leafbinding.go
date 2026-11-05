@@ -202,8 +202,7 @@ func verifyLeafBinding(b *artifacts.AuditBundle) LeafBindingCheck {
 			strconv.FormatInt(int64(b.RekorAnchor.InputNonce), 10), digest)
 	case b.NrepSectionHash != "" || b.ScaffoldFlagsHash != "":
 		form = leafDomainV3
-		nrepRecomputed := artifacts.ComputeNrepSectionHash(
-			b.Nrep.ActorID, b.Nrep.PublicKey, b.Nrep.Signature, b.Nrep.SignedAt)
+		nrepRecomputed := b.Nrep.SectionHash()
 		scaffoldRecomputed := artifacts.ComputeScaffoldFlagsHash(
 			b.Transcript.Scaffold.IsScaffold,
 			b.HardwareAttestation.Scaffold.IsScaffold,

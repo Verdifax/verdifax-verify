@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.17.15"
+const Version = "0.18.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -120,8 +120,11 @@ type Report struct {
 	RekorAnchor   RekorAnchorCheck `json:"rekor_anchor"`
 	LeafBinding   LeafBindingCheck `json:"leaf_binding"`
 	NrepSignature NrepCheck        `json:"nrep_signature"`
-	RuntimeTiming TimingCheck      `json:"runtime_timing"`
-	PreAnchor     PreAnchorCheck   `json:"pre_anchor"`
+	// RequestSignature is the key holder's own signature over the
+	// request (v0.18.0), checked here and pinned by --signer-key.
+	RequestSignature RequestSignatureCheck `json:"request_signature"`
+	RuntimeTiming    TimingCheck           `json:"runtime_timing"`
+	PreAnchor        PreAnchorCheck        `json:"pre_anchor"`
 	// BundleAnchor is the complete-record anchor (v0.10.0).
 	BundleAnchor BundleAnchorCheck `json:"bundle_anchor"`
 	// CompleteRecordRequirement is the leaf v6 guarantee (v0.11.0):
@@ -171,6 +174,7 @@ type options struct {
 	showVersion     *bool
 	selfHosted      *bool
 	policyFile      *string
+	signerKeyFile   *string
 	tamperTest      *bool
 	recomputeHashes *bool
 	showEvidence    *bool
@@ -185,6 +189,7 @@ func defineFlags(fs *flag.FlagSet) options {
 		showVersion:     fs.Bool("version", false, "print version and exit"),
 		selfHosted:      fs.Bool("self-hosted-receipt", false, "the receipt was issued by a test or self-hosted deployment that does not anchor receipts on the public log, not by the Verdifax API; exempts it from the rules that receipts dated from run 241 on must carry a public-log anchor and receipts dated from run 242 on must seal anchor_required"),
 		policyFile:      fs.String("policy", "", "a policy document (JSON) to check against the policy gate the record seals: its recomputed policy hash, identifier, name and version must equal the sealed values, or verification fails"),
+		signerKeyFile:   fs.String("signer-key", "", "a file holding the base64 Ed25519 public key you expect signed the request; fails unless the record carries a valid request signature from that key"),
 		tamperTest:      fs.Bool("tamper-test", false, "change every value one at a time, delete every key holding a value, remove and append list items and add unknown keys, and report any change the verifier accepts and which checks caught the rest; exit 0 only if every change fails"),
 		recomputeHashes: fs.Bool("recompute-hashes", false, "with --tamper-test, play a forger who rewrites the whole record: after each change, recompute every hash the record itself determines, and count a change as stopped only when a check no rewrite can satisfy catches it (the public-log entries, their signer and timestamps, the actor signature or AMD's report signature)"),
 		showEvidence:    fs.Bool("show-evidence-summary", false, "print a one-glance maturity summary (real vs scaffold counts, Rekor anchor status, PoTE preimage version, strict-mode gate disposition) and exit; combine with --json for machine-readable form"),
@@ -282,6 +287,14 @@ func main() {
 			os.Exit(2)
 		}
 		applyPolicyDocument(report, doc)
+	}
+	if *o.signerKeyFile != "" {
+		key, readErr := os.ReadFile(*o.signerKeyFile)
+		if readErr != nil {
+			fmt.Fprintln(os.Stderr, "verdifax-verify: read --signer-key:", readErr)
+			os.Exit(2)
+		}
+		applySignerKey(report, strings.TrimSpace(string(key)))
 	}
 
 	// --show-evidence-summary short-circuits the normal output paths so
@@ -644,7 +657,7 @@ const (
 var flagInputKinds = map[string]string{
 	"json": inputBoth, "version": inputBoth, "allow-unanchored": inputBoth,
 	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
-	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBundle, "show-evidence-summary": inputBundle,
+	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBundle, "signer-key": inputBundle, "show-evidence-summary": inputBundle,
 	"self-hosted-receipt": inputReceipt,
 }
 
@@ -836,6 +849,7 @@ func verify(b *artifacts.AuditBundle) *Report {
 	r.LeafBinding = verifyLeafBinding(b)
 	r.RecordIdentity = verifyRecordIdentity(b, r.LeafBinding)
 	r.NrepSignature = verifyNrepSignature(b, r.LeafBinding)
+	r.RequestSignature = verifyRequestSignature(b)
 	r.RuntimeTiming = verifyRuntimeTiming(b)
 	r.PreAnchor = verifyPreAnchor(b)
 	r.NrepSignature = sealedByPreAnchor(r.NrepSignature, r.LeafBinding, r.PreAnchor)
@@ -886,6 +900,9 @@ func verify(b *artifacts.AuditBundle) *Report {
 	// signal of the same rank as a mismatched leaf: a failure, never
 	// an advisory note.
 	if r.NrepSignature.Performed && !r.NrepSignature.Match {
+		allPassed = false
+	}
+	if r.RequestSignature.Performed && !r.RequestSignature.Match {
 		allPassed = false
 	}
 	// A timing digest that does not match the durations it claims to
@@ -1180,6 +1197,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	printLeafBinding(r.LeafBinding)
 	printRecordIdentity(r.RecordIdentity)
 	printNrepCheck(r.NrepSignature)
+	printRequestSignature(r.RequestSignature)
 	printTimingCheck(r.RuntimeTiming)
 	printPreAnchor(r.PreAnchor)
 	printBundleAnchor(r.BundleAnchor)

@@ -2,6 +2,25 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.18.0: request signatures
+
+A customer can now register a public key and sign each request on its
+own machine, so Verdifax never holds the private key. The record seals
+the signature in `nrep.request_signature`, and the section hash the
+complete-record anchor covers includes it.
+
+This release reads that section. A signature that does not match the
+run's payload hash, program, route, registry record, time and nonce
+fails the record. `--signer-key FILE` names the signer: it fails unless
+the record carries a valid signature from the key in the file, including
+on a record with no request signature.
+
+Without `--signer-key` a passing check reports consistency, because the
+key comes from the record. The signature covers the request, so it shows
+who requested the run and nothing about whether the key holder accepted
+the outcome. Records without the section hash exactly as before, so their
+verdicts do not change.
+
 ### v0.17.15: the same verification code as v0.17.14, released
 
 v0.17.14 was tagged but never released: its release workflow runs the

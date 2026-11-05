@@ -566,6 +566,41 @@ type NrepSection struct {
 	// shipped; those signatures are real but not offline-verifiable,
 	// and the check reports that state distinctly from pass or fail.
 	SignedAt string `json:"signed_at,omitempty"`
+
+	// RequestSignature is the customer's own signature over the request,
+	// made on the customer's machine with a key Verdifax never holds.
+	// Absent on every run that was not signed this way.
+	RequestSignature *RequestSignature `json:"request_signature,omitempty"`
+}
+
+// RequestSignature records who requested a run. It covers the request,
+// so it was made before the run existed and says nothing about whether
+// the key holder accepted the outcome. The signed bytes are
+// RequestSignaturePreimage over the envelope's own values.
+type RequestSignature struct {
+	PublicKey string `json:"public_key"` // base64-std, 32-byte Ed25519 key
+	Signature string `json:"signature"`  // base64-std, 64-byte Ed25519 signature
+	SignedAt  string `json:"signed_at"`  // RFC 3339, set by the signer
+	Nonce     string `json:"nonce"`      // 32 lowercase hex characters, set by the signer
+}
+
+// SectionHash digests the actor section, with the request signature
+// appended only when the run carries one, so records without it hash
+// exactly as before.
+func (n NrepSection) SectionHash() string {
+	if n.RequestSignature == nil {
+		return ComputeNrepSectionHash(n.ActorID, n.PublicKey, n.Signature, n.SignedAt)
+	}
+	r := n.RequestSignature
+	return nullJoinHash(nrepSectionDomain, n.ActorID, n.PublicKey, n.Signature, n.SignedAt,
+		r.PublicKey, r.Signature, r.SignedAt, r.Nonce)
+}
+
+// RequestSignaturePreimage is what a request signature signs. Fields are
+// joined with single 0x00 bytes so no value can run into the next.
+func RequestSignaturePreimage(payloadHash, programID, routeID, registryRecordHash, signedAt, nonce string) []byte {
+	return []byte(strings.Join([]string{"verdifax.request.v1", payloadHash, programID, routeID,
+		registryRecordHash, signedAt, nonce}, "\x00"))
 }
 
 // AivpT4Section is the audit-bundle representation of one AIVP-T4
