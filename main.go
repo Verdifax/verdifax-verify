@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.18.0"
+const Version = "0.19.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -175,6 +175,8 @@ type options struct {
 	selfHosted      *bool
 	policyFile      *string
 	signerKeyFile   *string
+	requestFile     *string
+	jobFolder       *string
 	tamperTest      *bool
 	recomputeHashes *bool
 	showEvidence    *bool
@@ -190,6 +192,8 @@ func defineFlags(fs *flag.FlagSet) options {
 		selfHosted:      fs.Bool("self-hosted-receipt", false, "the receipt was issued by a test or self-hosted deployment that does not anchor receipts on the public log, not by the Verdifax API; exempts it from the rules that receipts dated from run 241 on must carry a public-log anchor and receipts dated from run 242 on must seal anchor_required"),
 		policyFile:      fs.String("policy", "", "a policy document (JSON) to check against the policy gate the record seals: its recomputed policy hash, identifier, name and version must equal the sealed values, or verification fails"),
 		signerKeyFile:   fs.String("signer-key", "", "a file holding the base64 Ed25519 public key you expect signed the request; fails unless the record carries a valid request signature from that key"),
+		requestFile:     fs.String("request", "", "a file holding the exact signed request; passes only if the record's version 2 signature covers those bytes"),
+		jobFolder:       fs.String("job", "", "a folder of one job's records: check each record, then the map of links between them"),
 		tamperTest:      fs.Bool("tamper-test", false, "change every value one at a time, delete every key holding a value, remove and append list items and add unknown keys, and report any change the verifier accepts and which checks caught the rest; exit 0 only if every change fails"),
 		recomputeHashes: fs.Bool("recompute-hashes", false, "with --tamper-test, play a forger who rewrites the whole record: after each change, recompute every hash the record itself determines, and count a change as stopped only when a check no rewrite can satisfy catches it (the public-log entries, their signer and timestamps, the actor signature or AMD's report signature)"),
 		showEvidence:    fs.Bool("show-evidence-summary", false, "print a one-glance maturity summary (real vs scaffold counts, Rekor anchor status, PoTE preimage version, strict-mode gate disposition) and exit; combine with --json for machine-readable form"),
@@ -216,11 +220,19 @@ func main() {
 		return
 	}
 
+	if *o.jobFolder != "" {
+		os.Exit(runJobMode(o, *jsonOutput, *allowPartial, *allowUnanchored, *selfHosted))
+	}
+
 	// Error model of this binary: a CLI with no logger; an unreadable
 	// input is reported on stderr with exit code 2.
 	data, inputErr := readInput()
 	if inputErr != nil {
 		fmt.Fprintln(os.Stderr, "verdifax-verify:", inputErr)
+		os.Exit(2)
+	}
+	if bytes.HasPrefix(data, []byte{0xEF, 0xBB, 0xBF}) {
+		fmt.Fprintln(os.Stderr, "verdifax-verify: the file starts with a byte-order mark, which is not part of the record; save it as UTF-8 without one and check it again")
 		os.Exit(2)
 	}
 	if *recomputeHashes && !*tamperTest {
@@ -252,6 +264,25 @@ func main() {
 			os.Exit(2)
 		}
 		rr := verifyReceiptDocumentWith(doc, receiptOptions{selfHosted: *selfHosted})
+		if *o.signerKeyFile != "" {
+			key, readErr := os.ReadFile(*o.signerKeyFile)
+			if readErr != nil {
+				fmt.Fprintln(os.Stderr, "verdifax-verify: read --signer-key:", readErr)
+				os.Exit(2)
+			}
+			applyReceiptSignerKey(rr, strings.TrimSpace(string(key)))
+		}
+		if *o.requestFile != "" {
+			signed, readErr := os.ReadFile(*o.requestFile)
+			if readErr != nil {
+				fmt.Fprintln(os.Stderr, "verdifax-verify: read --request:", readErr)
+				os.Exit(2)
+			}
+			applyRequestFile(&rr.RequestSignature, signed)
+			if !rr.RequestSignature.RequestMatched {
+				rr.VerdictTier, rr.AllPassed, rr.Reason = "FAILED", false, rr.RequestSignature.Reason
+			}
+		}
 		if *jsonOutput {
 			emitReceiptJSON(rr)
 		} else {
@@ -295,6 +326,17 @@ func main() {
 			os.Exit(2)
 		}
 		applySignerKey(report, strings.TrimSpace(string(key)))
+	}
+	if *o.requestFile != "" {
+		signed, readErr := os.ReadFile(*o.requestFile)
+		if readErr != nil {
+			fmt.Fprintln(os.Stderr, "verdifax-verify: read --request:", readErr)
+			os.Exit(2)
+		}
+		applyRequestFile(&report.RequestSignature, signed)
+		if !report.RequestSignature.RequestMatched {
+			report.AllPassed = false
+		}
 	}
 
 	// --show-evidence-summary short-circuits the normal output paths so
@@ -657,13 +699,35 @@ const (
 var flagInputKinds = map[string]string{
 	"json": inputBoth, "version": inputBoth, "allow-unanchored": inputBoth,
 	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
-	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBundle, "signer-key": inputBundle, "show-evidence-summary": inputBundle,
+	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBundle, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
 	"self-hosted-receipt": inputReceipt,
 }
 
 // flagsRefusedFor returns the flags set on the command line that do not
 // apply to the input kind, sorted. A flag this table does not know is
 // refused too, so a new flag cannot ship unclassified.
+// runJobMode checks a folder of one job's records.
+func runJobMode(o options, asJSON, allowPartial, allowUnanchored, selfHosted bool) int {
+	allowed := map[string]bool{"job": true, "json": true, "allow-partial": true, "allow-unanchored": true,
+		"self-hosted-receipt": true, "signer-key": true}
+	var refused bool
+	flag.Visit(func(f *flag.Flag) { refused = refused || !allowed[f.Name] })
+	if refused || flag.NArg() > 0 {
+		fmt.Fprintln(os.Stderr, "verdifax-verify:", errJobFlags)
+		return 2
+	}
+	opts := jobOptions{allowUnanchored: allowUnanchored, selfHosted: selfHosted}
+	if *o.signerKeyFile != "" {
+		key, readErr := os.ReadFile(*o.signerKeyFile)
+		if readErr != nil {
+			fmt.Fprintln(os.Stderr, "verdifax-verify: read --signer-key:", readErr)
+			return 2
+		}
+		opts.signerKey = strings.TrimSpace(string(key))
+	}
+	return runJobCheck(*o.jobFolder, opts, asJSON, allowPartial)
+}
+
 func flagsRefusedFor(kind string) []string {
 	var refused []string
 	flag.Visit(func(f *flag.Flag) {
@@ -901,6 +965,12 @@ func verify(b *artifacts.AuditBundle) *Report {
 	// an advisory note.
 	if r.NrepSignature.Performed && !r.NrepSignature.Match {
 		allPassed = false
+	}
+	if job := b.Nrep.Job; job != nil {
+		if jobErr := job.Validate(); jobErr != nil {
+			r.AllPassed = false
+			r.RequestSignature.Reason = jobErr.Error()
+		}
 	}
 	if r.RequestSignature.Performed && !r.RequestSignature.Match {
 		allPassed = false

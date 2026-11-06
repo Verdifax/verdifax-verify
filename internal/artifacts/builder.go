@@ -62,11 +62,11 @@ type BuildInput struct {
 	LedgerSignedEntryTimestamp string
 	LedgerIntegratedTime       int64
 
-	// Phase-13 AIVP-T4 governance evidence. Populated from the
+	// Phase-13 AIVP governance evidence. Populated from the
 	// pipeline's manifest fields (AivpOutcome / AivpPiaHash /
 	// AivpAdapterID / AivpAiOutputHash / AivpDecision /
 	// AivpHaltReceiptHash). Zero values produce a "skipped" section,
-	// matching the manifest behavior when AIVP-T4 wasn't wired or
+	// matching the manifest behavior when AIVP wasn't wired or
 	// the run didn't engage governance.
 	AivpOutcome         string
 	AivpPiaHash         string
@@ -716,7 +716,7 @@ func BuildAuditBundle(in BuildInput) *AuditBundle {
 		IntegratedTime:       in.LedgerIntegratedTime,
 	}
 
-	// Phase-13 AIVP-T4, populate from BuildInput. For runs that
+	// Phase-13 AIVP, populate from BuildInput. For runs that
 	// didn't engage governance (e.g. AivpT4 governor wasn't wired,
 	// or pre-Phase-13 runs being rebuilt) all fields are zero and
 	// Outcome defaults to "skipped" so downstream renderers know to

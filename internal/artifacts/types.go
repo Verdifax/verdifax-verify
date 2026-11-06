@@ -436,16 +436,16 @@ type AuditBundle struct {
 	// root, with no network access required.
 	RekorAnchor RekorAnchor `json:"rekor_anchor"`
 
-	// AivpT4 carries the Tier-4 governance evidence for runs that
-	// passed through Stage 3.7 (AIVP-T4). For runs that ran with
+	// AivpT4 carries the governance evidence for runs that
+	// passed through Stage 3.7 (AIVP). For runs that ran with
 	// AivpOutcome == "release" the section records the PIA hash, the
 	// adapter that produced the decision, and the §0 hash of the AI
-	// output text governed. For runs that halted at AIVP-T4 the
+	// output text governed. For runs that halted at AIVP the
 	// HaltReceiptHash points to the sealed AivpT4HaltReceipt
 	// retrievable via /runs/{id}/aivp-t4-halt-receipt.
 	//
 	// Empty (zero-valued, Outcome == "skipped") for runs that didn't
-	// engage AIVP-T4, either because the orchestrator wasn't wired
+	// engage AIVP, either because the orchestrator wasn't wired
 	// for it (pre-Phase-13) or because the caller didn't declare an
 	// AI output to govern.
 	AivpT4 AivpT4Section `json:"aivp_t4"`
@@ -571,6 +571,9 @@ type NrepSection struct {
 	// made on the customer's machine with a key Verdifax never holds.
 	// Absent on every run that was not signed this way.
 	RequestSignature *RequestSignature `json:"request_signature,omitempty"`
+
+	// Job places this run in a job map. Absent on every run outside a job.
+	Job *JobLink `json:"job,omitempty"`
 }
 
 // RequestSignature records who requested a run. It covers the request,
@@ -582,18 +585,40 @@ type RequestSignature struct {
 	Signature string `json:"signature"`  // base64-std, 64-byte Ed25519 signature
 	SignedAt  string `json:"signed_at"`  // RFC 3339, set by the signer
 	Nonce     string `json:"nonce"`      // 32 lowercase hex characters, set by the signer
+
+	// Version is empty on a version 1 signature, which covers the payload,
+	// program, route and registry record. Version 2 covers the exact signed
+	// bytes of the whole request, through BodyHash.
+	Version      string `json:"version,omitempty"`
+	BodyHash     string `json:"body_hash,omitempty"`
+	AiOutputHash string `json:"ai_output_hash,omitempty"`
 }
 
-// SectionHash digests the actor section, with the request signature
-// appended only when the run carries one, so records without it hash
-// exactly as before.
+// fields is the signature's fixed form for hashing. A version 1 signature
+// keeps its four fields, so its records hash exactly as before.
+func (r *RequestSignature) fields() []string {
+	out := []string{r.PublicKey, r.Signature, r.SignedAt, r.Nonce}
+	if r.Version != "" {
+		out = append(out, r.Version, r.BodyHash, r.AiOutputHash)
+	}
+	return out
+}
+
+// SectionHash digests the actor section, with the request signature and job
+// appended only when the run carries them, so other records hash exactly as
+// before.
 func (n NrepSection) SectionHash() string {
-	if n.RequestSignature == nil {
+	if n.RequestSignature == nil && n.Job == nil {
 		return ComputeNrepSectionHash(n.ActorID, n.PublicKey, n.Signature, n.SignedAt)
 	}
-	r := n.RequestSignature
-	return nullJoinHash(nrepSectionDomain, n.ActorID, n.PublicKey, n.Signature, n.SignedAt,
-		r.PublicKey, r.Signature, r.SignedAt, r.Nonce)
+	fields := []string{n.ActorID, n.PublicKey, n.Signature, n.SignedAt}
+	if n.RequestSignature != nil {
+		fields = append(fields, n.RequestSignature.fields()...)
+	}
+	if n.Job != nil {
+		fields = append(fields, n.Job.fields()...)
+	}
+	return nullJoinHash(nrepSectionDomain, fields...)
 }
 
 // RequestSignaturePreimage is what a request signature signs. Fields are
@@ -603,14 +628,14 @@ func RequestSignaturePreimage(payloadHash, programID, routeID, registryRecordHas
 		registryRecordHash, signedAt, nonce}, "\x00"))
 }
 
-// AivpT4Section is the audit-bundle representation of one AIVP-T4
-// governance pass. Mirrors the manifest's six AIVP-T4 fields plus the
+// AivpT4Section is the audit-bundle representation of one AIVP
+// governance pass. Mirrors the manifest's six AIVP fields plus the
 // halt-receipt hash (when applicable) into a single canonical record.
 //
 // The §0 invariants this section preserves:
 //
-//   - PiaHash is the canonical Tier-4 governance seal, anyone holding
-//     the AI output text plus the AIVP-T4 binary can recompute this
+//   - PiaHash is the canonical governance seal, anyone holding
+//     the AI output text plus the AIVP binary can recompute this
 //     hash and confirm it matches.
 //   - AiOutputHash is the §0 SHA-256 of the input text the governance
 //     pipeline ran on, computed Go-side and bound into the manifest
@@ -626,8 +651,8 @@ type AivpT4Section struct {
 	// manifest's AivpOutcome field.
 	Outcome string `json:"outcome"`
 
-	// PiaHash is the §0 SHA-256 hex of the canonical Tier-4
-	// governance preimage. 64 lowercase hex characters when AIVP-T4
+	// PiaHash is the §0 SHA-256 hex of the canonical AIVP
+	// governance preimage. 64 lowercase hex characters when AIVP
 	// ran; empty when Outcome == "skipped".
 	PiaHash string `json:"pia_hash"`
 
@@ -639,7 +664,7 @@ type AivpT4Section struct {
 	// AiOutputHash is the §0 SHA-256 hex of the AI output text the
 	// governance pipeline ran on. Empty string when the caller didn't
 	// declare an AI output (Outcome == "release" with empty hash) or
-	// when AIVP-T4 was skipped entirely.
+	// when AIVP was skipped entirely.
 	AiOutputHash string `json:"ai_output_hash"`
 
 	// Decision is the lowercase decision kind. "release" on allow;

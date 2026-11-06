@@ -2,6 +2,35 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.19.0: job maps and request signature version 2
+
+`--job FOLDER` checks one job's records: each record in full, then the map
+of links between them. Steps can split into branches and join again. It
+names any step that is missing, swapped or repeated and any branch that
+goes nowhere. A job with one final step that leads back to every record is
+COMPLETE. A job with no final step is OPEN and exits 3, or 0 with
+`--allow-partial`, because nothing shows whether more steps were cut off.
+A job map covers what was sent. It cannot show a step that was never sent.
+
+A link to a record from another Verdifax account is reported as supplied
+and verified when that record is in the folder, and otherwise as not
+supplied: until then it is the customer's statement.
+
+Request signature version 2 covers the whole request through a hash of its
+exact signed bytes, and names the payload, program, route, registry record,
+AI output and job directly. `--request FILE` passes only if the signature
+covers those exact bytes, which is how a reader reaches fields the record
+holds only as hashes. Version 1 signatures still verify.
+
+Refused and halted runs can now carry a job and a signature. They sit in
+`receipt_context`, which the receipt's public-log entry binds through
+receipt anchor v3. `--signer-key` and `--request` now apply to receipts.
+
+`--help` now lists `--policy`, `--signer-key`, `--request` and `--job`. A
+file that starts with a byte-order mark is named as the cause and exits 2.
+Comments in this source now say AIVP. Records without these fields hash
+exactly as before, so their verdicts do not change.
+
 ### v0.18.0: request signatures
 
 A customer can now register a public key and sign each request on its

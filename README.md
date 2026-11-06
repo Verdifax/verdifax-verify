@@ -85,6 +85,7 @@ verdifax-verify --json bundle.json    # machine-readable JSON output
 verdifax-verify --strict bundle.json  # also fail on any scaffold-flagged value
 verdifax-verify --policy policy.json bundle.json  # also check a policy document against the sealed policy gate
 verdifax-verify --signer-key key.txt bundle.json  # also confirm the request was signed by this public key
+verdifax-verify --job job-folder/                 # check one job's records and the links between them
 verdifax-verify --allow-partial bundle.json       # exit 0 for a record the public log covers only in part
 verdifax-verify --tamper-test bundle.json         # change every sealed value one at a time and confirm each change fails
 verdifax-verify --tamper-test --recompute-hashes bundle.json  # the same, as a forger who also recomputes every hash the record stores
@@ -674,6 +675,19 @@ record with no policy gate, `--policy` fails rather than passing
 silently. `epa.policy_hash`, a separate field, is a fixed value (the
 SHA-256 of `orchestrator.policy.v1`) kept for record stability; it does
 not identify a policy.
+
+### `--job`: checking a job's records together
+
+`--job FOLDER` checks every record in the folder in full, then the map of
+links between them. It names any step that is missing, swapped or repeated
+and any branch that goes nowhere. The result is COMPLETE (exit 0), OPEN when
+no final step closes the job (exit 3, or 0 with `--allow-partial`), or FAILED
+(exit 1). A job map covers what was sent. It cannot show a step that was
+never sent. A closed job shows the customer said it was finished, not that
+nothing else happened.
+
+`--request FILE` passes only if a version 2 request signature covers the
+exact bytes of that file.
 
 ### `--signer-key`: confirming who requested a run
 

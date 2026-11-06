@@ -158,4 +158,5 @@ type ReceiptDocument struct {
 	AivpT4HaltReceipt     *AivpT4HaltReceipt     `json:"aivp_t4_halt_receipt,omitempty"`
 	AttestationGapReceipt *AttestationGapReceipt `json:"attestation_gap_receipt,omitempty"`
 	ReceiptAnchor         *ReceiptAnchor         `json:"receipt_anchor,omitempty"`
+	ReceiptContext        *ReceiptContext        `json:"receipt_context,omitempty"`
 }

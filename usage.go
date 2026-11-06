@@ -11,6 +11,7 @@ func printUsage() {
 USAGE
   verdifax-verify [flags] <bundle.json | receipt.json>
   cat bundle.json | verdifax-verify [flags]
+  verdifax-verify -job <folder> [flags]
 
 FLAGS
   -json                   emit machine-readable JSON output
@@ -20,6 +21,16 @@ FLAGS
   -allow-partial          exit 0 for a record whose public-log anchor
                           covers only part of it (sealed before leaf
                           v5, or without a complete-record anchor)
+  -job FOLDER             check a folder of one job's records: each record
+                          in full, then the map of links between them.
+                          A job map covers what was sent; it cannot show
+                          a step that was never sent
+  -policy FILE            check a policy document against the policy gate
+                          the record seals
+  -signer-key FILE        pass only if the run was requested by the holder
+                          of this base64 Ed25519 public key
+  -request FILE           pass only if the record's version 2 signature
+                          covers the exact bytes of this signed request
   -recompute-hashes       with -tamper-test, play a forger who rewrites
                           the whole record: after each change, recompute
                           every hash the record itself determines, and
@@ -49,5 +60,6 @@ EXIT
      -allow-unanchored was not passed (or -strict + scaffold)
   2  could not parse the input
   3  every check passed, but the public-log anchor covers only part
-     of the record, and -allow-partial was not passed`)
+     of the record, or with -job the job has no final step, and
+     -allow-partial was not passed`)
 }

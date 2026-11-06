@@ -227,7 +227,7 @@ func ComputeBundleLeafHash(envelopeID, anchoredDigest string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// ComputeAivpT4SectionHash digests all six AIVP-T4 fields.
+// ComputeAivpT4SectionHash digests all six AIVP fields.
 func ComputeAivpT4SectionHash(a AivpT4Section) string {
 	return MustCanonicalHash(struct {
 		Form            string `json:"form"`

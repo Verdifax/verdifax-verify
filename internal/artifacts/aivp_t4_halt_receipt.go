@@ -1,7 +1,7 @@
 package artifacts
 
-// AivpT4HaltReceipt is the sealed cryptographic artifact AIVP-T4 emits
-// when the Tier-4 governance pipeline returns a non-RELEASE decision
+// AivpT4HaltReceipt is the sealed cryptographic artifact AIVP emits
+// when the governance pipeline returns a non-RELEASE decision
 // (DENY / HALT / DEFER) on the AI output text bound to a run.
 //
 // Fits into the Phase 10/11/12 sealed-artifact family:
@@ -9,7 +9,7 @@ package artifacts
 //   - DenyReceipt: pre-execution policy halted at admission
 //   - CCVHaltReceipt: runtime budget exceeded mid-execution
 //   - MACCHaltReceipt: cumulative cross-run budget exceeded
-//   - AivpT4HaltReceipt , Tier-4 governance refused to RELEASE the AI output
+//   - AivpT4HaltReceipt , governance refused to RELEASE the AI output
 //
 // All five share the same canonical-bytes + SHA-256 sealing machinery,
 // the same independent-verifier API, and the same chain-of-custody
@@ -34,7 +34,7 @@ package artifacts
 // representation. Do not reorder fields without bumping the artifact
 // version (currently "vfa.aivp_t4_halt.v1").
 type AivpT4HaltReceipt struct {
-	// AdapterID identifies which AIVP-T4 ModelAdapter produced the
+	// AdapterID identifies which AIVP ModelAdapter produced the
 	// governance decision, e.g., "mock-claude", "live-claude-api". The
 	// verifier can use this to scope its trust evaluation: a mock-mode
 	// halt receipt should NOT be presented to a third party as evidence
@@ -48,8 +48,8 @@ type AivpT4HaltReceipt struct {
 	AiOutputHash string `json:"ai_output_hash"`
 
 	// AllowTokenHash is the §0-compliant hash of the AllowToken that
-	// initially admitted this run (when PEPG ran). The AIVP-T4 halt
-	// happened DESPITE the allow because Tier-4 governance refused to
+	// initially admitted this run (when PEPG ran). The AIVP halt
+	// happened DESPITE the allow because governance refused to
 	// release the AI output, binding the original allow into the halt
 	// receipt preserves the full causal chain. Empty string when PEPG
 	// was not wired or skipped.
@@ -62,7 +62,7 @@ type AivpT4HaltReceipt struct {
 	// self-consistent only. Receipts without it hash exactly as before.
 	AnchorRequired bool `json:"anchor_required,omitempty"`
 
-	// DecisionKind identifies which negative outcome AIVP-T4 returned.
+	// DecisionKind identifies which negative outcome AIVP returned.
 	// One of: "deny", "halt", "defer". RELEASE outcomes don't produce
 	// a halt receipt (the run continues) so they're never represented
 	// here.
@@ -70,7 +70,7 @@ type AivpT4HaltReceipt struct {
 
 	// DecisionReason is the adapter-supplied human-readable summary
 	// of why the governance pipeline produced this decision. Free-form
-	// string sourced from the AIVP-T4 governance output (e.g., a
+	// string sourced from the AIVP governance output (e.g., a
 	// contradiction-detection note, a policy-violation summary, a
 	// cognition-validation failure description).
 	DecisionReason string `json:"decision_reason"`
@@ -79,7 +79,7 @@ type AivpT4HaltReceipt struct {
 	// From DOG output.
 	EnvelopeID string `json:"envelope_id"`
 
-	// EvaluatorVersion is the AIVP-T4 governor software version that
+	// EvaluatorVersion is the AIVP governor software version that
 	// decided to halt. Format: "aivp-t4-X.Y.Z".
 	EvaluatorVersion string `json:"evaluator_version"`
 
@@ -88,15 +88,15 @@ type AivpT4HaltReceipt struct {
 	HaltClock string `json:"halt_clock"`
 
 	// HaltReasonCode is the standardized machine-readable code identifying
-	// why AIVP-T4 halted. One of: "AIVP_T4_DENY", "AIVP_T4_HALT",
+	// why AIVP halted. One of: "AIVP_T4_DENY", "AIVP_T4_HALT",
 	// "AIVP_T4_DEFER".
 	HaltReasonCode string `json:"halt_reason_code"`
 
-	// PiaHash is the AIVP-T4 Proof Integrity Audit hash, the canonical
+	// PiaHash is the AIVP Proof Integrity Audit hash, the canonical
 	// T4 governance seal binding the cognitive state snapshot, the
 	// contradiction check, the cognition validation, the policy
 	// evaluation, and the enforcement action into a single sealed
-	// hash. This is the AIVP-T4-internal seal; the AivpT4HaltReceipt
+	// hash. This is the AIVP-internal seal; the AivpT4HaltReceipt
 	// hash binds this PIA hash plus the orchestrator-side context
 	// (envelope, allow token, ai-output) into the orchestrator-level
 	// audit chain.

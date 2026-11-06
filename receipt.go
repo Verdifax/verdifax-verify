@@ -62,8 +62,18 @@ import (
 	"github.com/Verdifax/verdifax-verify/internal/rekorverify"
 )
 
+// validateContextJob checks the shape of a job carried by a receipt.
+func validateContextJob(c *artifacts.ReceiptContext) error {
+	if c.Job == nil {
+		return nil
+	}
+	return c.Job.Validate()
+}
+
 // ReceiptReport is the --json output for a receipt document.
 type ReceiptReport struct {
+	RequestSignature RequestSignatureCheck `json:"request_signature,omitempty"`
+
 	Tool         string `json:"tool"`
 	ToolVersion  string `json:"tool_version"`
 	ReceiptKind  string `json:"receipt_kind"`
@@ -280,14 +290,19 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 	}
 	rep.AnchorPresent = true
 	rep.AnchorLogEntry = a.LogEntryID
-	v2 := a.Kind == artifacts.ReceiptAnchorKindV2
+	v3 := a.Kind == artifacts.ReceiptAnchorKindV3
+	v2 := a.Kind == artifacts.ReceiptAnchorKindV2 || v3
 	switch {
 	case a.Kind != artifacts.ReceiptAnchorKind && !v2:
-		return failEntry("receipt_anchor is kind %q; this verifier knows %q and %q", a.Kind,
-			artifacts.ReceiptAnchorKind, artifacts.ReceiptAnchorKindV2)
+		return failEntry("receipt_anchor is kind %q; this verifier knows %q, %q and %q", a.Kind,
+			artifacts.ReceiptAnchorKind, artifacts.ReceiptAnchorKindV2, artifacts.ReceiptAnchorKindV3)
 	case required && !v2:
-		return failEntry("this receipt seals anchor_required, which only a %s anchor satisfies; it carries %q",
-			artifacts.ReceiptAnchorKindV2, a.Kind)
+		return failEntry("this receipt seals anchor_required, which only a %s or %s anchor satisfies; it carries %q",
+			artifacts.ReceiptAnchorKindV2, artifacts.ReceiptAnchorKindV3, a.Kind)
+	case v3 && d.ReceiptContext == nil:
+		return failEntry("this receipt's anchor binds a receipt_context, and the document carries none")
+	case !v3 && d.ReceiptContext != nil:
+		return failEntry("this document carries a receipt_context, and its anchor does not bind one")
 	case a.ReceiptKind != f.kind:
 		return failEntry("receipt_anchor names a %s, but this document carries a %s", a.ReceiptKind, f.kind)
 	case a.ReceiptHash != f.hash:
@@ -301,6 +316,21 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		leafErr = artifacts.ValidateReceiptLeafFieldsV2(f.kind, f.envelopeID, f.hash, d.RunID)
 		want = artifacts.ComputeReceiptLeafHashV2(f.kind, f.envelopeID, f.hash, d.RunID)
 		bound = "kind, envelope_id, hash and run_id"
+	}
+	if v3 {
+		contextHash := d.ReceiptContext.Hash()
+		leafErr = artifacts.ValidateReceiptLeafFieldsV3(f.kind, f.envelopeID, f.hash, d.RunID, contextHash)
+		want = artifacts.ComputeReceiptLeafHashV3(f.kind, f.envelopeID, f.hash, d.RunID, contextHash)
+		bound = "kind, envelope_id, hash, run_id and context"
+		if jobErr := validateContextJob(d.ReceiptContext); jobErr != nil {
+			return failEntry("%v", jobErr)
+		}
+		if c := d.ReceiptContext; c.RequestSignature != nil {
+			rep.RequestSignature = checkRequestSignature(c.RequestSignature, c.Request, c.Job)
+			if !rep.RequestSignature.Match {
+				return failEntry("the receipt's request signature fails: %s", rep.RequestSignature.Reason)
+			}
+		}
 	}
 	if leafErr != nil {
 		return failEntry("%v", leafErr)
@@ -505,6 +535,12 @@ func receiptEntryBinds(d *artifacts.ReceiptDocument) bool {
 	want := artifacts.ComputeReceiptLeafHash(f.kind, f.envelopeID, f.hash)
 	if a.Kind == artifacts.ReceiptAnchorKindV2 {
 		want = artifacts.ComputeReceiptLeafHashV2(f.kind, f.envelopeID, f.hash, d.RunID)
+	}
+	if a.Kind == artifacts.ReceiptAnchorKindV3 {
+		if d.ReceiptContext == nil {
+			return false
+		}
+		want = artifacts.ComputeReceiptLeafHashV3(f.kind, f.envelopeID, f.hash, d.RunID, d.ReceiptContext.Hash())
 	}
 	if a.ReceiptKind != f.kind || a.ReceiptHash != f.hash || !strings.EqualFold(a.LeafHashHex, want) {
 		return false

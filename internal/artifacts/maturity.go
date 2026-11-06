@@ -12,12 +12,12 @@ type MaturityFlag string
 
 const (
 	// MaturityReal, the stage executed against the real, production-
-	// grade backend. Examples: AIVP-T4 ran against the live Anthropic
+	// grade backend. Examples: AIVP ran against the live Anthropic
 	// Claude API; the ledger anchored to Sigstore Rekor.
 	MaturityReal MaturityFlag = "REAL"
 
 	// MaturityMock, the stage ran against a deterministic in-process
-	// scaffold. Examples: AIVP-T4 in mock-claude mode; the ledger
+	// scaffold. Examples: AIVP in mock-claude mode; the ledger
 	// in mock mode (no public transparency-log entry).
 	MaturityMock MaturityFlag = "MOCK"
 
@@ -58,7 +58,7 @@ type MaturityReport struct {
 // fields so the artifacts package doesn't need to import pipeline
 // (avoids the cycle pipeline → artifacts → pipeline).
 type MaturityInputs struct {
-	// AIVP-T4 governance signal.
+	// AIVP governance signal.
 	AivpAdapterID string
 
 	// Ledger backend signal.
@@ -85,7 +85,7 @@ type MaturityInputs struct {
 //
 //   - DOG / DTL / DKEC / AER, always REAL. These are pure §0
 //     orchestrator work; there's no "mock" version.
-//   - AIVP-T4, REAL if the adapter ID is "live-claude-api";
+//   - AIVP, REAL if the adapter ID is "live-claude-api";
 //     MOCK if it's "mock-claude" or any other identifier; UNKNOWN
 //     if empty (the run didn't carry AI output text).
 //   - ZKSP, PARTIAL by default. Artifact shapes are sealed but the
