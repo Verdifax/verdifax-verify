@@ -85,6 +85,8 @@ verdifax-verify --json bundle.json    # machine-readable JSON output
 verdifax-verify --strict bundle.json  # also fail on any scaffold-flagged value
 verdifax-verify --policy policy.json bundle.json  # also check a policy document and run its rules on the sealed inputs
 verdifax-verify --policy-history history.json     # check a key's chain of policy changes
+verdifax-verify --account-policy account-policy.json bundle.json  # also check the account's policy and run its rules
+verdifax-verify --account-policy-history account-history.json   # check an account's chain of policy changes
 verdifax-verify --signer-key key.txt bundle.json  # also confirm the request was signed by this public key
 verdifax-verify --job job-folder/                 # check one job's records and the links between them
 verdifax-verify --allow-partial bundle.json       # exit 0 for a record the public log covers only in part
@@ -723,6 +725,43 @@ signature, every link and every public-log entry must verify, so a change
 that was removed, reordered or rewritten fails. Given with a record, it
 also fails unless the record names one of the changes in the chain. Run
 alone, it checks the chain and exits 0 or 1.
+
+### Accounts: `--account-policy` and `--account-policy-history`
+
+Every API key belongs to one account, for life. A record from v0.21.0 on
+names the account in `nrep.account_id` (on a refused or halted run, in
+`receipt_context.account_id`), and the report prints an "Account" line.
+The account number is a label Verdifax assigned. It is not a verified
+company identity: Verdifax does not check who a customer is, so a record
+shows which account's key requested the run, not which legal entity
+stands behind it.
+
+An account can have its own policy, which every key in the account must
+pass on top of the key's own. The account's rules run first, then the
+key's gate: the key's own policy, or, for a key with none, Verdifax's
+built-in policy, which admits every request and keeps the code scan. A run
+is admitted only when both allow, and the record seals each decision in its
+own field: `epa.account_policy_gate` beside `epa.policy_gate`, or
+`receipt_context.account_policy` beside `receipt_context.policy`. When the
+account's policy refuses a run, the key's rules never run, and the receipt
+names the key's policy with no decision. An account policy is the
+customer's own; Verdifax did not write, review or approve it. The verifier
+fails an account decision that names no account, names an author other
+than the customer, or names no change in the account's history. A halted
+run's receipt fails if either sealed decision is a refusal, because the
+gate admitted that run.
+
+`--account-policy FILE` checks the account's policy document as
+`--policy` checks the key's, and runs its rules on the sealed inputs.
+`--account-policy-history FILE` checks the account's chain of policy
+changes, from the JSON that `GET /account/policies/history` returns, as
+`--policy-history` checks a key's. Every change must belong to the account
+the record names, and the record must name one of them. Run alone, it
+checks the chain and that every change is one account's. An account's view
+covers the runs its keys made through Verdifax, not runs made elsewhere.
+
+The verifier reads these fields since v0.21.0; older releases refuse fields
+they do not know. Records without the fields hash exactly as before.
 
 ### `--job`: checking a job's records together
 

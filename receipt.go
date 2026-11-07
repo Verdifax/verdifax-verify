@@ -75,6 +75,10 @@ type ReceiptReport struct {
 	RequestSignature RequestSignatureCheck `json:"request_signature,omitempty"`
 	PolicyGate       PolicyGateCheck       `json:"policy_gate"`
 	PolicyHistory    *PolicyHistoryCheck   `json:"policy_history,omitempty"`
+	// The account fields (v0.21.0), as on an allowed run's report.
+	AccountID            string              `json:"account_id,omitempty"`
+	AccountPolicyGate    *PolicyGateCheck    `json:"account_policy_gate,omitempty"`
+	AccountPolicyHistory *PolicyHistoryCheck `json:"account_policy_history,omitempty"`
 
 	Tool         string `json:"tool"`
 	ToolVersion  string `json:"tool_version"`
@@ -331,6 +335,22 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		if policyFailed(rep.PolicyGate) {
 			return failEntry("the receipt's policy decision fails: %s", rep.PolicyGate.Reason)
 		}
+		rep.AccountID = d.ReceiptContext.AccountID
+		if idErr := checkAccountID(rep.AccountID); idErr != nil {
+			return failEntry("%v", idErr)
+		}
+		rep.AccountPolicyGate = accountGateOfReceipt(d.ReceiptContext)
+		if accountFailed(rep.AccountPolicyGate, nil) {
+			return failEntry("the receipt's account policy decision fails: %s", rep.AccountPolicyGate.Reason)
+		}
+		if admitErr := admittedDecisionError(f.kind, "policy", rep.PolicyGate); admitErr != nil {
+			return failEntry("%v", admitErr)
+		}
+		if rep.AccountPolicyGate != nil {
+			if admitErr := admittedDecisionError(f.kind, "account policy", *rep.AccountPolicyGate); admitErr != nil {
+				return failEntry("%v", admitErr)
+			}
+		}
 		if c := d.ReceiptContext; c.RequestSignature != nil {
 			rep.RequestSignature = checkRequestSignature(c.RequestSignature, c.Request, c.Job)
 			if !rep.RequestSignature.Match {
@@ -498,6 +518,7 @@ func printReceiptReport(r *ReceiptReport) {
 	if r.PolicyHistory != nil {
 		printPolicyHistory(*r.PolicyHistory)
 	}
+	printAccount(r.AccountID, r.AccountPolicyGate, r.AccountPolicyHistory)
 	switch r.VerdictTier {
 	case "VERIFIED_ANCHORED":
 		fmt.Println("VERDICT: ✓ RECEIPT VERIFIED AND ANCHORED")

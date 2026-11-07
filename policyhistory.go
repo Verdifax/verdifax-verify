@@ -18,6 +18,7 @@ import (
 // PolicyHistoryEntry is one change, as the report lists it.
 type PolicyHistoryEntry struct {
 	Sequence       int64  `json:"sequence"`
+	ChainID        string `json:"chain_id,omitempty"`
 	PolicyID       string `json:"policy_id"`
 	PolicyVersion  string `json:"policy_version"`
 	PolicyHash     string `json:"policy_hash"`
@@ -66,7 +67,7 @@ func checkPolicyHistory(data []byte) PolicyHistoryCheck {
 			c.Reason = fmt.Sprintf("change %d: %v", i+1, entryErr)
 			return c
 		}
-		entry := PolicyHistoryEntry{Sequence: a.Sequence, PolicyID: a.PolicyID, PolicyVersion: a.PolicyVersion, PolicyHash: a.PolicyHash,
+		entry := PolicyHistoryEntry{Sequence: a.Sequence, ChainID: a.ChainID, PolicyID: a.PolicyID, PolicyVersion: a.PolicyVersion, PolicyHash: a.PolicyHash,
 			ActivatedAt: a.ActivatedAt, ActivationHash: a.ActivationHash, LogEntry: a.Anchor.LogEntryID}
 		if a.Signature != nil {
 			entry.SignedBy = a.Signature.PublicKey
@@ -195,12 +196,15 @@ func recordInChain(c *PolicyHistoryCheck, activationHash string) {
 	c.Reason = "the record names a policy change that is not in this history"
 }
 
-func printPolicyHistory(c PolicyHistoryCheck) {
+func printPolicyHistory(c PolicyHistoryCheck) { printHistoryLines(c, "Policy history:") }
+
+// printHistoryLines renders one chain of policy changes under its label.
+func printHistoryLines(c PolicyHistoryCheck, label string) {
 	if !c.OK {
-		fmt.Printf("  Policy history:   ✗ FAILED · %s\n", c.Reason)
+		fmt.Printf("  %-18s✗ FAILED · %s\n", label, c.Reason)
 		return
 	}
-	fmt.Printf("  Policy history:   %d change(s), each linked, on the public log\n", len(c.Entries))
+	fmt.Printf("  %-18s%d change(s), each linked, on the public log\n", label, len(c.Entries))
 	for _, e := range c.Entries {
 		signed := "not signed"
 		if e.SignedBy != "" {

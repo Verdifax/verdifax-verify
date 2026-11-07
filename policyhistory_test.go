@@ -17,6 +17,12 @@ import (
 // activationChain builds n genuine, linked, signed and logged changes.
 func activationChain(t *testing.T, l *testLog, n int) []artifacts.PolicyActivation {
 	t.Helper()
+	return activationChainFor(t, l, n, "api-key-7")
+}
+
+// activationChainFor builds the same chain under another chain id.
+func activationChainFor(t *testing.T, l *testLog, n int, chainID string) []artifacts.PolicyActivation {
+	t.Helper()
 	pub, priv, keyErr := ed25519.GenerateKey(rand.Reader)
 	if keyErr != nil {
 		t.Fatal(keyErr)
@@ -29,11 +35,11 @@ func activationChain(t *testing.T, l *testLog, n int) []artifacts.PolicyActivati
 		document := strings.Repeat(string(rune('a'+i)), 64)
 		nonce := strings.Repeat("0", 31) + string(rune('0'+i))
 		chain[i] = artifacts.PolicyActivation{
-			Format: artifacts.PolicyActivationFormat, ChainID: "api-key-7", Sequence: int64(i + 1), PreviousActivationHash: previous,
+			Format: artifacts.PolicyActivationFormat, ChainID: chainID, Sequence: int64(i + 1), PreviousActivationHash: previous,
 			PolicyID: "acme", PolicyVersion: string(rune('1' + i)), PolicyHash: strings.Repeat("c", 64), DocumentHash: document, ActivatedAt: at,
 			Signature: &artifacts.PolicyActivationSignature{
 				PublicKey: base64.StdEncoding.EncodeToString(pub), SignedAt: at, Nonce: nonce,
-				Signature: base64.StdEncoding.EncodeToString(ed25519.Sign(priv, artifacts.PolicyActivationPreimage("api-key-7", document, previous, at, nonce))),
+				Signature: base64.StdEncoding.EncodeToString(ed25519.Sign(priv, artifacts.PolicyActivationPreimage(chainID, document, previous, at, nonce))),
 			},
 		}
 		sealActivation(t, l, &chain[i], 30*time.Second)

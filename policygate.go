@@ -54,25 +54,10 @@ type PolicyGateCheck struct {
 
 // policyGateOf reads the policy decision an allowed run seals.
 func policyGateOf(b *artifacts.AuditBundle) PolicyGateCheck {
-	pg := b.EPA.PolicyGate
-	if pg == nil {
+	if b.EPA.PolicyGate == nil {
 		return PolicyGateCheck{Reason: "no policy gate sealed (record predates it, or the run had no policy gate)"}
 	}
-	return PolicyGateCheck{
-		Present:            true,
-		PolicyID:           pg.PolicyID,
-		PolicyName:         pg.PolicyName,
-		PolicyVersion:      pg.PolicyVersion,
-		PolicyHash:         pg.PolicyHash,
-		FiredRuleID:        pg.FiredRuleID,
-		DecisionReasonCode: pg.DecisionReasonCode,
-		Source:             pg.Source,
-		DocumentHash:       pg.DocumentHash,
-		ActivationHash:     pg.ActivationHash,
-		Outcome:            string(psleval.EffectAllow),
-		inputs:             pg.Inputs,
-		identitySealed:     true,
-	}
+	return gateOf(b.EPA.PolicyGate)
 }
 
 // policyBindingOf reads the policy decision a refused or halted run seals. Its
@@ -230,11 +215,24 @@ func policyAuthor(c PolicyGateCheck) string {
 	}
 }
 
+// gateLabels are the words one policy decision is printed with.
+type gateLabels struct {
+	gate, author, document, flag, absent string
+}
+
 // printPolicyGate renders the policy gate line(s) of the human report.
 func printPolicyGate(c PolicyGateCheck) {
 	if !c.Present && !c.DocumentChecked {
 		fmt.Printf("  Policy gate:      not sealed in this record (%s)\n", c.Reason)
 		return
+	}
+	printGateLines(c, gateLabels{gate: "Policy gate:", author: "Policy author:", document: "Policy document:", flag: "--policy"})
+}
+
+// printGateLines renders one sealed decision and its document check.
+func printGateLines(c PolicyGateCheck, l gateLabels) {
+	line := func(label, format string, args ...any) {
+		fmt.Printf("  %-18s%s\n", label, fmt.Sprintf(format, args...))
 	}
 	if c.Present {
 		name := ""
@@ -245,21 +243,28 @@ func printPolicyGate(c PolicyGateCheck) {
 		if c.DecisionReasonCode != "" {
 			reason = " (" + c.DecisionReasonCode + ")"
 		}
-		fmt.Printf("  Policy gate:      %spolicy hash %s, rule %s%s\n", name, safePrefix(c.PolicyHash), c.FiredRuleID, reason)
-		fmt.Printf("  Policy author:    %s\n", policyAuthor(c))
+		switch {
+		case !c.identitySealed && c.Outcome == "" && c.FiredRuleID == "":
+			line(l.gate, "%spolicy hash %s; its rules did not decide this run, which stopped before they ran", name, safePrefix(c.PolicyHash))
+		case !c.identitySealed:
+			line(l.gate, "%spolicy hash %s, rule %s%s, %s", name, safePrefix(c.PolicyHash), c.FiredRuleID, reason, c.Outcome)
+		default:
+			line(l.gate, "%spolicy hash %s, rule %s%s", name, safePrefix(c.PolicyHash), c.FiredRuleID, reason)
+		}
+		line(l.author, "%s", policyAuthor(c))
 	}
 	switch {
 	case !c.DocumentChecked && c.BuiltInFile != "":
-		fmt.Printf("  Policy document:  not checked; this record seals no author or inputs, so the rules cannot be run again\n")
+		line(l.document, "not checked; this record seals no author or inputs, so the rules cannot be run again")
 	case !c.DocumentChecked:
-		fmt.Printf("  Policy document:  not checked; pass --policy FILE to confirm the named policy is the hashed one\n")
+		line(l.document, "not checked; pass %s FILE to confirm the named policy is the hashed one", l.flag)
 	case !c.DocumentMatch:
-		fmt.Printf("  Policy document:  ✗ FAILED · %s\n", c.Reason)
+		line(l.document, "✗ FAILED · %s", c.Reason)
 	case c.RulesChecked:
-		fmt.Printf("  Policy document:  matches, and the rules run on the sealed inputs reach the same rule and outcome\n")
-		fmt.Printf("                    The inputs are what was declared; this does not show they were true\n")
+		line(l.document, "matches, and the rules run on the sealed inputs reach the same rule and outcome")
+		line("", "The inputs are what was declared; this does not show they were true")
 	default:
-		fmt.Printf("  Policy document:  matches: its recomputed hash and the sealed identity agree; this record seals no inputs, so the rules were not run\n")
+		line(l.document, "matches: its recomputed hash and the sealed identity agree; this record seals no inputs, so the rules were not run")
 	}
 }
 

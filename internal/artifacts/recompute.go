@@ -76,7 +76,8 @@ func RecomputeEPAHash(e EPA) string {
 		EnvironmentSnapshot EnvSnapshot     `json:"environment_snapshot"`
 		AttestedContext     AttestedContext `json:"attested_context"`
 		PolicyGate          *PolicyGate     `json:"policy_gate,omitempty"`
-	}{e.Kind, e.KernelID, e.KernelVersion, e.PolicyHash, e.EnvironmentSnapshot, e.AttestedContext, e.PolicyGate})
+		AccountPolicyGate   *PolicyGate     `json:"account_policy_gate,omitempty"`
+	}{e.Kind, e.KernelID, e.KernelVersion, e.PolicyHash, e.EnvironmentSnapshot, e.AttestedContext, e.PolicyGate, e.AccountPolicyGate})
 }
 
 func RecomputeEFAHash(e EFA) string {

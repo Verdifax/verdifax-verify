@@ -131,6 +131,10 @@ type ReceiptContext struct {
 	RequestSignature *RequestSignature   `json:"request_signature,omitempty"`
 	Job              *JobLink            `json:"job,omitempty"`
 	Policy           *PolicyBinding      `json:"policy,omitempty"`
+	// AccountID and AccountPolicy are the account's, as on an allowed run's
+	// record; each joins the hash under its own label, only when present.
+	AccountID     string         `json:"account_id,omitempty"`
+	AccountPolicy *PolicyBinding `json:"account_policy,omitempty"`
 }
 
 // Hash digests the context for the receipt leaf.
@@ -146,6 +150,12 @@ func (c ReceiptContext) Hash() string {
 	}
 	if c.Policy != nil {
 		parts = append(parts, c.Policy.fields()...)
+	}
+	if c.AccountID != "" {
+		parts = append(parts, "account", c.AccountID)
+	}
+	if c.AccountPolicy != nil {
+		parts = append(parts, c.AccountPolicy.labeledFields("account_policy")...)
 	}
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(sum[:])

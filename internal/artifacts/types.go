@@ -113,9 +113,13 @@ type EPA struct {
 	// runs with no policy gate. PolicyHash above is a fixed value, the
 	// SHA-256 of "orchestrator.policy.v1", kept for record stability; it
 	// does not identify a policy.
-	PolicyGate *PolicyGate   `json:"policy_gate,omitempty"`
-	Hash       string        `json:"hash"`
-	Seal       SealReference `json:"seal"`
+	PolicyGate *PolicyGate `json:"policy_gate,omitempty"`
+	// AccountPolicyGate is the account policy's decision, beside the key's
+	// own in PolicyGate: a run is admitted only when both allow. Absent when
+	// the account has no policy, so earlier records hash as before.
+	AccountPolicyGate *PolicyGate   `json:"account_policy_gate,omitempty"`
+	Hash              string        `json:"hash"`
+	Seal              SealReference `json:"seal"`
 }
 
 // PolicyGate records the policy gate's decision in an allowed run's EPA
@@ -585,6 +589,11 @@ type NrepSection struct {
 
 	// Job places this run in a job map. Absent on every run outside a job.
 	Job *JobLink `json:"job,omitempty"`
+
+	// AccountID names the account whose key requested the run, a label
+	// Verdifax assigned, not a verified company identity. Empty on records
+	// sealed before accounts existed, which then hash as before.
+	AccountID string `json:"account_id,omitempty"`
 }
 
 // RequestSignature records who requested a run. It covers the request,
@@ -619,7 +628,7 @@ func (r *RequestSignature) fields() []string {
 // appended only when the run carries them, so other records hash exactly as
 // before.
 func (n NrepSection) SectionHash() string {
-	if n.RequestSignature == nil && n.Job == nil {
+	if n.RequestSignature == nil && n.Job == nil && n.AccountID == "" {
 		return ComputeNrepSectionHash(n.ActorID, n.PublicKey, n.Signature, n.SignedAt)
 	}
 	fields := []string{n.ActorID, n.PublicKey, n.Signature, n.SignedAt}
@@ -628,6 +637,9 @@ func (n NrepSection) SectionHash() string {
 	}
 	if n.Job != nil {
 		fields = append(fields, n.Job.fields()...)
+	}
+	if n.AccountID != "" {
+		fields = append(fields, "account", n.AccountID)
 	}
 	return nullJoinHash(nrepSectionDomain, fields...)
 }

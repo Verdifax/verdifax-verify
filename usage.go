@@ -36,6 +36,17 @@ FLAGS
                           first: every change and link must verify, and a
                           record given with it must name one of them. Runs
                           alone with no record
+  -account-policy FILE    for a record from a key in an account with a
+                          policy: check the account's policy document as
+                          -policy checks the key's, and run its rules on the
+                          sealed inputs. An allowed run must be allowed by
+                          both. The account policy is the customer's;
+                          Verdifax did not write, review or approve it
+  -account-policy-history FILE
+                          check a JSON list of the account's policy changes,
+                          oldest first, as -policy-history does; every change
+                          must belong to the account the record names. Runs
+                          alone with no record
   -signer-key FILE        pass only if the run was requested by the holder
                           of this base64 Ed25519 public key
   -request FILE           pass only if the record's version 2 signature

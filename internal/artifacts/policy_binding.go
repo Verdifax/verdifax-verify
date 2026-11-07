@@ -43,10 +43,15 @@ type PolicyBinding struct {
 	Inputs         *PolicyInputs `json:"inputs,omitempty"`
 }
 
-// fields lists the binding for the receipt context hash. The inputs go
-// in as one digest of their JSON, because their values are free text and
-// a joined list could not keep them apart.
-func (b *PolicyBinding) fields() []string {
+// fields lists the binding for the receipt context hash, labeled as the
+// key's own policy.
+func (b *PolicyBinding) fields() []string { return b.labeledFields("policy") }
+
+// labeledFields lists the binding under a label, so the key's policy and the
+// account's can never be read as each other. The inputs go in as one digest
+// of their JSON, because their values are free text and a joined list could
+// not keep them apart.
+func (b *PolicyBinding) labeledFields(label string) []string {
 	inputs := ""
 	if b.Inputs != nil {
 		encoded, encodeErr := json.Marshal(b.Inputs)
@@ -55,5 +60,5 @@ func (b *PolicyBinding) fields() []string {
 			inputs = hex.EncodeToString(sum[:])
 		}
 	}
-	return []string{"policy", b.Source, b.PolicyHash, b.DocumentHash, b.ActivationHash, b.Outcome, b.FiredRuleID, inputs}
+	return []string{label, b.Source, b.PolicyHash, b.DocumentHash, b.ActivationHash, b.Outcome, b.FiredRuleID, inputs}
 }

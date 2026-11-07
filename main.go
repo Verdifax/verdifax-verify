@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.20.0"
+const Version = "0.21.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -144,6 +144,14 @@ type Report struct {
 	PolicyGate PolicyGateCheck `json:"policy_gate"`
 	// PolicyHistory is the --policy-history check, when one was asked for.
 	PolicyHistory *PolicyHistoryCheck `json:"policy_history,omitempty"`
+	// AccountID is the account whose key requested the run (v0.21.0): a
+	// label Verdifax assigned, not a verified company identity.
+	AccountID string `json:"account_id,omitempty"`
+	// AccountPolicyGate is the account policy's sealed decision and, with
+	// --account-policy, the document check.
+	AccountPolicyGate *PolicyGateCheck `json:"account_policy_gate,omitempty"`
+	// AccountPolicyHistory is the --account-policy-history check.
+	AccountPolicyHistory *PolicyHistoryCheck `json:"account_policy_history,omitempty"`
 	// RecordValues are the decision-bearing values as checked (v0.12.1).
 	RecordValues RecordValues `json:"record_values"`
 	CrossChecks  []string     `json:"cross_check_failures,omitempty"`
@@ -180,6 +188,8 @@ type options struct {
 	requestFile     *string
 	jobFolder       *string
 	policyHistory   *string
+	accountPolicy   *string
+	accountHistory  *string
 	tamperTest      *bool
 	recomputeHashes *bool
 	showEvidence    *bool
@@ -197,6 +207,8 @@ func defineFlags(fs *flag.FlagSet) options {
 		signerKeyFile:   fs.String("signer-key", "", "a file holding the base64 Ed25519 public key you expect signed the request; fails unless the record carries a valid request signature from that key"),
 		requestFile:     fs.String("request", "", "a file holding the exact signed request; passes only if the record's version 2 signature covers those bytes"),
 		policyHistory:   fs.String("policy-history", "", "a JSON list of a key's policy changes, oldest first: every change and link must verify, and a record given with it must name a change in the list"),
+		accountPolicy:   fs.String("account-policy", "", "the account's policy document (JSON), for a record from a key in an account with a policy: checked as --policy checks the key's, and the account's rules run on the sealed inputs must reach the sealed decision, or verification fails"),
+		accountHistory:  fs.String("account-policy-history", "", "a JSON list of the account's policy changes, oldest first: every change and link must verify, every change must belong to the account the record names, and the record must name a change in the list"),
 		jobFolder:       fs.String("job", "", "a folder of one job's records: check each record, then the map of links between them"),
 		tamperTest:      fs.Bool("tamper-test", false, "change every value one at a time, delete every key holding a value, remove and append list items and add unknown keys, and report any change the verifier accepts and which checks caught the rest; exit 0 only if every change fails"),
 		recomputeHashes: fs.Bool("recompute-hashes", false, "with --tamper-test, play a forger who rewrites the whole record: after each change, recompute every hash the record itself determines, and count a change as stopped only when a check no rewrite can satisfy catches it (the public-log entries, their signer and timestamps, the actor signature or AMD's report signature)"),
@@ -229,6 +241,9 @@ func main() {
 	}
 	if *o.policyHistory != "" && flag.NArg() == 0 {
 		os.Exit(runPolicyHistoryMode(*o.policyHistory, *jsonOutput))
+	}
+	if *o.accountHistory != "" && flag.NArg() == 0 {
+		os.Exit(runAccountHistoryMode(*o.accountHistory, *jsonOutput))
 	}
 
 	// Error model of this binary: a CLI with no logger; an unreadable
@@ -304,6 +319,7 @@ func main() {
 				rr.VerdictTier, rr.AllPassed, rr.Reason = "FAILED", false, rr.PolicyHistory.Reason
 			}
 		}
+		applyReceiptAccountFlags(rr, *o.accountPolicy, *o.accountHistory)
 		if *jsonOutput {
 			emitReceiptJSON(rr)
 		} else {
@@ -348,6 +364,7 @@ func main() {
 			report.RecordCoverage = "failed"
 		}
 	}
+	applyAccountFlags(report, *o.accountPolicy, *o.accountHistory)
 	if *o.signerKeyFile != "" {
 		key, readErr := os.ReadFile(*o.signerKeyFile)
 		if readErr != nil {
@@ -728,7 +745,7 @@ const (
 var flagInputKinds = map[string]string{
 	"json": inputBoth, "version": inputBoth, "allow-unanchored": inputBoth,
 	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
-	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
+	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "account-policy-history": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
 	"self-hosted-receipt": inputReceipt,
 }
 
@@ -953,6 +970,11 @@ func verify(b *artifacts.AuditBundle) *Report {
 	r.NrepSignature = sealedOnlyWhenLogged(r.NrepSignature, r.RekorAnchor, r.EntryAuth)
 	r.RecordValues = recordValuesOf(b)
 	r.PolicyGate = checkBuiltIn(policyGateOf(b))
+	r.AccountID = b.Nrep.AccountID
+	r.AccountPolicyGate = accountGateOfBundle(b)
+	if idErr := checkAccountID(b.Nrep.AccountID); idErr != nil {
+		r.CrossChecks = append(r.CrossChecks, idErr.Error())
+	}
 
 	// Roll-up.
 	allPassed := r.BundleHashOK
@@ -1034,7 +1056,7 @@ func verify(b *artifacts.AuditBundle) *Report {
 	// partial verdict an older record honestly earns.
 	// A record naming a built-in policy this verifier does not carry, or
 	// whose rules run again do not reach the sealed decision, fails.
-	if policyFailed(r.PolicyGate) {
+	if policyFailed(r.PolicyGate) || accountFailed(r.AccountPolicyGate, nil) {
 		allPassed = false
 	}
 	r.passedExceptRequirement = allPassed
@@ -1313,6 +1335,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	if r.PolicyHistory != nil {
 		printPolicyHistory(*r.PolicyHistory)
 	}
+	printAccount(r.AccountID, r.AccountPolicyGate, r.AccountPolicyHistory)
 	for _, f := range r.CrossChecks {
 		fmt.Printf("  Cross-check:      ✗ FAILED · %s\n", f)
 	}

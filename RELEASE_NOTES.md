@@ -2,6 +2,37 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.21.0: accounts
+
+Every API key now belongs to one account, for life. A record names the
+account in `nrep.account_id`, and a refused or halted run names it in
+`receipt_context.account_id`. The account number is a label Verdifax
+assigned, not a verified company identity.
+
+An account can have its own policy, which every key in the account must
+pass on top of the key's own. The account's rules run first, then the
+key's own policy or, for a key with none, Verdifax's built-in policy. A
+run is admitted only when both allow. An allowed run seals the account's
+decision in `epa.account_policy_gate`, and a refused or halted run seals it
+in `receipt_context.account_policy`. An account policy is the customer's
+own; Verdifax did not write, review or approve it. The verifier fails an
+account decision that names no account, names another author, or names no
+change in the account's history. A halted run's receipt fails if either
+sealed decision is a refusal.
+
+`--account-policy FILE` runs the account's rules again on the sealed
+inputs, as `--policy` does for the key's. `--account-policy-history FILE`
+checks the account's chain of policy changes, and fails unless every change
+belongs to the account the record names and the record names one of them.
+Run alone, it checks the chain and that every change is one account's.
+
+The `--policy-history` report now lists each change's `chain_id`, and a
+receipt's policy line now shows the sealed outcome, or says the policy's
+rules did not decide the run. These records need
+this release, because older releases refuse fields they do not know.
+Records without the new fields hash exactly as before, so their verdicts
+do not change.
+
 ### v0.20.0: customer policies, run again by the verifier
 
 A customer can now load its own policy on an API key. A record decided by
