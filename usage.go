@@ -47,6 +47,16 @@ FLAGS
                           oldest first, as -policy-history does; every change
                           must belong to the account the record names. Runs
                           alone with no record
+  -signoff FILE           check the sign-offs given for the record or receipt:
+                          each must verify, belong to the record's account
+                          and name this exact result; the latest is the
+                          decision in force. A sign-off shows a registered
+                          approver key signed it, not that the review was
+                          careful or the result right
+  -approver-key FILE      with -signoff, pass only if the decision in force
+                          was signed by this base64 Ed25519 public key
+  -signoff-history FILE   check an account's whole chain of sign-offs,
+                          oldest first. Runs alone with no record
   -signer-key FILE        pass only if the run was requested by the holder
                           of this base64 Ed25519 public key
   -request FILE           pass only if the record's version 2 signature

@@ -2,6 +2,23 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.22.0: customer sign-off on results
+
+An account can now register approver keys, and an approver can sign off a
+result: approve or reject one exact record, a refused or halted run's
+receipt, or a whole job by its final step. Each sign-off is signed on the
+customer's machine with a key Verdifax never holds, anchored on the public
+log, and linked to the account's previous sign-off. A later sign-off on the
+same result supersedes the earlier one; nothing is deleted.
+
+`--signoff FILE` checks the sign-offs given for a record or receipt and
+names the decision in force. `--approver-key FILE` pins the approver.
+`--signoff-history FILE` checks an account's whole chain, and runs alone.
+A sign-off shows a registered approver key signed that decision on that
+result; it does not show the review was careful, the result was right, or
+who the person is. This release does not change the record format, so every
+verdict stays as it was.
+
 ### v0.21.0: accounts
 
 Every API key now belongs to one account, for life. A record names the

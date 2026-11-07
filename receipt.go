@@ -79,6 +79,9 @@ type ReceiptReport struct {
 	AccountID            string              `json:"account_id,omitempty"`
 	AccountPolicyGate    *PolicyGateCheck    `json:"account_policy_gate,omitempty"`
 	AccountPolicyHistory *PolicyHistoryCheck `json:"account_policy_history,omitempty"`
+	// The sign-off checks (v0.22.0), as on an allowed run's report.
+	SignOffs       *SignOffCheck `json:"signoffs,omitempty"`
+	SignOffHistory *SignOffCheck `json:"signoff_history,omitempty"`
 
 	Tool         string `json:"tool"`
 	ToolVersion  string `json:"tool_version"`
@@ -519,6 +522,7 @@ func printReceiptReport(r *ReceiptReport) {
 		printPolicyHistory(*r.PolicyHistory)
 	}
 	printAccount(r.AccountID, r.AccountPolicyGate, r.AccountPolicyHistory)
+	printSignOffs(r.SignOffs, r.SignOffHistory)
 	switch r.VerdictTier {
 	case "VERIFIED_ANCHORED":
 		fmt.Println("VERDICT: ✓ RECEIPT VERIFIED AND ANCHORED")

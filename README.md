@@ -87,6 +87,8 @@ verdifax-verify --policy policy.json bundle.json  # also check a policy document
 verdifax-verify --policy-history history.json     # check a key's chain of policy changes
 verdifax-verify --account-policy account-policy.json bundle.json  # also check the account's policy and run its rules
 verdifax-verify --account-policy-history account-history.json   # check an account's chain of policy changes
+verdifax-verify --signoff signoffs.json --approver-key approver.txt bundle.json  # check an approver's sign-off on this record
+verdifax-verify --signoff-history signoff-history.json          # check an account's chain of sign-offs
 verdifax-verify --signer-key key.txt bundle.json  # also confirm the request was signed by this public key
 verdifax-verify --job job-folder/                 # check one job's records and the links between them
 verdifax-verify --allow-partial bundle.json       # exit 0 for a record the public log covers only in part
@@ -762,6 +764,30 @@ covers the runs its keys made through Verdifax, not runs made elsewhere.
 
 The verifier reads these fields since v0.21.0; older releases refuse fields
 they do not know. Records without the fields hash exactly as before.
+
+### Sign-offs: `--signoff`, `--approver-key` and `--signoff-history`
+
+An account can register approver keys, separate from the keys that request
+runs, and an approver can sign off a result: approve or reject one exact
+record, a refused or halted run's receipt, or a whole job by its final step.
+The approver signs on its own machine with a key Verdifax never holds. Each
+sign-off is anchored on the public log and linked to the account's previous
+one, and a later sign-off on the same result supersedes the earlier one.
+
+`--signoff FILE` checks the sign-offs that `GET /runs/{id}/signoffs` returns
+for a record or receipt: each must verify, belong to the record's account
+and name this exact result, by the digest its public-log entry covers. The
+report names the decision in force. `--approver-key FILE` fails unless that
+decision was signed by the key in the file. `--signoff-history FILE` checks
+the account's whole chain from `GET /account/signoffs/history`, so a
+removed, reordered or rewritten sign-off fails; run alone, it checks the
+chain.
+
+A sign-off shows that the holder of an approver key the account registered
+signed that decision on that result, and that Verdifax logged it. It does
+not show that the review was careful, that the result was right, or who the
+person is: a key is not an identity. It gates nothing on its own. Verdifax
+did not review the result. The verifier reads sign-offs since v0.22.0.
 
 ### `--job`: checking a job's records together
 

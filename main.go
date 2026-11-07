@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.21.0"
+const Version = "0.22.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -152,6 +152,10 @@ type Report struct {
 	AccountPolicyGate *PolicyGateCheck `json:"account_policy_gate,omitempty"`
 	// AccountPolicyHistory is the --account-policy-history check.
 	AccountPolicyHistory *PolicyHistoryCheck `json:"account_policy_history,omitempty"`
+	// SignOffs is the --signoff check (v0.22.0): the approvers' decisions on
+	// this record. SignOffHistory is the account's whole chain.
+	SignOffs       *SignOffCheck `json:"signoffs,omitempty"`
+	SignOffHistory *SignOffCheck `json:"signoff_history,omitempty"`
 	// RecordValues are the decision-bearing values as checked (v0.12.1).
 	RecordValues RecordValues `json:"record_values"`
 	CrossChecks  []string     `json:"cross_check_failures,omitempty"`
@@ -190,6 +194,9 @@ type options struct {
 	policyHistory   *string
 	accountPolicy   *string
 	accountHistory  *string
+	signOff         *string
+	approverKey     *string
+	signOffHistory  *string
 	tamperTest      *bool
 	recomputeHashes *bool
 	showEvidence    *bool
@@ -209,6 +216,9 @@ func defineFlags(fs *flag.FlagSet) options {
 		policyHistory:   fs.String("policy-history", "", "a JSON list of a key's policy changes, oldest first: every change and link must verify, and a record given with it must name a change in the list"),
 		accountPolicy:   fs.String("account-policy", "", "the account's policy document (JSON), for a record from a key in an account with a policy: checked as --policy checks the key's, and the account's rules run on the sealed inputs must reach the sealed decision, or verification fails"),
 		accountHistory:  fs.String("account-policy-history", "", "a JSON list of the account's policy changes, oldest first: every change and link must verify, every change must belong to the account the record names, and the record must name a change in the list"),
+		signOff:         fs.String("signoff", "", "a JSON list of sign-offs for the record or receipt, as GET /runs/{id}/signoffs returns: each must verify, belong to the record's account and name this exact result; the latest is the decision in force"),
+		approverKey:     fs.String("approver-key", "", "with --signoff, a file holding the base64 Ed25519 public key you expect signed the decision in force; fails unless it did"),
+		signOffHistory:  fs.String("signoff-history", "", "a JSON list of an account's sign-offs, oldest first: every sign-off and link must verify, in one account; runs alone with no record"),
 		jobFolder:       fs.String("job", "", "a folder of one job's records: check each record, then the map of links between them"),
 		tamperTest:      fs.Bool("tamper-test", false, "change every value one at a time, delete every key holding a value, remove and append list items and add unknown keys, and report any change the verifier accepts and which checks caught the rest; exit 0 only if every change fails"),
 		recomputeHashes: fs.Bool("recompute-hashes", false, "with --tamper-test, play a forger who rewrites the whole record: after each change, recompute every hash the record itself determines, and count a change as stopped only when a check no rewrite can satisfy catches it (the public-log entries, their signer and timestamps, the actor signature or AMD's report signature)"),
@@ -244,6 +254,9 @@ func main() {
 	}
 	if *o.accountHistory != "" && flag.NArg() == 0 {
 		os.Exit(runAccountHistoryMode(*o.accountHistory, *jsonOutput))
+	}
+	if *o.signOffHistory != "" && flag.NArg() == 0 && *o.signOff == "" {
+		os.Exit(runSignOffHistoryMode(*o.signOffHistory, *jsonOutput))
 	}
 
 	// Error model of this binary: a CLI with no logger; an unreadable
@@ -320,6 +333,7 @@ func main() {
 			}
 		}
 		applyReceiptAccountFlags(rr, *o.accountPolicy, *o.accountHistory)
+		applyReceiptSignOffFlags(rr, doc, *o.signOff, *o.approverKey, *o.signOffHistory)
 		if *jsonOutput {
 			emitReceiptJSON(rr)
 		} else {
@@ -365,6 +379,7 @@ func main() {
 		}
 	}
 	applyAccountFlags(report, *o.accountPolicy, *o.accountHistory)
+	applySignOffFlags(report, bundle, *o.signOff, *o.approverKey, *o.signOffHistory)
 	if *o.signerKeyFile != "" {
 		key, readErr := os.ReadFile(*o.signerKeyFile)
 		if readErr != nil {
@@ -745,7 +760,7 @@ const (
 var flagInputKinds = map[string]string{
 	"json": inputBoth, "version": inputBoth, "allow-unanchored": inputBoth,
 	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
-	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "account-policy-history": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
+	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
 	"self-hosted-receipt": inputReceipt,
 }
 
@@ -1336,6 +1351,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 		printPolicyHistory(*r.PolicyHistory)
 	}
 	printAccount(r.AccountID, r.AccountPolicyGate, r.AccountPolicyHistory)
+	printSignOffs(r.SignOffs, r.SignOffHistory)
 	for _, f := range r.CrossChecks {
 		fmt.Printf("  Cross-check:      ✗ FAILED · %s\n", f)
 	}

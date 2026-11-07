@@ -126,15 +126,22 @@ func checkActivationSignature(a *artifacts.PolicyActivation) error {
 
 // checkActivationEntry checks the public-log entry as a receipt's is checked.
 func checkActivationEntry(a *artifacts.PolicyActivation, at time.Time) error {
-	entry := a.Anchor
+	return checkChainEntry(a.Anchor, artifacts.PolicyActivationKind, a.ActivationHash, a.LeafHash(), at, "activated_at")
+}
+
+// checkChainEntry checks the public-log entry of a record in a chain, a
+// policy change or a sign-off, as a receipt's entry is checked: it binds this
+// record's kind, hash and leaf, verifies against the log, was made by a pinned
+// Verdifax key in its accepted period, and inside the anchoring window after
+// the record's own time.
+func checkChainEntry(entry *artifacts.ReceiptAnchor, kind, hash, leaf string, at time.Time, clock string) error {
 	if entry == nil {
 		return errors.New("it carries no public-log entry")
 	}
 	if entry.Backend != "rekor" {
 		return fmt.Errorf("its entry's backend is %q, not the public log", entry.Backend)
 	}
-	if entry.ReceiptKind != artifacts.PolicyActivationKind || entry.ReceiptHash != a.ActivationHash ||
-		!strings.EqualFold(entry.LeafHashHex, a.LeafHash()) {
+	if entry.ReceiptKind != kind || entry.ReceiptHash != hash || !strings.EqualFold(entry.LeafHashHex, leaf) {
 		return errors.New("its public-log entry does not bind this record")
 	}
 	verifyErr := rekorAnchorVerifier(rekorverify.AnchorInput{
@@ -159,7 +166,7 @@ func checkActivationEntry(a *artifacts.PolicyActivation, at time.Time) error {
 	}
 	gap := float64(entry.IntegratedTime) - float64(at.UnixNano())/1e9
 	if gap < -anchoringClockSkew.Seconds() || gap > float64(artifacts.ReceiptAnchoringWindowSeconds) {
-		return fmt.Errorf("its entry was logged outside the %d-second window after activated_at", artifacts.ReceiptAnchoringWindowSeconds)
+		return fmt.Errorf("its entry was logged outside the %d-second window after %s", artifacts.ReceiptAnchoringWindowSeconds, clock)
 	}
 	return nil
 }
