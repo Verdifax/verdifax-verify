@@ -25,8 +25,17 @@ FLAGS
                           in full, then the map of links between them.
                           A job map covers what was sent; it cannot show
                           a step that was never sent
-  -policy FILE            check a policy document against the policy gate
-                          the record seals
+  -policy FILE            check a policy document against the policy
+                          decision the record or receipt seals, and run its
+                          rules on the sealed inputs. A pass shows the rules
+                          were applied to what was declared; it does not
+                          show that what was declared was true, or that the
+                          rules are good ones. Verdifax's built-in policy is
+                          carried here and checked without this flag
+  -policy-history FILE    check a JSON list of a key's policy changes, oldest
+                          first: every change and link must verify, and a
+                          record given with it must name one of them. Runs
+                          alone with no record
   -signer-key FILE        pass only if the run was requested by the holder
                           of this base64 Ed25519 public key
   -request FILE           pass only if the record's version 2 signature

@@ -130,6 +130,7 @@ type ReceiptContext struct {
 	Request          SealedRequestFields `json:"request"`
 	RequestSignature *RequestSignature   `json:"request_signature,omitempty"`
 	Job              *JobLink            `json:"job,omitempty"`
+	Policy           *PolicyBinding      `json:"policy,omitempty"`
 }
 
 // Hash digests the context for the receipt leaf.
@@ -142,6 +143,9 @@ func (c ReceiptContext) Hash() string {
 	}
 	if c.Job != nil {
 		parts = append(parts, c.Job.fields()...)
+	}
+	if c.Policy != nil {
+		parts = append(parts, c.Policy.fields()...)
 	}
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(sum[:])

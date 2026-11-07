@@ -1,0 +1,62 @@
+{
+  "deny_receipt": {
+    "decision_reason_code": "MCD_SIGNATURE_MATCH",
+    "deny_clock": "2026-11-07T13:27:28.263161Z",
+    "envelope_id": "env-22c51772b7f2dc55",
+    "evaluation_hash": "3df47eeabe76b9564b625bce9175c4a0fa771d3eff71c9c037619249d5096a41",
+    "evaluator_version": "pepg-0.1.0-api-test",
+    "fired_rule_id": "mcd-llm-001",
+    "mcd_finding_hash": "46b145b2c6e3feca7f215242a5ef69aba0aa058929a93625b28c8d0649accf24",
+    "policy_hash": "1a090975c0515a14296a0e68bb6840c5de4d76465369c50022e390b3da1e25d0",
+    "version": "vfa.deny_receipt.v1",
+    "hash": "519bbeec6fa8fe67280bcb894125e7b7ae22a25f6a31f0727046a0a958dfcbf7"
+  },
+  "ok": true,
+  "receipt_anchor": {
+    "kind": "verdifax.receipt_anchor.v3",
+    "receipt_kind": "deny_receipt",
+    "receipt_hash": "519bbeec6fa8fe67280bcb894125e7b7ae22a25f6a31f0727046a0a958dfcbf7",
+    "backend": "mock",
+    "log_entry_id": "mock-b565272c10eae16d26aba6f23df0efa9ae33b6fd4439cc549e3aa99be0815395",
+    "log_id": "",
+    "leaf_hash": "d40fbe994b0493866497767e39f944e1440adab4f2457f762599af00365e23d2",
+    "log_index": 0,
+    "tree_size": 0,
+    "root_hash": "",
+    "inclusion_path": null,
+    "checkpoint": "",
+    "signed_entry_timestamp": "",
+    "integrated_time": 0
+  },
+  "receipt_context": {
+    "request": {
+      "payload_hash": "22c51772b7f2dc55da89d1a1829d4376ff4ddaef732e8e8333afb6f113dfa442",
+      "program_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "route_id": "route-signed",
+      "registry_record_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "request_signature": {
+      "public_key": "CuHcC9e+9ECPjxngP7MsCzfRhO+0rKYdE/1XoKz1OSU=",
+      "signature": "X5I70ev25xgv5VwGVtawgAxGG9LT4DSNiCPZggCmfU/AciADS559Ff/pEsT3UDF4qDyygz1CeY2S2UE6IKmTBQ==",
+      "signed_at": "2026-11-07T13:27:28Z",
+      "nonce": "949cfc7d0e427491a667c50a7d5d348c"
+    },
+    "policy": {
+      "source": "verdifax",
+      "policy_hash": "1a090975c0515a14296a0e68bb6840c5de4d76465369c50022e390b3da1e25d0",
+      "document_hash": "c2395f30f608228a0442c00682326a040e030b895af59b22a41747740a9e4e28",
+      "outcome": "allow",
+      "fired_rule_id": "baseline-permit",
+      "inputs": {
+        "subject_id": "unattested",
+        "subject_type": "system",
+        "verb": "route-signed",
+        "object_type": "text",
+        "object_id": "request-payload",
+        "classification": "INTERNAL",
+        "evaluated_at": "2026-11-07T13:27:28.263161Z"
+      }
+    }
+  },
+  "run_id": 2
+}

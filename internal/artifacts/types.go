@@ -132,6 +132,17 @@ type PolicyGate struct {
 	FiredRuleID        string `json:"fired_rule_id"`
 	DecisionReasonCode string `json:"decision_reason_code"`
 	EvaluationHash     string `json:"evaluation_hash"`
+
+	// Source names who wrote the policy, and is set on records from
+	// verifier v0.20.0 on, with the three fields after it. DocumentHash
+	// covers the exact text, explanations included, which PolicyHash
+	// leaves out. ActivationHash is the change record the run happened
+	// under. Inputs are the values the rules read, so a reader can run
+	// them again.
+	Source         string        `json:"source,omitempty"`
+	DocumentHash   string        `json:"document_hash,omitempty"`
+	ActivationHash string        `json:"activation_hash,omitempty"`
+	Inputs         *PolicyInputs `json:"inputs,omitempty"`
 }
 
 type EnvSnapshot struct {

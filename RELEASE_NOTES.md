@@ -2,6 +2,37 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.20.0: customer policies, run again by the verifier
+
+A customer can now load its own policy on an API key. A record decided by
+a policy says who wrote it (`source`), names the policy's exact text by
+hash (`document_hash`), and seals the values the rules read (`inputs`). A
+refused or halted run seals the same in `receipt_context.policy`. These
+records need this release, because older releases refuse fields they do
+not know.
+
+`--policy FILE` now runs the rules itself, with a copy of the server's decision
+code, on the sealed inputs, and fails unless it
+reaches the sealed rule and outcome. It also checks the exact text hash.
+A pass shows the rules were applied to what was declared. The declared
+values are the customer's statements, and the rate counts are the
+server's, so a pass does not show the values were true. Verdifax did not
+write, review or approve a customer's policy.
+
+`--policy-history FILE` checks a key's chain of policy changes: each change
+is signed by the key holder's request key whenever one is registered,
+linked to the one before it and anchored on the public log, so a change that was removed,
+reordered or rewritten fails. Given with a record, it also fails unless the
+record names a change in the chain.
+
+Verdifax's built-in policy is now checked the same way. This release
+carries every built-in policy text Verdifax has run and runs it again with
+no `--policy` file. A record that names Verdifax as the author must name
+one of those texts. A record with no `source` field reads as built-in
+only when its policy hash is a built-in version, and otherwise as "not
+recorded". Records without the new fields hash exactly as
+before, so their verdicts do not change.
+
 ### v0.19.0: job maps and request signature version 2
 
 `--job FOLDER` checks one job's records: each record in full, then the map

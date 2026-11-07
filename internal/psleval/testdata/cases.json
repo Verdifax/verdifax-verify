@@ -1,0 +1,1984 @@
+[
+ {
+  "default_effect": "allow",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "no rules applies the default",
+  "rules": [],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "allow",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "no rule matches, default deny",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "exact",
+      "value": "other"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "allow",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "first matching rule wins",
+  "rules": [
+   {
+    "effect": "deny",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "a",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   },
+   {
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "b",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "a",
+   "outcome": "deny",
+   "reason_code": "RULE_DENIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "a rule that does not match is passed over",
+  "rules": [
+   {
+    "effect": "deny",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "a",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "exact",
+      "value": "x"
+     }
+    }
+   },
+   {
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "b",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "b",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "allow",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "reason code override",
+  "rules": [
+   {
+    "effect": "deny",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "reason_code": "ROLE_MISMATCH",
+    "rule_id": "a",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "a",
+   "outcome": "deny",
+   "reason_code": "ROLE_MISMATCH"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "exact",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "exact",
+      "value": "tool.send_email"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "prefix",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "prefix",
+      "value": "tool."
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "prefix longer than the value",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "prefix",
+      "value": "tool.send_email.extra"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "suffix",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "suffix",
+      "value": "_email"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "substring",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "substring",
+      "value": "send"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "in",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "in",
+      "values": [
+       "a",
+       "tool.send_email"
+      ]
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "not_in excludes",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "not_in",
+      "values": [
+       "tool.send_email"
+      ]
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "subject type must match",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "user"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "subject role match",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "role_match": {
+      "operator": "exact",
+      "value": "analyst"
+     },
+     "type": "agent"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "object type must match",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "code"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "object id match",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "prefix",
+      "value": "loans/"
+     },
+     "type": "data"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "classification at the max matches",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "classification_max": "INTERNAL",
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "classification above the max does not match",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "classification_max": "PUBLIC",
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "classification below the min does not match",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "classification_min": "RESTRICTED",
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "mfa required and satisfied",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "required": true,
+      "type": "mfa_required"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": false,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "mfa required and missing",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "required": true,
+      "type": "mfa_required"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "session old enough",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "seconds": 600,
+      "type": "min_session_age"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "session too new",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "seconds": 601,
+      "type": "min_session_age"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "role required",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "role": "admin",
+      "type": "requires_role"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "inside a time window",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "end_utc": "18:00",
+      "start_utc": "08:00",
+      "type": "time_window"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "on the end of a time window",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "end_utc": "14:30",
+      "start_utc": "08:00",
+      "type": "time_window"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "outside a time window",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "end_utc": "18:00",
+      "start_utc": "15:00",
+      "type": "time_window"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T23:00:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "a window wrapping midnight, inside",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "end_utc": "08:00",
+      "start_utc": "20:00",
+      "type": "time_window"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "a window wrapping midnight, outside",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "end_utc": "08:00",
+      "start_utc": "20:00",
+      "type": "time_window"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T09:30:00-05:00",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "an offset is read as UTC",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "end_utc": "15:00",
+      "start_utc": "14:00",
+      "type": "time_window"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "rate_counts": {
+    "r": 2
+   },
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "rate below the limit",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "max_per_window": 3,
+      "type": "rate_limit",
+      "window_seconds": 60
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "rate_counts": {
+    "r": 3
+   },
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "rate at the limit stops matching",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "max_per_window": 3,
+      "type": "rate_limit",
+      "window_seconds": 60
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "rate with no count yet",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "max_per_window": 1,
+      "type": "rate_limit",
+      "window_seconds": 60
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "all conditions must hold",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "required": true,
+      "type": "mfa_required"
+     },
+     {
+      "role": "admin",
+      "type": "requires_role"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "allow",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "a badly written window stops the decision",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "end_utc": "18:00",
+      "start_utc": "8am",
+      "type": "time_window"
+     }
+    ],
+    "effect": "deny",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "unreadable": true
+ },
+ {
+  "default_effect": "allow",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "letters in a window stop the decision",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "end_utc": "18:00",
+      "start_utc": "0a:00",
+      "type": "time_window"
+     }
+    ],
+    "effect": "deny",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "unreadable": true
+ },
+ {
+  "default_effect": "allow",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "an unreadable clock stops the decision",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "end_utc": "18:00",
+      "start_utc": "08:00",
+      "type": "time_window"
+     }
+    ],
+    "effect": "deny",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "unreadable": true
+ },
+ {
+  "default_effect": "allow",
+  "inputs": {
+   "classification": "SECRET-ISH",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "an unknown classification stops the decision",
+  "rules": [
+   {
+    "effect": "deny",
+    "object": {
+     "classification_min": "RESTRICTED",
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "unreadable": true
+ },
+ {
+  "default_effect": "allow",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "an unknown condition stops the decision",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "type": "moon_phase"
+     }
+    ],
+    "effect": "deny",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "unreadable": true
+ },
+ {
+  "default_effect": "allow",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "an unknown operator stops the decision",
+  "rules": [
+   {
+    "effect": "deny",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "regex",
+      "value": "x"
+     }
+    }
+   }
+  ],
+  "unreadable": true
+ },
+ {
+  "default_effect": "allow",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-06T14:30:00Z",
+   "mfa_satisfied": true,
+   "object_id": "loans/42",
+   "object_type": "data",
+   "session_age_seconds": 600,
+   "subject_id": "agent-7",
+   "subject_role": "analyst",
+   "subject_type": "agent",
+   "verb": "tool.send_email"
+  },
+  "name": "a broken rule after the one that fires still stops it",
+  "rules": [
+   {
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "a",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   },
+   {
+    "conditions": [
+     {
+      "type": "moon_phase"
+     }
+    ],
+    "effect": "deny",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "b",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "unreadable": true
+ }
+]

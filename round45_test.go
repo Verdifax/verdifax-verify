@@ -201,7 +201,7 @@ func TestFlagsAreRefusedOnTheWrongInput(t *testing.T) {
 		stderr string
 		stdout string
 	}{
-		{[]string{"--policy", policy, receipt}, 2, "--policy applies only to an audit bundle; this input is a receipt document", ""},
+		{[]string{"--policy", policy, receipt}, 1, "", "no policy gate to compare it with"},
 		{[]string{"--strict", receipt}, 2, "--strict applies only to an audit bundle", ""},
 		{[]string{"--allow-partial", receipt}, 2, "--allow-partial applies only to an audit bundle", ""},
 		{[]string{"--show-evidence-summary", receipt}, 2, "--show-evidence-summary applies only to an audit bundle", ""},

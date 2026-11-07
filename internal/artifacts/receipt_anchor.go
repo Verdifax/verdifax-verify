@@ -72,7 +72,7 @@ type ReceiptAnchor struct {
 // assumptions: a known kind, a dot-free non-empty envelope_id, and a
 // 64-character lowercase hex receipt hash.
 func ValidateReceiptLeafFields(kind, envelopeID, receiptHash string) error {
-	known := false
+	known := kind == PolicyActivationKind
 	for _, k := range ReceiptKinds {
 		if k == kind {
 			known = true

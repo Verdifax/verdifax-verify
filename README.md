@@ -83,7 +83,8 @@ verdifax-verify bundle.json           # verify a file, print human report
 cat bundle.json | verdifax-verify     # verify from stdin
 verdifax-verify --json bundle.json    # machine-readable JSON output
 verdifax-verify --strict bundle.json  # also fail on any scaffold-flagged value
-verdifax-verify --policy policy.json bundle.json  # also check a policy document against the sealed policy gate
+verdifax-verify --policy policy.json bundle.json  # also check a policy document and run its rules on the sealed inputs
+verdifax-verify --policy-history history.json     # check a key's chain of policy changes
 verdifax-verify --signer-key key.txt bundle.json  # also confirm the request was signed by this public key
 verdifax-verify --job job-folder/                 # check one job's records and the links between them
 verdifax-verify --allow-partial bundle.json       # exit 0 for a record the public log covers only in part
@@ -653,28 +654,75 @@ first three entries, all from private test runs on 2026-10-24
 before v0.17.0 report entries signed by key 3 as signed by an
 unpublished key.
 
-### `--policy`: confirming which policy admitted a run
+### `--policy`: confirming which policy decided a run
 
 Records sealed from orchestrator 564f1d4 (October 19, 2026 UTC) on
 carry the policy gate's decision in the EPA section (`epa.policy_gate`):
 the policy's identifier, name and version, its hash, the rule that
-admitted the request and the reason code. The report prints them on the
-"Policy gate" line. Those values are covered by the EPA section hash, the
-bundle hash and, on complete-record anchored records, the second
-public-log entry, so editing them fails verification.
+decided and the reason code. The report prints them on the "Policy gate"
+line. Those values are covered by the EPA section hash, the bundle hash
+and, on complete-record anchored records, the second public-log entry, so
+editing them fails verification.
 
-What the record cannot show on its own is that the named identifier and
-version belong to the hashed document, because the record carries the
-hash, not the policy. `--policy FILE` closes that gap for a reader who
-holds the policy document: the verifier recomputes the document's policy
-hash exactly as the orchestrator does (`internal/policyhash`, with
-parity vectors against the orchestrator for 21 documents, including the
-production default policy) and fails verification unless the hash,
-identifier, name and version all equal the sealed values. Against a
-record with no policy gate, `--policy` fails rather than passing
-silently. `epa.policy_hash`, a separate field, is a fixed value (the
-SHA-256 of `orchestrator.policy.v1`) kept for record stability; it does
-not identify a policy.
+A record that names its policy's author also seals, beside them, who
+wrote the policy (`source`), the hash of the policy's exact text
+(`document_hash`), the change record it ran under for a customer's policy
+(`activation_hash`), and the values the rules read (`inputs`). A refused
+or halted run seals the same values in `receipt_context.policy`, which
+receipt anchor v3 binds to its public-log entry. The verifier reads them
+since v0.20.0; older releases refuse fields they do not know.
+
+`--policy FILE` checks a policy document the reader holds. The verifier
+recomputes the document's policy hash exactly as the orchestrator does
+(`internal/policyhash`, with parity vectors against the orchestrator) and
+fails unless the hash, identifier, name and version all equal the sealed
+values and, where the record names it, the exact text hashes to
+`document_hash`. Where the record seals its inputs, the verifier then runs
+the rules itself, with a copy of the server's decision code, held to the server's by a release check,
+(`internal/psleval`), and fails unless it reaches the same rule and
+outcome. Against a record with no policy gate, `--policy` fails rather
+than passing silently.
+
+What a pass shows, and what it does not:
+
+- The rules were applied to the values the request declared. Those values
+  are the customer's own statements, apart from the time and the rate
+  counts, which are the server's. A pass does not show the declared values
+  were true: an MFA field is what the customer said.
+- The verifier cannot recount a rate limit alone. It checks the decision
+  against the count the server sealed.
+- A customer's policy is written by the customer. Verdifax did not write,
+  review or approve it, and a pass means the rules ran, not that they are
+  good rules.
+- The rules read declared values, not the content of the request or the
+  AI's answer. A refusal stops an action only if the customer's system
+  waits for the answer.
+
+**Verdifax's built-in policy.** A key with no policy of its own runs under
+Verdifax's built-in policy, which admits every request; its refusals come
+from the code scan. This verifier carries every built-in policy text
+Verdifax has run (`internal/pslbuiltin`, held to the server's copy by a
+release check). A record that names Verdifax as the author must name one of them by
+its exact text hash; the verifier then checks it and runs its rules again
+with no `--policy` file, and fails a record naming a text it does not
+carry. A record with no `source` field reads as built-in only when its
+policy hash is a built-in version, and otherwise as "not recorded".
+
+`epa.policy_hash`, a separate field, is a fixed value (the SHA-256 of
+`orchestrator.policy.v1`) kept for record stability; it does not identify
+a policy.
+
+### `--policy-history`: confirming which policy was in force
+
+Every change to a customer's active policy is a record in a chain: each
+names the policy's exact text and the change before it, carries a signature
+by the key holder's request key whenever one is registered, as it always is
+on a pilot key, and is anchored on the public log. `--policy-history FILE` checks a key's whole chain, oldest
+first, from the JSON that `GET /policies/history` returns: every
+signature, every link and every public-log entry must verify, so a change
+that was removed, reordered or rewritten fails. Given with a record, it
+also fails unless the record names one of the changes in the chain. Run
+alone, it checks the chain and exits 0 or 1.
 
 ### `--job`: checking a job's records together
 

@@ -1,24 +1,31 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/Verdifax/verdifax-verify/internal/artifacts"
 	"github.com/Verdifax/verdifax-verify/internal/policyhash"
+	"github.com/Verdifax/verdifax-verify/internal/pslbuiltin"
+	"github.com/Verdifax/verdifax-verify/internal/psleval"
 )
 
-// PolicyGateCheck reports the policy gate's decision an allowed run seals
-// in its EPA section (orchestrator releases from October 2026 on), and,
-// with --policy, whether a policy document the reader holds is the one
-// the gate evaluated.
+// PolicyGateCheck reports the policy decision a run seals, on an allowed run
+// in its EPA section and on a refused or halted run in its receipt context,
+// and, with --policy, what a policy document the reader holds shows about it.
 //
-// The values are covered by the EPA section hash, the bundle hash and,
-// on complete-record anchored records, the second public-log entry, so
-// editing them fails verification. What they cannot show on their own
-// is that the named identifier and version belong to the hashed
-// document: the record carries the hash, not the policy. --policy
-// closes that: the document's recomputed hash must equal the sealed one,
-// and its identifier, name and version must equal the sealed values.
+// The values are covered by the record's or receipt's hashes and public-log
+// entries, so editing them fails verification. What they cannot show on their
+// own is that the rules were applied correctly: the record carries hashes, not
+// the policy. --policy closes that. The document's hashes must equal the sealed
+// ones, and where the run sealed the values the rules read, this tool runs the
+// rules itself, with a copy of the server's decision code, and must reach the
+// same rule and outcome. The sealed values are the customer's own statements,
+// except the time and the rate count, which are the server's; a pass shows the
+// rules were applied to those values, not that they were true.
 type PolicyGateCheck struct {
 	Present            bool   `json:"present"`
 	PolicyID           string `json:"policy_id,omitempty"`
@@ -27,12 +34,25 @@ type PolicyGateCheck struct {
 	PolicyHash         string `json:"policy_hash,omitempty"`
 	FiredRuleID        string `json:"fired_rule_id,omitempty"`
 	DecisionReasonCode string `json:"decision_reason_code,omitempty"`
+	Source             string `json:"source,omitempty"`
+	DocumentHash       string `json:"document_hash,omitempty"`
+	ActivationHash     string `json:"activation_hash,omitempty"`
+	Outcome            string `json:"outcome,omitempty"`
 	DocumentChecked    bool   `json:"document_checked"`
 	DocumentMatch      bool   `json:"document_match"`
-	Reason             string `json:"reason,omitempty"`
+	RulesChecked       bool   `json:"rules_checked"`
+	// BuiltInFile names the Verdifax built-in policy this verifier carries
+	// that the record is held to: by its sealed text hash on a record that
+	// names Verdifax as the author, and by its policy hash on an earlier
+	// record that names no author.
+	BuiltInFile string `json:"builtin_file,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+
+	inputs         *artifacts.PolicyInputs
+	identitySealed bool
 }
 
-// policyGateOf reads the sealed policy gate values.
+// policyGateOf reads the policy decision an allowed run seals.
 func policyGateOf(b *artifacts.AuditBundle) PolicyGateCheck {
 	pg := b.EPA.PolicyGate
 	if pg == nil {
@@ -46,12 +66,78 @@ func policyGateOf(b *artifacts.AuditBundle) PolicyGateCheck {
 		PolicyHash:         pg.PolicyHash,
 		FiredRuleID:        pg.FiredRuleID,
 		DecisionReasonCode: pg.DecisionReasonCode,
+		Source:             pg.Source,
+		DocumentHash:       pg.DocumentHash,
+		ActivationHash:     pg.ActivationHash,
+		Outcome:            string(psleval.EffectAllow),
+		inputs:             pg.Inputs,
+		identitySealed:     true,
 	}
 }
 
-// checkPolicyDocument compares a policy document against the sealed
-// policy gate. Error model: every problem becomes the check's reason;
-// this binary has no logger.
+// policyBindingOf reads the policy decision a refused or halted run seals. Its
+// outcome and rule are what the policy's rules decided, which stays true when
+// the built-in code scan then refused a run the rules allowed.
+func policyBindingOf(b *artifacts.PolicyBinding) PolicyGateCheck {
+	if b == nil {
+		return PolicyGateCheck{Reason: "no policy decision sealed in this receipt"}
+	}
+	return PolicyGateCheck{
+		Present:        true,
+		PolicyHash:     b.PolicyHash,
+		FiredRuleID:    b.FiredRuleID,
+		Source:         b.Source,
+		DocumentHash:   b.DocumentHash,
+		ActivationHash: b.ActivationHash,
+		Outcome:        b.Outcome,
+		inputs:         b.Inputs,
+	}
+}
+
+// checkBuiltIn holds a record to the Verdifax built-in policy it names. One
+// naming Verdifax as the author must name, by the hash of its exact text, a
+// version this verifier carries; that text is then checked as a --policy
+// document would be, and the rules are run again on the sealed inputs. An
+// earlier record that names no author is matched by its policy hash, so it
+// reads as built-in only when it is. An author this verifier does not know
+// fails, as an unknown field does.
+func checkBuiltIn(c PolicyGateCheck) PolicyGateCheck {
+	if !c.Present {
+		return c
+	}
+	fail := func(format string, args ...any) PolicyGateCheck {
+		c.DocumentChecked, c.DocumentMatch, c.Reason = true, false, fmt.Sprintf(format, args...)
+		return c
+	}
+	switch c.Source {
+	case artifacts.PolicySourceCustomer:
+		return c
+	case artifacts.PolicySourceVerdifax:
+		if c.ActivationHash != "" {
+			return fail("the record names Verdifax's built-in policy and also a customer's policy change record %s", safePrefix(c.ActivationHash))
+		}
+		published, found := pslbuiltin.ByDocumentHash(c.DocumentHash)
+		if !found {
+			return fail("the record names a Verdifax built-in policy with text hash %s, which this verifier release does not carry; use the latest release", safePrefix(c.DocumentHash))
+		}
+		c.BuiltInFile = published.File
+		return checkPolicyDocument(c, published.Document)
+	case "":
+		if published, found := pslbuiltin.ByPolicyHash(c.PolicyHash); found {
+			c.BuiltInFile = published.File
+		}
+		return c
+	default:
+		return fail("the record names policy author %q, which this verifier does not know", c.Source)
+	}
+}
+
+// policyFailed reports a policy check that ran and did not hold.
+func policyFailed(c PolicyGateCheck) bool { return c.DocumentChecked && !c.DocumentMatch }
+
+// checkPolicyDocument compares a policy document with the sealed decision.
+// Error model: every problem becomes the check's reason; this binary has no
+// logger.
 func checkPolicyDocument(c PolicyGateCheck, doc []byte) PolicyGateCheck {
 	c.DocumentChecked = true
 	if !c.Present {
@@ -63,16 +149,85 @@ func checkPolicyDocument(c PolicyGateCheck, doc []byte) PolicyGateCheck {
 		c.Reason = fmt.Sprintf("the policy document could not be read as a policy: %v", docErr)
 		return c
 	}
-	switch {
+	digest := sha256.Sum256(doc)
+	switch documentHash := hex.EncodeToString(digest[:]); {
 	case got.PolicyHash != c.PolicyHash:
 		c.Reason = fmt.Sprintf("the document's policy hash %s is not the sealed %s", got.PolicyHash, c.PolicyHash)
-	case got.PolicyID != c.PolicyID || got.PolicyName != c.PolicyName || got.PolicyVersion != c.PolicyVersion:
+		return c
+	case c.identitySealed && (got.PolicyID != c.PolicyID || got.PolicyName != c.PolicyName || got.PolicyVersion != c.PolicyVersion):
 		c.Reason = fmt.Sprintf("the document is %q %q version %q, the record names %q %q version %q",
 			got.PolicyID, got.PolicyName, got.PolicyVersion, c.PolicyID, c.PolicyName, c.PolicyVersion)
-	default:
-		c.DocumentMatch = true
+		return c
+	case c.DocumentHash != "" && documentHash != c.DocumentHash:
+		c.Reason = fmt.Sprintf("the document's exact text hashes to %s, the record seals %s", documentHash, c.DocumentHash)
+		return c
 	}
+	if c.inputs == nil {
+		c.DocumentMatch = true
+		return c
+	}
+	c.RulesChecked = true
+	if ruleErr := rerunRules(c, doc); ruleErr != nil {
+		c.Reason = ruleErr.Error()
+		return c
+	}
+	c.DocumentMatch = true
 	return c
+}
+
+// rerunRules decides again from the document and the sealed inputs.
+func rerunRules(c PolicyGateCheck, doc []byte) error {
+	rules, readErr := psleval.ReadDocument(doc)
+	if readErr != nil {
+		return fmt.Errorf("the rules could not be read: %w", readErr)
+	}
+	inputs, convertErr := sealedInputs(c.inputs)
+	if convertErr != nil {
+		return fmt.Errorf("the sealed inputs could not be read: %w", convertErr)
+	}
+	result, decideErr := psleval.Decide(rules.Rules, rules.DefaultEffect, inputs.Context())
+	if errors.Is(decideErr, psleval.ErrUnreadable) {
+		return fmt.Errorf("the rules cannot be decided on the sealed inputs: %w", decideErr)
+	}
+	if decideErr != nil {
+		return fmt.Errorf("the rules could not be run: %w", decideErr)
+	}
+	if result.FiredRuleID != c.FiredRuleID || string(result.Outcome) != c.Outcome {
+		return fmt.Errorf("running the rules on the sealed inputs gives %s by rule %q, the record says %s by rule %q",
+			result.Outcome, result.FiredRuleID, c.Outcome, c.FiredRuleID)
+	}
+	return nil
+}
+
+// sealedInputs turns the record's form of the inputs into the decision's. The
+// two types are one field list, which a test holds in step.
+func sealedInputs(in *artifacts.PolicyInputs) (psleval.Inputs, error) {
+	var out psleval.Inputs
+	encoded, encodeErr := json.Marshal(in)
+	if encodeErr != nil {
+		return out, encodeErr
+	}
+	return out, json.Unmarshal(encoded, &out)
+}
+
+// policyAuthor says who wrote the policy, so a customer's rules can never read
+// as Verdifax's approval of them, and a policy reads as Verdifax's only when
+// this verifier holds its text.
+func policyAuthor(c PolicyGateCheck) string {
+	switch {
+	case c.Source == artifacts.PolicySourceCustomer:
+		return "written by the customer; Verdifax did not write, review or approve it"
+	case c.Source == artifacts.PolicySourceVerdifax && c.BuiltInFile != "":
+		return "Verdifax's built-in policy, " + c.BuiltInFile + ", which this verifier carries"
+	case c.Source == artifacts.PolicySourceVerdifax:
+		return "names Verdifax's built-in policy, in a version this verifier does not carry"
+	case c.Source == "" && c.BuiltInFile != "":
+		return "not recorded in this record; its policy hash is Verdifax's built-in " + c.BuiltInFile
+	case c.Source == "":
+		return "not recorded in this record, and its policy hash is not a Verdifax built-in version"
+	default:
+		return fmt.Sprintf("unknown author %q", c.Source)
+	}
 }
 
 // printPolicyGate renders the policy gate line(s) of the human report.
@@ -82,16 +237,29 @@ func printPolicyGate(c PolicyGateCheck) {
 		return
 	}
 	if c.Present {
-		fmt.Printf("  Policy gate:      %s %q version %s, policy hash %s, rule %s (%s)\n",
-			c.PolicyID, c.PolicyName, c.PolicyVersion, safePrefix(c.PolicyHash), c.FiredRuleID, c.DecisionReasonCode)
+		name := ""
+		if c.identitySealed {
+			name = fmt.Sprintf("%s %q version %s, ", c.PolicyID, c.PolicyName, c.PolicyVersion)
+		}
+		reason := ""
+		if c.DecisionReasonCode != "" {
+			reason = " (" + c.DecisionReasonCode + ")"
+		}
+		fmt.Printf("  Policy gate:      %spolicy hash %s, rule %s%s\n", name, safePrefix(c.PolicyHash), c.FiredRuleID, reason)
+		fmt.Printf("  Policy author:    %s\n", policyAuthor(c))
 	}
 	switch {
+	case !c.DocumentChecked && c.BuiltInFile != "":
+		fmt.Printf("  Policy document:  not checked; this record seals no author or inputs, so the rules cannot be run again\n")
 	case !c.DocumentChecked:
 		fmt.Printf("  Policy document:  not checked; pass --policy FILE to confirm the named policy is the hashed one\n")
-	case c.DocumentMatch:
-		fmt.Printf("  Policy document:  matches: its recomputed hash, identifier, name and version equal the sealed values\n")
-	default:
+	case !c.DocumentMatch:
 		fmt.Printf("  Policy document:  ✗ FAILED · %s\n", c.Reason)
+	case c.RulesChecked:
+		fmt.Printf("  Policy document:  matches, and the rules run on the sealed inputs reach the same rule and outcome\n")
+		fmt.Printf("                    The inputs are what was declared; this does not show they were true\n")
+	default:
+		fmt.Printf("  Policy document:  matches: its recomputed hash and the sealed identity agree; this record seals no inputs, so the rules were not run\n")
 	}
 }
 
@@ -99,9 +267,17 @@ func printPolicyGate(c PolicyGateCheck) {
 // document that does not match fails verification.
 func applyPolicyDocument(r *Report, doc []byte) {
 	r.PolicyGate = checkPolicyDocument(r.PolicyGate, doc)
-	if !r.PolicyGate.DocumentMatch {
+	if policyFailed(r.PolicyGate) {
 		r.AllPassed = false
 		r.VerdictTier = "FAILED"
 		r.RecordCoverage = "failed"
+	}
+}
+
+// applyReceiptPolicyDocument is the same check for a refused or halted run.
+func applyReceiptPolicyDocument(r *ReceiptReport, doc []byte) {
+	r.PolicyGate = checkPolicyDocument(r.PolicyGate, doc)
+	if policyFailed(r.PolicyGate) {
+		r.VerdictTier, r.AllPassed, r.Reason = "FAILED", false, r.PolicyGate.Reason
 	}
 }

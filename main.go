@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.19.0"
+const Version = "0.20.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -142,6 +142,8 @@ type Report struct {
 	// PolicyGate is the policy gate's sealed decision and, with
 	// --policy, the document check (v0.15.0).
 	PolicyGate PolicyGateCheck `json:"policy_gate"`
+	// PolicyHistory is the --policy-history check, when one was asked for.
+	PolicyHistory *PolicyHistoryCheck `json:"policy_history,omitempty"`
 	// RecordValues are the decision-bearing values as checked (v0.12.1).
 	RecordValues RecordValues `json:"record_values"`
 	CrossChecks  []string     `json:"cross_check_failures,omitempty"`
@@ -177,6 +179,7 @@ type options struct {
 	signerKeyFile   *string
 	requestFile     *string
 	jobFolder       *string
+	policyHistory   *string
 	tamperTest      *bool
 	recomputeHashes *bool
 	showEvidence    *bool
@@ -190,9 +193,10 @@ func defineFlags(fs *flag.FlagSet) options {
 		allowUnanchored: fs.Bool("allow-unanchored", false, "exit 0 for a bundle with no public-log anchor; without this flag, unanchored bundles fail, because every sealing property this tool checks hangs off the anchor and an attacker can strip an anchor claim by editing one unprotected field (the documented downgrade attack)"),
 		showVersion:     fs.Bool("version", false, "print version and exit"),
 		selfHosted:      fs.Bool("self-hosted-receipt", false, "the receipt was issued by a test or self-hosted deployment that does not anchor receipts on the public log, not by the Verdifax API; exempts it from the rules that receipts dated from run 241 on must carry a public-log anchor and receipts dated from run 242 on must seal anchor_required"),
-		policyFile:      fs.String("policy", "", "a policy document (JSON) to check against the policy gate the record seals: its recomputed policy hash, identifier, name and version must equal the sealed values, or verification fails"),
+		policyFile:      fs.String("policy", "", "a policy document (JSON) to check against the policy decision the record or receipt seals: its hashes and sealed identity must match, and where the run sealed the inputs the rules read, this tool runs the rules itself and must reach the same rule and outcome, or verification fails"),
 		signerKeyFile:   fs.String("signer-key", "", "a file holding the base64 Ed25519 public key you expect signed the request; fails unless the record carries a valid request signature from that key"),
 		requestFile:     fs.String("request", "", "a file holding the exact signed request; passes only if the record's version 2 signature covers those bytes"),
+		policyHistory:   fs.String("policy-history", "", "a JSON list of a key's policy changes, oldest first: every change and link must verify, and a record given with it must name a change in the list"),
 		jobFolder:       fs.String("job", "", "a folder of one job's records: check each record, then the map of links between them"),
 		tamperTest:      fs.Bool("tamper-test", false, "change every value one at a time, delete every key holding a value, remove and append list items and add unknown keys, and report any change the verifier accepts and which checks caught the rest; exit 0 only if every change fails"),
 		recomputeHashes: fs.Bool("recompute-hashes", false, "with --tamper-test, play a forger who rewrites the whole record: after each change, recompute every hash the record itself determines, and count a change as stopped only when a check no rewrite can satisfy catches it (the public-log entries, their signer and timestamps, the actor signature or AMD's report signature)"),
@@ -222,6 +226,9 @@ func main() {
 
 	if *o.jobFolder != "" {
 		os.Exit(runJobMode(o, *jsonOutput, *allowPartial, *allowUnanchored, *selfHosted))
+	}
+	if *o.policyHistory != "" && flag.NArg() == 0 {
+		os.Exit(runPolicyHistoryMode(*o.policyHistory, *jsonOutput))
 	}
 
 	// Error model of this binary: a CLI with no logger; an unreadable
@@ -283,6 +290,20 @@ func main() {
 				rr.VerdictTier, rr.AllPassed, rr.Reason = "FAILED", false, rr.RequestSignature.Reason
 			}
 		}
+		if *policyFile != "" {
+			policyDoc, readErr := os.ReadFile(*policyFile)
+			if readErr != nil {
+				fmt.Fprintln(os.Stderr, "verdifax-verify: read --policy:", readErr)
+				os.Exit(2)
+			}
+			applyReceiptPolicyDocument(rr, policyDoc)
+		}
+		if *o.policyHistory != "" {
+			rr.PolicyHistory = loadPolicyHistory(*o.policyHistory, rr.PolicyGate.ActivationHash)
+			if !rr.PolicyHistory.OK {
+				rr.VerdictTier, rr.AllPassed, rr.Reason = "FAILED", false, rr.PolicyHistory.Reason
+			}
+		}
 		if *jsonOutput {
 			emitReceiptJSON(rr)
 		} else {
@@ -318,6 +339,14 @@ func main() {
 			os.Exit(2)
 		}
 		applyPolicyDocument(report, doc)
+	}
+	if *o.policyHistory != "" {
+		report.PolicyHistory = loadPolicyHistory(*o.policyHistory, report.PolicyGate.ActivationHash)
+		if !report.PolicyHistory.OK {
+			report.AllPassed = false
+			report.VerdictTier = "FAILED"
+			report.RecordCoverage = "failed"
+		}
 	}
 	if *o.signerKeyFile != "" {
 		key, readErr := os.ReadFile(*o.signerKeyFile)
@@ -699,7 +728,7 @@ const (
 var flagInputKinds = map[string]string{
 	"json": inputBoth, "version": inputBoth, "allow-unanchored": inputBoth,
 	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
-	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBundle, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
+	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
 	"self-hosted-receipt": inputReceipt,
 }
 
@@ -923,7 +952,7 @@ func verify(b *artifacts.AuditBundle) *Report {
 	r.EntryAuth = verifyEntryAuthentication(b, r)
 	r.NrepSignature = sealedOnlyWhenLogged(r.NrepSignature, r.RekorAnchor, r.EntryAuth)
 	r.RecordValues = recordValuesOf(b)
-	r.PolicyGate = policyGateOf(b)
+	r.PolicyGate = checkBuiltIn(policyGateOf(b))
 
 	// Roll-up.
 	allPassed := r.BundleHashOK
@@ -1003,6 +1032,11 @@ func verify(b *artifacts.AuditBundle) *Report {
 	// anchor, and that does not carry one which holds, is a record
 	// whose second entry was deleted or swapped: a failure, never the
 	// partial verdict an older record honestly earns.
+	// A record naming a built-in policy this verifier does not carry, or
+	// whose rules run again do not reach the sealed decision, fails.
+	if policyFailed(r.PolicyGate) {
+		allPassed = false
+	}
 	r.passedExceptRequirement = allPassed
 	if r.CompleteRecordRequirement.Sealed && !r.CompleteRecordRequirement.Satisfied {
 		allPassed = false
@@ -1276,6 +1310,9 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	printEntryAuth(r.EntryAuth)
 	printRecordValues(r.RecordValues)
 	printPolicyGate(r.PolicyGate)
+	if r.PolicyHistory != nil {
+		printPolicyHistory(*r.PolicyHistory)
+	}
 	for _, f := range r.CrossChecks {
 		fmt.Printf("  Cross-check:      ✗ FAILED · %s\n", f)
 	}

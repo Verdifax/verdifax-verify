@@ -34,6 +34,10 @@ var fixtureVerdicts = []fixtureVerdict{
 	{"internal/artifacts/testdata/golden-bundle-run-208.json", "genuine", "ANCHORED_PARTIAL_COVERAGE", 3},
 	{"internal/artifacts/testdata/run-235-v3-bundle.json", "synthetic", "FAILED", 1},
 	{"testdata/policy-gate/orchestrator-mock-allowed-run.json", "synthetic", "SELF_CONSISTENT_NOT_ANCHORED", 1},
+	{"testdata/policy-gate/builtin-allowed.json", "synthetic", "SELF_CONSISTENT_NOT_ANCHORED", 1},
+	// A test server's refusal, issued after receipts began sealing
+	// anchor_required, carries no anchor, so the verifier fails it.
+	{"testdata/policy-gate/builtin-refused.json", "synthetic", "FAILED", 1},
 	{"testdata/round10/deny-receipt-orchestrator-mock.json", "synthetic", "SELF_CONSISTENT_NOT_ANCHORED", 1},
 	{"testdata/round10/deny-receipt-run241-production.json", "genuine", "VERIFIED_ANCHORED", 0},
 	{"testdata/round10/deny-receipt-run242-production-v2.json", "genuine", "VERIFIED_ANCHORED", 0},

@@ -73,6 +73,8 @@ func validateContextJob(c *artifacts.ReceiptContext) error {
 // ReceiptReport is the --json output for a receipt document.
 type ReceiptReport struct {
 	RequestSignature RequestSignatureCheck `json:"request_signature,omitempty"`
+	PolicyGate       PolicyGateCheck       `json:"policy_gate"`
+	PolicyHistory    *PolicyHistoryCheck   `json:"policy_history,omitempty"`
 
 	Tool         string `json:"tool"`
 	ToolVersion  string `json:"tool_version"`
@@ -325,6 +327,10 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		if jobErr := validateContextJob(d.ReceiptContext); jobErr != nil {
 			return failEntry("%v", jobErr)
 		}
+		rep.PolicyGate = checkBuiltIn(policyBindingOf(d.ReceiptContext.Policy))
+		if policyFailed(rep.PolicyGate) {
+			return failEntry("the receipt's policy decision fails: %s", rep.PolicyGate.Reason)
+		}
 		if c := d.ReceiptContext; c.RequestSignature != nil {
 			rep.RequestSignature = checkRequestSignature(c.RequestSignature, c.Request, c.Job)
 			if !rep.RequestSignature.Match {
@@ -485,6 +491,12 @@ func printReceiptReport(r *ReceiptReport) {
 		fmt.Printf("  Logged at:        %s, %ds after the receipt's clock\n", r.AnchoredAt, *r.GapSeconds)
 		fmt.Printf("  Anchoring window: %ds and met; a later re-log would fail\n", r.WindowSeconds)
 		fmt.Printf("     View on https://search.sigstore.dev/?logIndex=%s\n", r.AnchorLogEntry)
+	}
+	if r.PolicyGate.Present || r.PolicyGate.DocumentChecked {
+		printPolicyGate(r.PolicyGate)
+	}
+	if r.PolicyHistory != nil {
+		printPolicyHistory(*r.PolicyHistory)
 	}
 	switch r.VerdictTier {
 	case "VERIFIED_ANCHORED":
