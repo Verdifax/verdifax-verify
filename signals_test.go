@@ -293,6 +293,47 @@ func TestAReceiptsSealedPlaceIsChecked(t *testing.T) {
 	}
 }
 
+// A run publication validates when its shape holds and its hash recomputes,
+// and every edit to a sealed field fails it (since v0.24.0).
+func TestRunPublicationsValidate(t *testing.T) {
+	link := artifacts.SignalLink{Account: feedAccount, Sequence: 1, PreviousSignalHash: artifacts.NoPreviousSignal}
+	good := artifacts.RunPublication{Format: artifacts.RunPublicationFormat, Action: artifacts.SignalRunPublished, RunID: 41,
+		RecordHash: strings.Repeat("a", 64), JobID: "loan-1", StepID: "verdict", ChangedAt: feedStart.Format(time.RFC3339), Signal: link}
+	good.PublicationHash = good.ComputeHash()
+	if err := good.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkRunPublication(&good); err == nil || !strings.Contains(err.Error(), "public-log entry") {
+		t.Fatalf("a publication with no anchor passed the entry check: %v", err)
+	}
+	for name, edit := range map[string]func(p *artifacts.RunPublication){
+		"unknown action":       func(p *artifacts.RunPublication) { p.Action = "run.shared" },
+		"a key change action":  func(p *artifacts.RunPublication) { p.Action = artifacts.SignalKeyCreated },
+		"zero run":             func(p *artifacts.RunPublication) { p.RunID = 0 },
+		"short record hash":    func(p *artifacts.RunPublication) { p.RecordHash = "abc" },
+		"a step without a job": func(p *artifacts.RunPublication) { p.JobID = "" },
+		"no time":              func(p *artifacts.RunPublication) { p.ChangedAt = "" },
+		"bad link":             func(p *artifacts.RunPublication) { p.Signal.Sequence = 2 },
+	} {
+		p := good
+		edit(&p)
+		if p.Validate() == nil {
+			t.Errorf("%s validated", name)
+		}
+	}
+	changed := good
+	changed.RunID = 42
+	if got := changed.ComputeHash(); got == good.PublicationHash {
+		t.Fatal("a changed run keeps the publication hash")
+	}
+	if err := checkRunPublication(&changed); err == nil || !strings.Contains(err.Error(), "recomputes") {
+		t.Fatalf("a publication whose hash does not recompute passed: %v", err)
+	}
+	if !artifacts.IsSignalKind(artifacts.SignalRunPublished) || !artifacts.IsSignalKind(artifacts.SignalRunUnpublished) {
+		t.Fatal("the publication kinds are not signal kinds")
+	}
+}
+
 func TestKeyChangesAndFailureReceiptsValidate(t *testing.T) {
 	link := artifacts.SignalLink{Account: feedAccount, Sequence: 1, PreviousSignalHash: artifacts.NoPreviousSignal}
 	good := artifacts.KeyChange{Format: artifacts.KeyChangeFormat, Action: artifacts.SignalKeyCreated, KeyID: 4, KeyScope: artifacts.KeyScopeSignals,

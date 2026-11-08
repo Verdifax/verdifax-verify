@@ -225,8 +225,41 @@ func checkSignalEntry(e *signalEvent) (checkedEntry, error) {
 		}
 		link := k.Signal
 		return checkedEntry{hash: k.KeyChangeHash, at: k.ChangedAt, logEntry: k.Anchor.LogEntryID, link: &link}, nil
+	case artifacts.SignalRunPublished, artifacts.SignalRunUnpublished:
+		var p artifacts.RunPublication
+		if decodeErr := strictDecode(e.Entry, &p); decodeErr != nil {
+			return checkedEntry{}, fmt.Errorf("its entry is not a run publication: %w", decodeErr)
+		}
+		if checkErr := checkRunPublication(&p); checkErr != nil {
+			return checkedEntry{}, fmt.Errorf("its run publication: %w", checkErr)
+		}
+		if p.Action != e.Kind {
+			return checkedEntry{}, fmt.Errorf("it is a %s event, and its publication is a %s", e.Kind, p.Action)
+		}
+		if e.RunID != p.RunID {
+			return checkedEntry{}, fmt.Errorf("it names run %d, and its publication is run %d's", e.RunID, p.RunID)
+		}
+		link := p.Signal
+		return checkedEntry{hash: p.PublicationHash, at: p.ChangedAt, logEntry: p.Anchor.LogEntryID, link: &link, runID: p.RunID}, nil
 	}
 	return checkedEntry{}, fmt.Errorf("its kind %q is not one the feed emits", safePrefix(e.Kind))
+}
+
+// checkRunPublication checks one run publication: its shape, hash and
+// public-log entry. The record it names is checked by its own record; the
+// publication shows the owner's decision about it and when.
+func checkRunPublication(p *artifacts.RunPublication) error {
+	if shapeErr := p.Validate(); shapeErr != nil {
+		return shapeErr
+	}
+	if got := p.ComputeHash(); got != p.PublicationHash {
+		return fmt.Errorf("its hash recomputes to %s, not %s", truncate(got, 16), truncate(p.PublicationHash, 16))
+	}
+	at, clockErr := time.Parse(time.RFC3339Nano, p.ChangedAt)
+	if clockErr != nil {
+		return fmt.Errorf("changed_at %q is not an RFC 3339 time", safePrefix(p.ChangedAt))
+	}
+	return checkChainEntry(p.Anchor, artifacts.RunPublicationKind, p.PublicationHash, p.LeafHash(), at, "changed_at")
 }
 
 // checkPolicyChangeAlone checks one policy change without its chain: its

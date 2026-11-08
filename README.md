@@ -794,15 +794,16 @@ did not review the result. The verifier reads sign-offs since v0.22.0.
 An account's control signals form one ordered feed, served at `GET /signals`
 to a feed key and to `GET /account/signals` for the owner key: refused,
 halted and failed runs, policy changes, sign-offs, approver keys registered
-or revoked, and member and feed keys created or revoked. Each event is a
+or revoked, member and feed keys created or revoked, and records the owner
+made public or withdrew (since v0.24.0). Each event is a
 CloudEvents 1.0 JSON envelope whose data carries the event's sealed entry.
 The event's number in the account and the previous event's hash are sealed
 inside that entry before it is anchored on the public log, so the one entry
 fixes both what happened and its place.
 
 `--signals FILE` checks a saved response: each entry must verify on the
-public log as its own kind (a receipt, a policy change, a sign-off or a key
-change), seal the event's place, belong to one account, and link to the
+public log as its own kind (a receipt, a policy change, a sign-off, a key
+change or a run publication), seal the event's place, belong to one account, and link to the
 event before it without a gap. A feed that starts at event 1 is checked from
 the start. For a later page, `--signals-after N:hash` (the last sequence a
 system read and its event hash, which the report prints as the next point)

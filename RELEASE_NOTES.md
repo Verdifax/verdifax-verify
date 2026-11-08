@@ -2,6 +2,22 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.24.0: the owner publishes records
+
+An account's owner key can now make one of the account's sealed records
+public on its random link, or withdraw it, with `POST
+/account/runs/{id}/publish` and `/unpublish`. Each decision is a run
+publication (`verdifax.run-publication.v1`, leaf kind `run_publication`)
+naming the run, its record hash, its job and step, and the time, sealed with
+its place in the account's signal feed and anchored on the public log. The
+feed carries it as a `run.published` or `run.unpublished` event. The
+service's own admin key still publishes only records it made itself.
+
+`--signals FILE` checks these events like the others: the entry must verify
+on the public log as a run publication, seal the event's place, and name the
+event's run. Since v0.24.0, the verifier reads a feed that holds a
+publication event; an earlier release refuses the kind as unknown.
+
 ### v0.23.0: the signal feed and failure receipts
 
 An account's control signals now form one ordered feed: refused, halted and

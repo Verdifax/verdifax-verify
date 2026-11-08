@@ -37,6 +37,10 @@ const (
 	SignalApproverRevoked    = "approver.revoked"
 	SignalKeyCreated         = "key.created"
 	SignalKeyRevoked         = "key.revoked"
+	// SignalRunPublished and SignalRunUnpublished: the account's owner made
+	// one of the account's records public, or withdrew it.
+	SignalRunPublished   = "run.published"
+	SignalRunUnpublished = "run.unpublished"
 
 	// SignalTypePrefix opens every CloudEvents type the feed emits.
 	SignalTypePrefix = "com.verdifax."
@@ -44,7 +48,8 @@ const (
 
 // SignalKinds lists every event kind, in a fixed order.
 var SignalKinds = []string{SignalRunRefused, SignalRunHalted, SignalRunFailed, SignalPolicyChanged,
-	SignalSignOffRecorded, SignalApproverRegistered, SignalApproverRevoked, SignalKeyCreated, SignalKeyRevoked}
+	SignalSignOffRecorded, SignalApproverRegistered, SignalApproverRevoked, SignalKeyCreated, SignalKeyRevoked,
+	SignalRunPublished, SignalRunUnpublished}
 
 // IsSignalKind reports a kind the feed emits.
 func IsSignalKind(kind string) bool {
@@ -164,6 +169,75 @@ func (k *KeyChange) Validate() error {
 // place in the account's feed.
 func (k *KeyChange) LeafHash() string {
 	return ComputeReceiptLeafHashV3(KeyChangeKind, k.Signal.Account, k.KeyChangeHash, k.Signal.Sequence, k.Signal.PreviousSignalHash)
+}
+
+// A run publication is the account owner's decision to make one of the
+// account's sealed records public on its random link, or to withdraw it.
+// Each is one record, anchored on the public log as its own entry and
+// carrying its place in the account's feed, so an auditor sees who made what
+// public and when. Only the account's owner key can make the decision; the
+// service's admin key publishes only records it made itself.
+const (
+	// RunPublicationFormat is the format field of a run-publication record.
+	RunPublicationFormat = "verdifax.run-publication.v1"
+	// RunPublicationKind is the leaf kind of its public-log entry.
+	RunPublicationKind = "run_publication"
+)
+
+// RunPublication is one record made public or withdrawn by the account owner.
+type RunPublication struct {
+	Format string `json:"format"`
+	// Action is run.published or run.unpublished.
+	Action string `json:"action"`
+	RunID  int64  `json:"run_id"`
+	// RecordHash is the record's own hash (its manifest hash), so the
+	// publication binds the exact record, not only its number.
+	RecordHash string `json:"record_hash"`
+	// JobID and StepID name the record's place in a job, when it has one.
+	JobID           string         `json:"job_id,omitempty"`
+	StepID          string         `json:"step_id,omitempty"`
+	ChangedAt       string         `json:"changed_at"`
+	Signal          SignalLink     `json:"signal"`
+	PublicationHash string         `json:"publication_hash"`
+	Anchor          *ReceiptAnchor `json:"anchor,omitempty"`
+}
+
+// ComputeHash returns the record's hash: every field but the hash and the
+// anchor, each length-prefixed.
+func (p *RunPublication) ComputeHash() string {
+	fields := append([]string{p.Format, p.Action, strconv.FormatInt(p.RunID, 10), p.RecordHash, p.JobID, p.StepID,
+		p.ChangedAt}, p.Signal.fields()...)
+	return lengthPrefixedHash(fields)
+}
+
+// Validate checks the record's shape: every value its hash and leaf are built
+// from.
+func (p *RunPublication) Validate() error {
+	switch {
+	case p.Format != RunPublicationFormat:
+		return errors.New("run publication: unknown format")
+	case p.Action != SignalRunPublished && p.Action != SignalRunUnpublished:
+		return errors.New("run publication: action must be run.published or run.unpublished")
+	case p.RunID <= 0:
+		return errors.New("run publication: run_id must be positive")
+	case !jobHashPattern.MatchString(p.RecordHash):
+		return errors.New("run publication: record_hash must be 64 lowercase hex characters")
+	case len(p.JobID) > 200 || len(p.StepID) > 200:
+		return errors.New("run publication: job_id and step_id are at most 200 bytes")
+	case (p.JobID == "") != (p.StepID == ""):
+		return errors.New("run publication: a record in a job names both its job and its step")
+	case p.ChangedAt == "":
+		return errors.New("run publication: changed_at is required")
+	case !jobHashPattern.MatchString(p.PublicationHash):
+		return errors.New("run publication: publication_hash must be 64 lowercase hex characters")
+	}
+	return p.Signal.Validate()
+}
+
+// LeafHash is the public-log leaf that binds this record: its hash and its
+// place in the account's feed.
+func (p *RunPublication) LeafHash() string {
+	return ComputeReceiptLeafHashV3(RunPublicationKind, p.Signal.Account, p.PublicationHash, p.Signal.Sequence, p.Signal.PreviousSignalHash)
 }
 
 // lengthPrefixedHash digests fields so that none can run into the next.
