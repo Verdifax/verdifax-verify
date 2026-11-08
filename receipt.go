@@ -82,6 +82,9 @@ type ReceiptReport struct {
 	// The sign-off checks (v0.22.0), as on an allowed run's report.
 	SignOffs       *SignOffCheck `json:"signoffs,omitempty"`
 	SignOffHistory *SignOffCheck `json:"signoff_history,omitempty"`
+	// SignalSequence is the receipt's sealed place in its account's signal
+	// feed (v0.23.0), or 0 when it seals none.
+	SignalSequence int64 `json:"signal_sequence,omitempty"`
 
 	Tool         string `json:"tool"`
 	ToolVersion  string `json:"tool_version"`
@@ -151,6 +154,11 @@ func factsOf(d *artifacts.ReceiptDocument) ([]receiptFacts, error) {
 			artifacts.VerifyAttestationGapReceiptHash(r), map[string]string{
 				"decision_reason_code": r.DecisionReasonCode, "policy_hash": r.PolicyHash}})
 	}
+	if r := d.FailureReceipt; r != nil {
+		out = append(out, receiptFacts{"failure_receipt", r.EnvelopeID, r.FailClock, r.Hash,
+			artifacts.VerifyFailureReceiptHash(r), map[string]string{
+				"failed_stage": r.FailedStage, "error_class": r.ErrorClass}})
+	}
 	if len(out) != 1 {
 		return nil, fmt.Errorf("a receipt document must carry exactly one receipt, this one carries %d", len(out))
 	}
@@ -191,6 +199,11 @@ func receiptHashes(d *artifacts.ReceiptDocument) (recorded, computed string, err
 		r.Hash = ""
 		computed, err = artifacts.BuildAttestationGapReceiptHash(&r)
 		return d.AttestationGapReceipt.Hash, computed, err
+	case d.FailureReceipt != nil:
+		r := *d.FailureReceipt
+		r.Hash = ""
+		computed, err = artifacts.BuildFailureReceiptHash(&r)
+		return d.FailureReceipt.Hash, computed, err
 	}
 	return "", "", fmt.Errorf("a receipt document must carry one receipt")
 }
@@ -342,6 +355,15 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		if idErr := checkAccountID(rep.AccountID); idErr != nil {
 			return failEntry("%v", idErr)
 		}
+		if sig := d.ReceiptContext.Signal; sig != nil {
+			if linkErr := sig.Validate(); linkErr != nil {
+				return failEntry("the receipt's place in the signal feed: %v", linkErr)
+			}
+			if sig.Account != rep.AccountID {
+				return failEntry("the receipt's place in the signal feed names %s, and the receipt seals account %q", sig.Account, rep.AccountID)
+			}
+			rep.SignalSequence = sig.Sequence
+		}
 		rep.AccountPolicyGate = accountGateOfReceipt(d.ReceiptContext)
 		if accountFailed(rep.AccountPolicyGate, nil) {
 			return failEntry("the receipt's account policy decision fails: %s", rep.AccountPolicyGate.Reason)
@@ -476,6 +498,8 @@ func anchorRequiredOf(d *artifacts.ReceiptDocument) bool {
 		return d.AivpT4HaltReceipt.AnchorRequired
 	case d.AttestationGapReceipt != nil:
 		return d.AttestationGapReceipt.AnchorRequired
+	case d.FailureReceipt != nil:
+		return d.FailureReceipt.AnchorRequired
 	}
 	return false
 }

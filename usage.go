@@ -57,7 +57,15 @@ FLAGS
                           was signed by this base64 Ed25519 public key
   -signoff-history FILE   check an account's whole chain of sign-offs,
                           oldest first. Runs alone with no record
-  -signer-key FILE        pass only if the run was requested by the holder
+  -signals FILE           check an account's signal feed, the body of
+                          GET /signals: every event's entry must verify on
+                          the public log as its kind, seal its place in the
+                          feed and link to the event before it without a
+                          gap. It shows the signals Verdifax recorded, not
+                          ones it never recorded. Runs alone with no record
+  -signals-after N:hash   with -signals, the last event already read: the
+                          feed must continue from it
+  -signer-key FILE       pass only if the run was requested by the holder
                           of this base64 Ed25519 public key
   -request FILE           pass only if the record's version 2 signature
                           covers the exact bytes of this signed request

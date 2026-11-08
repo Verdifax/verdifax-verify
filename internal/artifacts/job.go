@@ -135,6 +135,9 @@ type ReceiptContext struct {
 	// record; each joins the hash under its own label, only when present.
 	AccountID     string         `json:"account_id,omitempty"`
 	AccountPolicy *PolicyBinding `json:"account_policy,omitempty"`
+	// Signal is the receipt's place in the account's signal feed; it joins
+	// the hash under its own label, only when present.
+	Signal *SignalLink `json:"signal,omitempty"`
 }
 
 // Hash digests the context for the receipt leaf.
@@ -156,6 +159,9 @@ func (c ReceiptContext) Hash() string {
 	}
 	if c.AccountPolicy != nil {
 		parts = append(parts, c.AccountPolicy.labeledFields("account_policy")...)
+	}
+	if c.Signal != nil {
+		parts = append(parts, c.Signal.fields()...)
 	}
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(sum[:])

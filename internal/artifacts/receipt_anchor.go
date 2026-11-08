@@ -43,7 +43,7 @@ const (
 // the JSON field the receipt is served under.
 var ReceiptKinds = []string{
 	"deny_receipt", "ccv_halt_receipt", "macc_halt_receipt",
-	"aivp_t4_halt_receipt", "attestation_gap_receipt",
+	"aivp_t4_halt_receipt", "attestation_gap_receipt", "failure_receipt",
 }
 
 // ReceiptAnchor is a receipt's public-log entry. Field meanings match
@@ -72,7 +72,7 @@ type ReceiptAnchor struct {
 // assumptions: a known kind, a dot-free non-empty envelope_id, and a
 // 64-character lowercase hex receipt hash.
 func ValidateReceiptLeafFields(kind, envelopeID, receiptHash string) error {
-	known := kind == PolicyActivationKind || kind == SignOffKind
+	known := kind == PolicyActivationKind || kind == SignOffKind || kind == KeyChangeKind
 	for _, k := range ReceiptKinds {
 		if k == kind {
 			known = true
@@ -157,6 +157,7 @@ type ReceiptDocument struct {
 	MACCHaltReceipt       *MACCHaltReceipt       `json:"macc_halt_receipt,omitempty"`
 	AivpT4HaltReceipt     *AivpT4HaltReceipt     `json:"aivp_t4_halt_receipt,omitempty"`
 	AttestationGapReceipt *AttestationGapReceipt `json:"attestation_gap_receipt,omitempty"`
+	FailureReceipt        *FailureReceipt        `json:"failure_receipt,omitempty"`
 	ReceiptAnchor         *ReceiptAnchor         `json:"receipt_anchor,omitempty"`
 	ReceiptContext        *ReceiptContext        `json:"receipt_context,omitempty"`
 }

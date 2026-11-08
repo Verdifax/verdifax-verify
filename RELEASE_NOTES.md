@@ -2,6 +2,31 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.23.0: the signal feed and failure receipts
+
+An account's control signals now form one ordered feed: refused, halted and
+failed runs, policy changes, sign-offs, approver keys registered or revoked,
+and member and feed keys created or revoked. Each event is numbered within
+the account and names the previous event's hash, and that place is sealed
+inside the event's own entry before the entry is anchored on the public log:
+in a receipt's `receipt_context.signal`, in a policy change's or sign-off's
+`signal`, or in a new key-change entry (kind `key_change`).
+
+A run that fails with a server error now seals a failure receipt
+(`failure_receipt`, version `vfa.failure_receipt.v1`) naming the request,
+the stage that failed and an error class, anchored like every receipt. The
+raw error text never enters it.
+
+`--signals FILE` checks a saved `GET /signals` response: every event's entry
+must verify on the public log as its own kind, seal the event's place, belong
+to one account, and link to the event before it without a gap.
+`--signals-after N:hash` checks that a later page continues from the last
+event a system already read. The feed shows the signals Verdifax recorded
+for the account; it cannot show one Verdifax never recorded.
+
+The verifier reads these fields since v0.23.0. Records without them verify
+exactly as before.
+
 ### v0.22.0: customer sign-off on results
 
 An account can now register approver keys, and an approver can sign off a

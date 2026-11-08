@@ -44,8 +44,11 @@ type PolicyActivation struct {
 	DocumentHash           string                     `json:"document_hash"`
 	ActivatedAt            string                     `json:"activated_at"`
 	Signature              *PolicyActivationSignature `json:"signature,omitempty"`
-	ActivationHash         string                     `json:"activation_hash"`
-	Anchor                 *ReceiptAnchor             `json:"anchor,omitempty"`
+	// Signal is the change's place in the account's signal feed; it joins
+	// the hash under its own label, only when present.
+	Signal         *SignalLink    `json:"signal,omitempty"`
+	ActivationHash string         `json:"activation_hash"`
+	Anchor         *ReceiptAnchor `json:"anchor,omitempty"`
 }
 
 // PolicyActivationPreimage is what the request key signs: the chain, the exact
@@ -63,6 +66,9 @@ func (a *PolicyActivation) ComputeHash() string {
 		a.PolicyID, a.PolicyVersion, a.PolicyHash, a.DocumentHash, a.ActivatedAt}
 	if s := a.Signature; s != nil {
 		fields = append(fields, s.PublicKey, s.Signature, s.SignedAt, s.Nonce)
+	}
+	if a.Signal != nil {
+		fields = append(fields, a.Signal.fields()...)
 	}
 	digest := sha256.New()
 	for _, f := range fields {
@@ -86,6 +92,9 @@ func (a *PolicyActivation) Validate() error {
 		return errors.New("policy activation: policy and document hashes must be 64 lowercase hex characters")
 	case !jobHashPattern.MatchString(a.ActivationHash):
 		return errors.New("policy activation: activation hash must be 64 lowercase hex characters")
+	}
+	if a.Signal != nil {
+		return a.Signal.Validate()
 	}
 	return nil
 }

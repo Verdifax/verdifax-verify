@@ -58,20 +58,24 @@ type SignOffTarget struct {
 
 // SignOff is one approver's decision on one result.
 type SignOff struct {
-	Format              string         `json:"format"`
-	ChainID             string         `json:"chain_id"`
-	Sequence            int64          `json:"sequence"`
-	PreviousSignOffHash string         `json:"previous_signoff_hash"`
-	Target              SignOffTarget  `json:"target"`
-	Decision            string         `json:"decision"`
-	NoteHash            string         `json:"note_hash,omitempty"`
-	ApproverKey         string         `json:"approver_key"`
-	Signature           string         `json:"signature"`
-	SignedAt            string         `json:"signed_at"`
-	Nonce               string         `json:"nonce"`
-	RecordedAt          string         `json:"recorded_at"`
-	SignOffHash         string         `json:"signoff_hash"`
-	Anchor              *ReceiptAnchor `json:"anchor,omitempty"`
+	Format              string        `json:"format"`
+	ChainID             string        `json:"chain_id"`
+	Sequence            int64         `json:"sequence"`
+	PreviousSignOffHash string        `json:"previous_signoff_hash"`
+	Target              SignOffTarget `json:"target"`
+	Decision            string        `json:"decision"`
+	NoteHash            string        `json:"note_hash,omitempty"`
+	ApproverKey         string        `json:"approver_key"`
+	Signature           string        `json:"signature"`
+	SignedAt            string        `json:"signed_at"`
+	Nonce               string        `json:"nonce"`
+	RecordedAt          string        `json:"recorded_at"`
+	// Signal is the sign-off's place in the account's signal feed, added by
+	// the server outside what the approver signs; it joins the hash under its
+	// own label, only when present.
+	Signal      *SignalLink    `json:"signal,omitempty"`
+	SignOffHash string         `json:"signoff_hash"`
+	Anchor      *ReceiptAnchor `json:"anchor,omitempty"`
 }
 
 // SignOffPreimage is what the approver key signs: the account's chain, the
@@ -100,6 +104,9 @@ func (s *SignOff) ComputeHash() string {
 	fields := []string{s.Format, s.ChainID, strconv.FormatInt(s.Sequence, 10), s.PreviousSignOffHash,
 		s.Target.Kind, strconv.FormatInt(s.Target.RunID, 10), s.Target.Digest, s.Target.JobID,
 		s.Decision, s.NoteHash, s.ApproverKey, s.Signature, s.SignedAt, s.Nonce, s.RecordedAt}
+	if s.Signal != nil {
+		fields = append(fields, s.Signal.fields()...)
+	}
 	digest := sha256.New()
 	for _, f := range fields {
 		digest.Write([]byte(strconv.Itoa(len(f)) + ":" + f))
@@ -139,6 +146,12 @@ func (s *SignOff) Validate() error {
 		return errors.New("signoff: nonce must be 32 lowercase hex characters")
 	case !jobHashPattern.MatchString(s.SignOffHash):
 		return errors.New("signoff: signoff hash must be 64 lowercase hex characters")
+	}
+	if s.Signal != nil {
+		if s.Signal.Account != s.ChainID {
+			return errors.New("signoff: its signal feed place names another account")
+		}
+		return s.Signal.Validate()
 	}
 	return nil
 }

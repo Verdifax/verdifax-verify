@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.22.0"
+const Version = "0.23.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -197,6 +197,8 @@ type options struct {
 	signOff         *string
 	approverKey     *string
 	signOffHistory  *string
+	signals         *string
+	signalsAfter    *string
 	tamperTest      *bool
 	recomputeHashes *bool
 	showEvidence    *bool
@@ -218,6 +220,8 @@ func defineFlags(fs *flag.FlagSet) options {
 		accountHistory:  fs.String("account-policy-history", "", "a JSON list of the account's policy changes, oldest first: every change and link must verify, every change must belong to the account the record names, and the record must name a change in the list"),
 		signOff:         fs.String("signoff", "", "a JSON list of sign-offs for the record or receipt, as GET /runs/{id}/signoffs returns: each must verify, belong to the record's account and name this exact result; the latest is the decision in force"),
 		approverKey:     fs.String("approver-key", "", "with --signoff, a file holding the base64 Ed25519 public key you expect signed the decision in force; fails unless it did"),
+		signals:         fs.String("signals", "", "an account's signal feed, the body of GET /signals: every event's entry must verify as its kind on the public log, seal its place in the feed, belong to one account, and link to the event before it without a gap; runs alone with no record"),
+		signalsAfter:    fs.String("signals-after", "", "with --signals, N:hash, the last event a system already read: the feed must continue from it"),
 		signOffHistory:  fs.String("signoff-history", "", "a JSON list of an account's sign-offs, oldest first: every sign-off and link must verify, in one account; runs alone with no record"),
 		jobFolder:       fs.String("job", "", "a folder of one job's records: check each record, then the map of links between them"),
 		tamperTest:      fs.Bool("tamper-test", false, "change every value one at a time, delete every key holding a value, remove and append list items and add unknown keys, and report any change the verifier accepts and which checks caught the rest; exit 0 only if every change fails"),
@@ -254,6 +258,17 @@ func main() {
 	}
 	if *o.accountHistory != "" && flag.NArg() == 0 {
 		os.Exit(runAccountHistoryMode(*o.accountHistory, *jsonOutput))
+	}
+	if *o.signalsAfter != "" && *o.signals == "" {
+		fmt.Fprintln(os.Stderr, "verdifax-verify: --signals-after applies only with --signals")
+		os.Exit(2)
+	}
+	if *o.signals != "" && flag.NArg() > 0 {
+		fmt.Fprintln(os.Stderr, "verdifax-verify: --signals checks a feed file and runs alone, with no record")
+		os.Exit(2)
+	}
+	if *o.signals != "" {
+		os.Exit(runSignalsMode(*o.signals, *o.signalsAfter, *jsonOutput))
 	}
 	if *o.signOffHistory != "" && flag.NArg() == 0 && *o.signOff == "" {
 		os.Exit(runSignOffHistoryMode(*o.signOffHistory, *jsonOutput))
@@ -760,7 +775,7 @@ const (
 var flagInputKinds = map[string]string{
 	"json": inputBoth, "version": inputBoth, "allow-unanchored": inputBoth,
 	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
-	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
+	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "signals": inputBoth, "signals-after": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
 	"self-hosted-receipt": inputReceipt,
 }
 

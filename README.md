@@ -789,6 +789,36 @@ not show that the review was careful, that the result was right, or who the
 person is: a key is not an identity. It gates nothing on its own. Verdifax
 did not review the result. The verifier reads sign-offs since v0.22.0.
 
+### The signal feed: `--signals` and `--signals-after`
+
+An account's control signals form one ordered feed, served at `GET /signals`
+to a feed key and to `GET /account/signals` for the owner key: refused,
+halted and failed runs, policy changes, sign-offs, approver keys registered
+or revoked, and member and feed keys created or revoked. Each event is a
+CloudEvents 1.0 JSON envelope whose data carries the event's sealed entry.
+The event's number in the account and the previous event's hash are sealed
+inside that entry before it is anchored on the public log, so the one entry
+fixes both what happened and its place.
+
+`--signals FILE` checks a saved response: each entry must verify on the
+public log as its own kind (a receipt, a policy change, a sign-off or a key
+change), seal the event's place, belong to one account, and link to the
+event before it without a gap. A feed that starts at event 1 is checked from
+the start. For a later page, `--signals-after N:hash` (the last sequence a
+system read and its event hash, which the report prints as the next point)
+checks that the page continues from it; without it, the report says
+continuity before the first event was not checked. Run alone, with no record.
+
+The feed shows the signals Verdifax recorded for the account, in the order
+it recorded them. It cannot show a signal Verdifax never recorded: a company
+that signs its requests holds its own list of what it sent. The verifier
+reads the feed since v0.23.0.
+
+A run that fails with a server error seals a failure receipt naming the
+request, the stage that failed and an error class, anchored on the public log
+like every receipt; `GET /runs/{id}/failure-receipt` serves it and the
+verifier checks it as it checks any receipt.
+
 ### `--job`: checking a job's records together
 
 `--job FOLDER` checks every record in the folder in full, then the map of

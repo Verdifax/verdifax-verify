@@ -97,7 +97,7 @@ func accountGateOfReceipt(ctx *artifacts.ReceiptContext) *PolicyGateCheck {
 // later check then stopped. Every decision such a receipt seals must be an
 // allow, or no decision at all when the run stopped before the rules ran.
 var haltedReceiptKinds = map[string]bool{
-	"ccv_halt_receipt": true, "macc_halt_receipt": true, "aivp_t4_halt_receipt": true,
+	"ccv_halt_receipt": true, "macc_halt_receipt": true, "aivp_t4_halt_receipt": true, "failure_receipt": true,
 }
 
 // admittedDecisionError reports a halted run whose sealed policy refused it.
