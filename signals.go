@@ -67,8 +67,11 @@ type SignalFeedEntry struct {
 	Sequence int64  `json:"sequence"`
 	Kind     string `json:"kind"`
 	RunID    int64  `json:"run_id,omitempty"`
-	At       string `json:"at"`
-	LogEntry string `json:"log_entry_id"`
+	// DecidedBy, on a publication event, is who decided: owner, or
+	// verdifax_admin when a Verdifax admin key withdrew the record (R160).
+	DecidedBy string `json:"decided_by,omitempty"`
+	At        string `json:"at"`
+	LogEntry  string `json:"log_entry_id"`
 	// CommittedBy, when set, is the later event whose public-log entry
 	// commits this one: this event carries no entry of its own, so its time
 	// is proven only by that later entry, not by its own clock.
@@ -167,6 +170,7 @@ type checkedEntry struct {
 	hash, at, logEntry string
 	link               *artifacts.SignalLink
 	runID              int64
+	decidedBy          string
 	// unlogged is an entry sound in every way but one: it carries no
 	// public-log entry of its own.
 	unlogged bool
@@ -279,14 +283,16 @@ func checkSignalEntry(e *signalEvent) (checkedEntry, error) {
 			return checkedEntry{}, fmt.Errorf("it names run %d, and its publication is run %d's", e.RunID, p.RunID)
 		}
 		link := p.Signal
-		return checkedEntry{hash: p.PublicationHash, at: p.ChangedAt, logEntry: logEntryOf(p.Anchor), link: &link, runID: p.RunID, unlogged: unlogged}, nil
+		return checkedEntry{hash: p.PublicationHash, at: p.ChangedAt, logEntry: logEntryOf(p.Anchor), link: &link, runID: p.RunID,
+			decidedBy: p.Decider(), unlogged: unlogged}, nil
 	}
 	return checkedEntry{}, fmt.Errorf("its kind %q is not one the feed emits", safePrefix(e.Kind))
 }
 
 // checkRunPublication checks one run publication: its shape, hash and
 // public-log entry. The record it names is checked by its own record; the
-// publication shows the owner's decision about it and when.
+// publication shows who decided about it, the owner or a Verdifax admin key,
+// and when.
 func checkRunPublication(p *artifacts.RunPublication) error {
 	if shapeErr := p.Validate(); shapeErr != nil {
 		return shapeErr
@@ -422,7 +428,7 @@ func checkSignalFeed(data []byte, after *signalPoint) SignalFeedCheck {
 		if d.RunID != got.runID {
 			return fail("it names run %d, and its entry names run %d", d.RunID, got.runID)
 		}
-		entry := SignalFeedEntry{Sequence: d.Sequence, Kind: d.Kind, RunID: d.RunID, At: got.at, LogEntry: got.logEntry}
+		entry := SignalFeedEntry{Sequence: d.Sequence, Kind: d.Kind, RunID: d.RunID, DecidedBy: got.decidedBy, At: got.at, LogEntry: got.logEntry}
 		if got.unlogged {
 			entry.CommittedBy = -1 // resolved below, once the later events are checked
 		}
@@ -514,7 +520,11 @@ func printSignalFeed(c *SignalFeedCheck) {
 		if e.CommittedBy != 0 {
 			late = fmt.Sprintf("  (no log entry of its own; committed by event %d)", e.CommittedBy)
 		}
-		fmt.Printf("    %d. %s  %s%s%s\n", e.Sequence, e.At, e.Kind, run, late)
+		by := ""
+		if e.DecidedBy == artifacts.PublicationByVerdifax {
+			by = " by a Verdifax admin key"
+		}
+		fmt.Printf("    %d. %s  %s%s%s%s\n", e.Sequence, e.At, e.Kind, run, by, late)
 	}
 	fmt.Printf("  %-18s%d:%s\n", "Next point:", c.Last, c.LastEventHash)
 	fmt.Println("                    The feed shows the signals Verdifax recorded for this account; it cannot show one it never recorded")

@@ -178,18 +178,31 @@ func (k *KeyChange) LeafHash() string {
 // public and when. Only the account's owner key can make the decision; the
 // service's admin key publishes only records it made itself.
 const (
-	// RunPublicationFormat is the format field of a run-publication record.
-	RunPublicationFormat = "verdifax.run-publication.v1"
+	// RunPublicationFormat is the format field of a run-publication record:
+	// v2 seals who decided, the account's owner or a Verdifax admin key.
+	RunPublicationFormat = "verdifax.run-publication.v2"
+	// RunPublicationFormatV1 is the first format, sealed before v2: every v1
+	// publication was the owner's decision, and v1 seals no decided_by.
+	RunPublicationFormatV1 = "verdifax.run-publication.v1"
+	// PublicationByOwner and PublicationByVerdifax name who decided: the
+	// account's owner key, or a Verdifax admin key, which withdraws any
+	// public record and publishes only records it made itself (R160).
+	PublicationByOwner    = "owner"
+	PublicationByVerdifax = "verdifax_admin"
 	// RunPublicationKind is the leaf kind of its public-log entry.
 	RunPublicationKind = "run_publication"
 )
 
-// RunPublication is one record made public or withdrawn by the account owner.
+// RunPublication is one record made public or withdrawn: by the account's
+// owner, or withdrawn by a Verdifax admin key.
 type RunPublication struct {
 	Format string `json:"format"`
 	// Action is run.published or run.unpublished.
 	Action string `json:"action"`
-	RunID  int64  `json:"run_id"`
+	// DecidedBy is who decided, owner or verdifax_admin; sealed in v2 and
+	// absent from v1, whose every record was the owner's.
+	DecidedBy string `json:"decided_by,omitempty"`
+	RunID     int64  `json:"run_id"`
 	// RecordHash is the record's own hash (its manifest hash), so the
 	// publication binds the exact record, not only its number.
 	RecordHash string `json:"record_hash"`
@@ -205,17 +218,34 @@ type RunPublication struct {
 // ComputeHash returns the record's hash: every field but the hash and the
 // anchor, each length-prefixed.
 func (p *RunPublication) ComputeHash() string {
-	fields := append([]string{p.Format, p.Action, strconv.FormatInt(p.RunID, 10), p.RecordHash, p.JobID, p.StepID,
-		p.ChangedAt}, p.Signal.fields()...)
+	head := []string{p.Format, p.Action}
+	if p.Format != RunPublicationFormatV1 {
+		head = append(head, p.DecidedBy)
+	}
+	fields := append(append(head, strconv.FormatInt(p.RunID, 10), p.RecordHash, p.JobID, p.StepID,
+		p.ChangedAt), p.Signal.fields()...)
 	return lengthPrefixedHash(fields)
+}
+
+// Decider is who made the decision: the sealed decided_by, or the owner for a
+// v1 record, which could only be the owner's.
+func (p *RunPublication) Decider() string {
+	if p.Format == RunPublicationFormatV1 {
+		return PublicationByOwner
+	}
+	return p.DecidedBy
 }
 
 // Validate checks the record's shape: every value its hash and leaf are built
 // from.
 func (p *RunPublication) Validate() error {
 	switch {
-	case p.Format != RunPublicationFormat:
+	case p.Format != RunPublicationFormat && p.Format != RunPublicationFormatV1:
 		return errors.New("run publication: unknown format")
+	case p.Format == RunPublicationFormatV1 && p.DecidedBy != "":
+		return errors.New("run publication: a v1 publication seals no decided_by")
+	case p.Format == RunPublicationFormat && p.DecidedBy != PublicationByOwner && p.DecidedBy != PublicationByVerdifax:
+		return errors.New("run publication: decided_by must be owner or verdifax_admin")
 	case p.Action != SignalRunPublished && p.Action != SignalRunUnpublished:
 		return errors.New("run publication: action must be run.published or run.unpublished")
 	case p.RunID <= 0:

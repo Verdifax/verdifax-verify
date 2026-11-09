@@ -2,6 +2,27 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.26.0: what a sign-off decision means, and who decided a publication
+
+`--signoff` now prints, under the decision in force, what it means, and
+`--json` carries it as `latest_meaning`. A decision means the same on every
+kind of result: approve states that the approver agrees with the result
+signed, a record's result, a job's result or the stop a refused or halted
+run's receipt records; reject states that the approver judges it wrong.
+Neither releases nor blocks anything on its own.
+
+`--signals` reads run publications in format v2
+(`verdifax.run-publication.v2`), which seals who decided: `owner`, the
+account's owner key, or `verdifax_admin`, a Verdifax admin key, which can
+withdraw any public record and publish only records it made itself. The decision is in the publication's hash, so
+a withdrawal by Verdifax cannot be passed off as the owner's. The report
+marks such an event "by a Verdifax admin key", and `--json` carries
+`decided_by` on each publication event. A v1 publication, sealed before v2,
+verifies as before and reads as the owner's, the only key that could make
+one.
+
+Every other check passes and fails as in v0.25.0.
+
 ### v0.25.0: an event committed by a later entry
 
 Each event in a signal feed names the hash of the event before it, and every

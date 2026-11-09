@@ -44,6 +44,11 @@ type SignOffCheck struct {
 	// it, which supersedes every earlier one.
 	Latest         string `json:"latest_decision,omitempty"`
 	LatestApprover string `json:"latest_approver_key,omitempty"`
+	// LatestMeaning says what the decision in force states, the same for
+	// every kind of result: approve agrees with the result signed, a
+	// verdict, a record or the stop a receipt records; reject judges it
+	// wrong. A sign-off releases or blocks nothing on its own (R159).
+	LatestMeaning  string `json:"latest_meaning,omitempty"`
 	ApproverPinned bool   `json:"approver_pinned,omitempty"`
 	Reason         string `json:"reason,omitempty"`
 }
@@ -146,7 +151,27 @@ func checkSignOffs(data []byte, subject signOffSubject) SignOffCheck {
 	}
 	last := list[len(list)-1]
 	c.OK, c.Latest, c.LatestApprover = true, last.Decision, last.ApproverKey
+	c.LatestMeaning = signOffMeaning(last.Decision, last.Target.Kind)
 	return c
+}
+
+// signOffMeaning is what a decision states about the result it names. One
+// meaning for every kind: approve agrees, reject judges the result wrong.
+// Neither releases nor blocks anything on its own.
+func signOffMeaning(decision, kind string) string {
+	result := "this result"
+	switch kind {
+	case artifacts.SignOffTargetReceipt:
+		result = "the stop this receipt records"
+	case artifacts.SignOffTargetJob:
+		result = "this job's result"
+	case artifacts.SignOffTargetRecord:
+		result = "this record's result"
+	}
+	if decision == artifacts.SignOffApprove {
+		return "the approver agrees with " + result
+	}
+	return "the approver judges " + result + " wrong"
 }
 
 // namesSubject reports a target that is not this exact result. A job
@@ -353,6 +378,7 @@ func printSignOffs(given, history *SignOffCheck) {
 				pinned = ", the approver key given"
 			}
 			fmt.Printf("  %-18s%s by approver key %s%s, on the public log\n", "Sign-off:", given.Latest, truncate(given.LatestApprover, 12), pinned)
+			fmt.Printf("  %-18s%s; it releases or blocks nothing on its own\n", "Meaning:", given.LatestMeaning)
 			for _, e := range given.Entries {
 				state := ""
 				if e.Superseded {

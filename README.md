@@ -777,7 +777,11 @@ one, and a later sign-off on the same result supersedes the earlier one.
 `--signoff FILE` checks the sign-offs that `GET /runs/{id}/signoffs` returns
 for a record or receipt: each must verify, belong to the record's account
 and name this exact result, by the digest its public-log entry covers. The
-report names the decision in force. `--approver-key FILE` fails unless that
+report names the decision in force and, since v0.26.0, what it means. A
+decision means the same on every kind of result: approve states that the
+approver agrees with the result signed (a record's result, a job's result
+or the stop a receipt records), and reject states that the approver judges
+it wrong. `--approver-key FILE` fails unless that
 decision was signed by the key in the file. `--signoff-history FILE` checks
 the account's whole chain from `GET /account/signoffs/history`, so a
 removed, reordered or rewritten sign-off fails; run alone, it checks the
@@ -795,7 +799,9 @@ An account's control signals form one ordered feed, served at `GET /signals`
 to a feed key and to `GET /account/signals` for the owner key: refused,
 halted and failed runs, policy changes, sign-offs, approver keys registered
 or revoked, member and feed keys created or revoked, and records the owner
-made public or withdrew (since v0.24.0). Each event is a
+made public or withdrew (since v0.24.0). Since v0.26.0 a publication seals
+who decided, the owner or a Verdifax admin key, and the report marks a
+decision by Verdifax. Each event is a
 CloudEvents 1.0 JSON envelope whose data carries the event's sealed entry.
 The event's number in the account and the previous event's hash are sealed
 inside that entry before it is anchored on the public log, so the one entry

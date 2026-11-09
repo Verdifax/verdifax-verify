@@ -94,7 +94,28 @@ func TestASignOffOnTheRecordVerifiesAndTheLatestDecides(t *testing.T) {
 	if !c.OK || c.Latest != artifacts.SignOffApprove || c.LatestApprover != a.pub || !c.Entries[0].Superseded || c.Entries[1].Superseded {
 		t.Fatalf("%+v", c)
 	}
+	if c.LatestMeaning != "the approver agrees with this record's result" {
+		t.Fatalf("meaning %q", c.LatestMeaning)
+	}
 	printSignOffs(&c, nil)
+}
+
+// R159: a decision means the same on every kind of result. Approve agrees
+// with what the result shows, a receipt's stop included; reject judges it
+// wrong. The demo once signed reject on a correct refusal meaning "the
+// draft stays rejected", and reject on a wrong halt meaning "this stop was
+// wrong".
+func TestADecisionMeansTheSameOnEveryKindOfResult(t *testing.T) {
+	for _, c := range []struct{ decision, kind, want string }{
+		{artifacts.SignOffApprove, artifacts.SignOffTargetReceipt, "the approver agrees with the stop this receipt records"},
+		{artifacts.SignOffReject, artifacts.SignOffTargetReceipt, "the approver judges the stop this receipt records wrong"},
+		{artifacts.SignOffApprove, artifacts.SignOffTargetJob, "the approver agrees with this job's result"},
+		{artifacts.SignOffReject, artifacts.SignOffTargetRecord, "the approver judges this record's result wrong"},
+	} {
+		if got := signOffMeaning(c.decision, c.kind); got != c.want {
+			t.Errorf("%s on a %s: %q, want %q", c.decision, c.kind, got, c.want)
+		}
+	}
 }
 
 // A sign-off must name this exact result, in this account, and verify.

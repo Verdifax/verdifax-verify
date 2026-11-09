@@ -299,8 +299,9 @@ func TestAReceiptsSealedPlaceIsChecked(t *testing.T) {
 // and every edit to a sealed field fails it (since v0.24.0).
 func TestRunPublicationsValidate(t *testing.T) {
 	link := artifacts.SignalLink{Account: feedAccount, Sequence: 1, PreviousSignalHash: artifacts.NoPreviousSignal}
-	good := artifacts.RunPublication{Format: artifacts.RunPublicationFormat, Action: artifacts.SignalRunPublished, RunID: 41,
-		RecordHash: strings.Repeat("a", 64), JobID: "loan-1", StepID: "verdict", ChangedAt: feedStart.Format(time.RFC3339), Signal: link}
+	good := artifacts.RunPublication{Format: artifacts.RunPublicationFormat, Action: artifacts.SignalRunPublished,
+		DecidedBy: artifacts.PublicationByOwner, RunID: 41, RecordHash: strings.Repeat("a", 64), JobID: "loan-1", StepID: "verdict",
+		ChangedAt: feedStart.Format(time.RFC3339), Signal: link}
 	good.PublicationHash = good.ComputeHash()
 	if err := good.Validate(); err != nil {
 		t.Fatal(err)
@@ -316,6 +317,11 @@ func TestRunPublicationsValidate(t *testing.T) {
 		"a step without a job": func(p *artifacts.RunPublication) { p.JobID = "" },
 		"no time":              func(p *artifacts.RunPublication) { p.ChangedAt = "" },
 		"bad link":             func(p *artifacts.RunPublication) { p.Signal.Sequence = 2 },
+		"no decider in v2":     func(p *artifacts.RunPublication) { p.DecidedBy = "" },
+		"an unknown decider":   func(p *artifacts.RunPublication) { p.DecidedBy = "member" },
+		"a decider in v1": func(p *artifacts.RunPublication) {
+			p.Format = artifacts.RunPublicationFormatV1
+		},
 	} {
 		p := good
 		edit(&p)
@@ -327,6 +333,26 @@ func TestRunPublicationsValidate(t *testing.T) {
 	changed.RunID = 42
 	if got := changed.ComputeHash(); got == good.PublicationHash {
 		t.Fatal("a changed run keeps the publication hash")
+	}
+	// R160: who decided is sealed, so a withdrawal by Verdifax cannot be
+	// passed off as the owner's.
+	byVerdifax := good
+	byVerdifax.Action, byVerdifax.DecidedBy = artifacts.SignalRunUnpublished, artifacts.PublicationByVerdifax
+	byVerdifax.PublicationHash = byVerdifax.ComputeHash()
+	if err := byVerdifax.Validate(); err != nil || byVerdifax.Decider() != artifacts.PublicationByVerdifax {
+		t.Fatalf("a Verdifax withdrawal: %v, decider %q", err, byVerdifax.Decider())
+	}
+	relabelled := byVerdifax
+	relabelled.DecidedBy = artifacts.PublicationByOwner
+	if relabelled.ComputeHash() == byVerdifax.PublicationHash {
+		t.Fatal("changing who decided keeps the publication hash")
+	}
+	// A v1 publication, sealed before v2, still verifies and reads as the owner's.
+	v1 := good
+	v1.Format, v1.DecidedBy = artifacts.RunPublicationFormatV1, ""
+	v1.PublicationHash = v1.ComputeHash()
+	if err := v1.Validate(); err != nil || v1.Decider() != artifacts.PublicationByOwner {
+		t.Fatalf("a v1 publication: %v, decider %q", err, v1.Decider())
 	}
 	if err := checkRunPublication(&changed); err == nil || !strings.Contains(err.Error(), "recomputes") {
 		t.Fatalf("a publication whose hash does not recompute passed: %v", err)
@@ -388,8 +414,8 @@ func TestKeyChangesAndFailureReceiptsValidate(t *testing.T) {
 // publication adds a record made public by the account's owner.
 func (f *feedBuilder) publication(action string) {
 	link, at := f.next()
-	p := artifacts.RunPublication{Format: artifacts.RunPublicationFormat, Action: action, RunID: f.runID, RecordHash: strings.Repeat("7", 64),
-		JobID: "loan-1", StepID: "verdict", ChangedAt: at.Format(time.RFC3339Nano), Signal: link}
+	p := artifacts.RunPublication{Format: artifacts.RunPublicationFormat, Action: action, DecidedBy: artifacts.PublicationByOwner,
+		RunID: f.runID, RecordHash: strings.Repeat("7", 64), JobID: "loan-1", StepID: "verdict", ChangedAt: at.Format(time.RFC3339Nano), Signal: link}
 	p.PublicationHash = p.ComputeHash()
 	p.Anchor = f.anchor(artifacts.RunPublicationKind, p.PublicationHash, p.LeafHash(), at)
 	f.add(action, link, p.PublicationHash, p.RunID, p)
