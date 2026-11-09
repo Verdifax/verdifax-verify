@@ -26,6 +26,40 @@ type Rule struct {
 	Conditions         []Condition `json:"conditions,omitempty"`
 	Priority           int         `json:"priority,omitempty"` // reserved; validation refuses a non-zero value
 	ReasonCodeOverride string      `json:"reason_code,omitempty"`
+	AIReview           *AIReview   `json:"ai_review,omitempty"` // allow rules only
+}
+
+// ContradictionMode is what a contradiction the AI review finds in a step's
+// answer does to the step: halt it, or record the finding and let it
+// continue.
+type ContradictionMode string
+
+const (
+	ContradictionHalt   ContradictionMode = "halt"
+	ContradictionRecord ContradictionMode = "record"
+)
+
+// AIReview is a policy's choice about the AI review of the steps it allows.
+type AIReview struct {
+	Contradiction ContradictionMode `json:"contradiction"`
+}
+
+// KnownContradictionMode reports whether m is a mode the review applies.
+func KnownContradictionMode(m ContradictionMode) bool {
+	return m == ContradictionHalt || m == ContradictionRecord
+}
+
+// ContradictionModeFor is what a contradiction finding does on a step the
+// policy allowed: the fired rule's choice, else the policy's own, else halt.
+// A step allowed by the default effect has no fired rule; pass nil.
+func ContradictionModeFor(fired *Rule, policyDefault *AIReview) ContradictionMode {
+	if fired != nil && fired.AIReview != nil {
+		return fired.AIReview.Contradiction
+	}
+	if policyDefault != nil {
+		return policyDefault.Contradiction
+	}
+	return ContradictionHalt
 }
 
 // Subject describes who is making the request.

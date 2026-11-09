@@ -102,8 +102,14 @@ type AivpT4HaltReceipt struct {
 	// audit chain.
 	PiaHash string `json:"pia_hash"`
 
-	// Version is always "vfa.aivp_t4_halt.v1" for this artifact version.
+	// Version is "vfa.aivp_t4_halt.v1", or "vfa.aivp_t4_halt.v2" for a
+	// receipt that carries the review block.
 	Version string `json:"version"`
+
+	// Review is the AI review's record of the answer it halted on (see
+	// AivpReview). Present on v2 receipts only, so a v1 receipt's preimage
+	// and hash are unchanged.
+	Review *AivpReview `json:"review,omitempty"`
 
 	// Hash is the canonical SHA-256 hex of the ten preimage fields
 	// above. Filled by BuildAivpT4HaltReceiptHash; this field is NOT
@@ -116,19 +122,21 @@ type AivpT4HaltReceipt struct {
 // in place; the resulting Hash is also returned for convenience.
 func BuildAivpT4HaltReceiptHash(receipt *AivpT4HaltReceipt) (string, error) {
 	preimage := struct {
-		AdapterID        string `json:"adapter_id"`
-		AiOutputHash     string `json:"ai_output_hash"`
-		AllowTokenHash   string `json:"allow_token_hash"`
-		AnchorRequired   bool   `json:"anchor_required,omitempty"`
-		DecisionKind     string `json:"decision_kind"`
-		DecisionReason   string `json:"decision_reason"`
-		EnvelopeID       string `json:"envelope_id"`
-		EvaluatorVersion string `json:"evaluator_version"`
-		HaltClock        string `json:"halt_clock"`
-		HaltReasonCode   string `json:"halt_reason_code"`
-		PiaHash          string `json:"pia_hash"`
-		Version          string `json:"version"`
+		AdapterID        string      `json:"adapter_id"`
+		AiOutputHash     string      `json:"ai_output_hash"`
+		AllowTokenHash   string      `json:"allow_token_hash"`
+		AnchorRequired   bool        `json:"anchor_required,omitempty"`
+		DecisionKind     string      `json:"decision_kind"`
+		DecisionReason   string      `json:"decision_reason"`
+		EnvelopeID       string      `json:"envelope_id"`
+		EvaluatorVersion string      `json:"evaluator_version"`
+		HaltClock        string      `json:"halt_clock"`
+		HaltReasonCode   string      `json:"halt_reason_code"`
+		PiaHash          string      `json:"pia_hash"`
+		Review           *AivpReview `json:"review,omitempty"`
+		Version          string      `json:"version"`
 	}{
+		Review:           receipt.Review,
 		AnchorRequired:   receipt.AnchorRequired,
 		AdapterID:        receipt.AdapterID,
 		AiOutputHash:     receipt.AiOutputHash,

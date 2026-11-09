@@ -79,6 +79,9 @@ type ReceiptReport struct {
 	AccountID            string              `json:"account_id,omitempty"`
 	AccountPolicyGate    *PolicyGateCheck    `json:"account_policy_gate,omitempty"`
 	AccountPolicyHistory *PolicyHistoryCheck `json:"account_policy_history,omitempty"`
+	// AIReview is what this tool found about an AI review halt receipt's
+	// review block (v0.27.0), or nil when it carries none.
+	AIReview *AIReviewCheck `json:"ai_review,omitempty"`
 	// The sign-off checks (v0.22.0), as on an allowed run's report.
 	SignOffs       *SignOffCheck `json:"signoffs,omitempty"`
 	SignOffHistory *SignOffCheck `json:"signoff_history,omitempty"`
@@ -258,6 +261,18 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 	f := all[0]
 	rep.ReceiptKind, rep.EnvelopeID, rep.ReceiptClock, rep.ReceiptHash, rep.Summary =
 		f.kind, f.envelopeID, f.clock, f.hash, f.summary
+	// An AI review halt receipt's review block (v0.27.0) must be
+	// consistent with itself and with the step having been halted.
+	if d.AivpT4HaltReceipt != nil {
+		r := d.AivpT4HaltReceipt
+		if (r.Review != nil) != (r.Version == "vfa.aivp_t4_halt.v2") {
+			return fail("an AI review halt receipt carries a review block exactly when it is version vfa.aivp_t4_halt.v2; this one is %q", r.Version)
+		}
+		rep.AIReview = aiReviewOf(r.Review, false)
+		if aiReviewFailed(rep.AIReview) {
+			return fail("%s", rep.AIReview.Reason)
+		}
+	}
 	// The API serves every receipt document with ok true (its response
 	// flag); a document that says otherwise is not one it served, and is
 	// refused as strict reading refuses a malformed one (round 45: the
@@ -546,6 +561,7 @@ func printReceiptReport(r *ReceiptReport) {
 		printPolicyHistory(*r.PolicyHistory)
 	}
 	printAccount(r.AccountID, r.AccountPolicyGate, r.AccountPolicyHistory)
+	printAIReview(r.AIReview)
 	printSignOffs(r.SignOffs, r.SignOffHistory)
 	switch r.VerdictTier {
 	case "VERIFIED_ANCHORED":

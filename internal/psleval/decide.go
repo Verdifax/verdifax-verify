@@ -22,8 +22,9 @@ type Result struct {
 
 // Document is the part of a policy a decision reads.
 type Document struct {
-	DefaultEffect Effect `json:"default_effect"`
-	Rules         []Rule `json:"rules"`
+	DefaultEffect Effect    `json:"default_effect"`
+	Rules         []Rule    `json:"rules"`
+	AIReview      *AIReview `json:"ai_review,omitempty"`
 }
 
 // ReadDocument reads the rules out of a policy's exact text.

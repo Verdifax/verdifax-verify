@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.26.0"
+const Version = "0.27.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -150,6 +150,9 @@ type Report struct {
 	// AccountPolicyGate is the account policy's sealed decision and, with
 	// --account-policy, the document check.
 	AccountPolicyGate *PolicyGateCheck `json:"account_policy_gate,omitempty"`
+	// AIReview is what this tool found about the record's AI review
+	// (v0.27.0), or nil when the record seals none.
+	AIReview *AIReviewCheck `json:"ai_review,omitempty"`
 	// AccountPolicyHistory is the --account-policy-history check.
 	AccountPolicyHistory *PolicyHistoryCheck `json:"account_policy_history,omitempty"`
 	// SignOffs is the --signoff check (v0.22.0): the approvers' decisions on
@@ -193,6 +196,8 @@ type options struct {
 	jobFolder       *string
 	policyHistory   *string
 	accountPolicy   *string
+	aivpTrace       *string
+	aivpTraces      *string
 	accountHistory  *string
 	signOff         *string
 	approverKey     *string
@@ -217,6 +222,8 @@ func defineFlags(fs *flag.FlagSet) options {
 		requestFile:     fs.String("request", "", "a file holding the exact signed request; passes only if the record's version 2 signature covers those bytes"),
 		policyHistory:   fs.String("policy-history", "", "a JSON list of a key's policy changes, oldest first: every change and link must verify, and a record given with it must name a change in the list"),
 		accountPolicy:   fs.String("account-policy", "", "the account's policy document (JSON), for a record from a key in an account with a policy: checked as --policy checks the key's, and the account's rules run on the sealed inputs must reach the sealed decision, or verification fails"),
+		aivpTraces:      fs.String("aivp-traces", "", "with --job, a folder holding the trace of every step whose AI review ran, as <step>.txt for the step's <step>.json; each must re-check as --aivp-trace checks one"),
+		aivpTrace:       fs.String("aivp-trace", "", "the trace the record's AI review checked, as the run's response returned it (aivp_trace_text): its SHA-256 must be the sealed trace hash, and the contradiction check run again on it must reach the sealed finding, or verification fails"),
 		accountHistory:  fs.String("account-policy-history", "", "a JSON list of the account's policy changes, oldest first: every change and link must verify, every change must belong to the account the record names, and the record must name a change in the list"),
 		signOff:         fs.String("signoff", "", "a JSON list of sign-offs for the record or receipt, as GET /runs/{id}/signoffs returns: each must verify, belong to the record's account and name this exact result; the latest is the decision in force"),
 		approverKey:     fs.String("approver-key", "", "with --signoff, a file holding the base64 Ed25519 public key you expect signed the decision in force; fails unless it did"),
@@ -348,6 +355,13 @@ func main() {
 			}
 		}
 		applyReceiptAccountFlags(rr, *o.accountPolicy, *o.accountHistory)
+		rr.AIReview = applyAIReviewTrace(rr.AIReview, *o.aivpTrace)
+		if *o.accountPolicy != "" {
+			rr.AIReview = applyAIReviewMode(rr.AIReview, readAccountPolicy(*o.accountPolicy), rr.AccountPolicyGate)
+		}
+		if aiReviewFailed(rr.AIReview) {
+			rr.VerdictTier, rr.AllPassed, rr.Reason = "FAILED", false, rr.AIReview.Reason
+		}
 		applyReceiptSignOffFlags(rr, doc, *o.signOff, *o.approverKey, *o.signOffHistory)
 		if *jsonOutput {
 			emitReceiptJSON(rr)
@@ -394,6 +408,13 @@ func main() {
 		}
 	}
 	applyAccountFlags(report, *o.accountPolicy, *o.accountHistory)
+	report.AIReview = applyAIReviewTrace(report.AIReview, *o.aivpTrace)
+	if *o.accountPolicy != "" {
+		report.AIReview = applyAIReviewMode(report.AIReview, readAccountPolicy(*o.accountPolicy), report.AccountPolicyGate)
+	}
+	if aiReviewFailed(report.AIReview) {
+		report.AllPassed, report.VerdictTier, report.RecordCoverage = false, "FAILED", "failed"
+	}
 	applySignOffFlags(report, bundle, *o.signOff, *o.approverKey, *o.signOffHistory)
 	if *o.signerKeyFile != "" {
 		key, readErr := os.ReadFile(*o.signerKeyFile)
@@ -775,7 +796,7 @@ const (
 var flagInputKinds = map[string]string{
 	"json": inputBoth, "version": inputBoth, "allow-unanchored": inputBoth,
 	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
-	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "signals": inputBoth, "signals-after": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
+	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "signals": inputBoth, "signals-after": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
 	"self-hosted-receipt": inputReceipt,
 }
 
@@ -785,14 +806,14 @@ var flagInputKinds = map[string]string{
 // runJobMode checks a folder of one job's records.
 func runJobMode(o options, asJSON, allowPartial, allowUnanchored, selfHosted bool) int {
 	allowed := map[string]bool{"job": true, "json": true, "allow-partial": true, "allow-unanchored": true,
-		"self-hosted-receipt": true, "signer-key": true}
+		"self-hosted-receipt": true, "signer-key": true, "aivp-traces": true}
 	var refused bool
 	flag.Visit(func(f *flag.Flag) { refused = refused || !allowed[f.Name] })
 	if refused || flag.NArg() > 0 {
 		fmt.Fprintln(os.Stderr, "verdifax-verify:", errJobFlags)
 		return 2
 	}
-	opts := jobOptions{allowUnanchored: allowUnanchored, selfHosted: selfHosted}
+	opts := jobOptions{allowUnanchored: allowUnanchored, selfHosted: selfHosted, traceDir: *o.aivpTraces}
 	if *o.signerKeyFile != "" {
 		key, readErr := os.ReadFile(*o.signerKeyFile)
 		if readErr != nil {
@@ -1089,6 +1110,12 @@ func verify(b *artifacts.AuditBundle) *Report {
 	if policyFailed(r.PolicyGate) || accountFailed(r.AccountPolicyGate, nil) {
 		allPassed = false
 	}
+	// The AI review block (v0.27.0) must be consistent with itself and with
+	// the step having been released.
+	r.AIReview = aiReviewOf(b.AivpT4.Review, true)
+	if aiReviewFailed(r.AIReview) {
+		allPassed = false
+	}
 	r.passedExceptRequirement = allPassed
 	if r.CompleteRecordRequirement.Sealed && !r.CompleteRecordRequirement.Satisfied {
 		allPassed = false
@@ -1361,6 +1388,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	printCompleteRecordRequirement(r.CompleteRecordRequirement, len(b.PreAnchor) > 0)
 	printEntryAuth(r.EntryAuth)
 	printRecordValues(r.RecordValues)
+	printAIReview(r.AIReview)
 	printPolicyGate(r.PolicyGate)
 	if r.PolicyHistory != nil {
 		printPolicyHistory(*r.PolicyHistory)

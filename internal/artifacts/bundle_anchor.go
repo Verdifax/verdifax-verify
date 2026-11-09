@@ -48,7 +48,8 @@ package artifacts
 //	                         fields (outside bundle_hash).
 //	 4 aivp_t4_section       ComputeAivpT4SectionHash, all six fields,
 //	                         including aivp_t4.decision, which no
-//	                         earlier seal covered.
+//	                         earlier seal covered, and the review block
+//	                         (aivp_t4.review) when the section has one.
 //	 5 formal_verification   RecomputeFormalVerificationHash (a zero
 //	                         section hashes to a stable constant).
 //	 6 execution_record      ComputeExecutionRecordSectionHash, all
@@ -227,17 +228,20 @@ func ComputeBundleLeafHash(envelopeID, anchoredDigest string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// ComputeAivpT4SectionHash digests all six AIVP fields.
+// ComputeAivpT4SectionHash digests every AIVP field: the six it has always
+// covered, and the review block when the section carries one. A section
+// without the block hashes as it did before the block existed.
 func ComputeAivpT4SectionHash(a AivpT4Section) string {
 	return MustCanonicalHash(struct {
-		Form            string `json:"form"`
-		Outcome         string `json:"outcome"`
-		PiaHash         string `json:"pia_hash"`
-		AdapterID       string `json:"adapter_id"`
-		AiOutputHash    string `json:"ai_output_hash"`
-		Decision        string `json:"decision"`
-		HaltReceiptHash string `json:"halt_receipt_hash"`
-	}{aivpT4SectionForm, a.Outcome, a.PiaHash, a.AdapterID, a.AiOutputHash, a.Decision, a.HaltReceiptHash})
+		Form            string      `json:"form"`
+		Outcome         string      `json:"outcome"`
+		PiaHash         string      `json:"pia_hash"`
+		AdapterID       string      `json:"adapter_id"`
+		AiOutputHash    string      `json:"ai_output_hash"`
+		Decision        string      `json:"decision"`
+		HaltReceiptHash string      `json:"halt_receipt_hash"`
+		Review          *AivpReview `json:"review,omitempty"`
+	}{aivpT4SectionForm, a.Outcome, a.PiaHash, a.AdapterID, a.AiOutputHash, a.Decision, a.HaltReceiptHash, a.Review})
 }
 
 // ComputeExecutionRecordSectionHash digests every execution-record

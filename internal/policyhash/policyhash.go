@@ -110,6 +110,13 @@ type policy struct {
 	ProfileTag             string            `json:"profile_tag,omitempty"`
 	SignaturePolicy        *signaturePolicy  `json:"signature_policy,omitempty"`
 	Signers                []policySignature `json:"signers,omitempty"`
+	AIReview               *aiReview         `json:"ai_review,omitempty"`
+}
+
+// aiReview is a policy's or a rule's choice about the AI review: what a
+// contradiction finding does, halt or record.
+type aiReview struct {
+	Contradiction string `json:"contradiction"`
 }
 
 type policySignature struct {
@@ -136,6 +143,7 @@ type rule struct {
 	Conditions         []condition `json:"conditions,omitempty"`
 	Priority           int         `json:"priority,omitempty"` // excluded from policy_hash
 	ReasonCodeOverride string      `json:"reason_code,omitempty"`
+	AIReview           *aiReview   `json:"ai_review,omitempty"`
 }
 
 type subject struct {
@@ -190,6 +198,24 @@ func validate(p *policy) error {
 		if r.Priority != 0 {
 			return fmt.Errorf("%w: rule %q sets priority %d", ErrReservedPriority, r.RuleID, r.Priority)
 		}
+		if aiErr := checkAIReview("rule "+strconv.Quote(r.RuleID), r.Effect, r.AIReview); aiErr != nil {
+			return aiErr
+		}
+	}
+	return checkAIReview("the policy", "allow", p.AIReview)
+}
+
+// checkAIReview is the server's: a mode the review does not know, or an
+// ai_review on a deny rule, whose steps never reach the review, is refused.
+func checkAIReview(where, effect string, a *aiReview) error {
+	if a == nil {
+		return nil
+	}
+	if effect != "allow" {
+		return fmt.Errorf("policyhash: invalid ai_review: %s denies, so its steps never reach the AI review", where)
+	}
+	if a.Contradiction != "halt" && a.Contradiction != "record" {
+		return fmt.Errorf("policyhash: invalid ai_review: %s: contradiction must be halt or record, not %q", where, a.Contradiction)
 	}
 	return nil
 }
@@ -231,6 +257,9 @@ func canonicalPolicyForHash(p *policy) map[string]any {
 	}
 	if p.ProfileTag != "" {
 		out["profile_tag"] = p.ProfileTag
+	}
+	if p.AIReview != nil {
+		out["ai_review"] = map[string]any{"contradiction": p.AIReview.Contradiction}
 	}
 	return out
 }
@@ -283,6 +312,9 @@ func ruleHashPreimage(r rule) map[string]any {
 	}
 	if r.ReasonCodeOverride != "" {
 		out["reason_code"] = r.ReasonCodeOverride
+	}
+	if r.AIReview != nil {
+		out["ai_review"] = map[string]any{"contradiction": r.AIReview.Contradiction}
 	}
 	return out
 }

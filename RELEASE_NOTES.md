@@ -2,6 +2,27 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.27.0: what the AI review found, and the trace that proves it
+
+A record whose AI review ran now carries a review block: the review setup,
+the SHA-256 of the trace the review checked, the checker, what the account
+policy chose a contradiction finding does (`halt` or `record`), the outcome
+and the finding. The report prints it and `--json` carries it as
+`ai_review`; verification fails when the block contradicts itself or the
+record. An AI review halt receipt with the block is version
+`vfa.aivp_t4_halt.v2`.
+
+`--aivp-trace FILE` re-runs the contradiction check on the trace the record's
+owner kept from the run's response: the file must hash to the sealed trace
+hash and reach the sealed finding. With `--job`, `--aivp-traces DIR` checks
+every step's trace. With `--account-policy`, the sealed choice must be the
+one the account policy's fired rule makes, and a policy may now carry
+`ai_review` on itself and on its allow rules (`policyhash` binds it).
+
+The check this release re-runs is the server's own (`internal/aivpcheck`,
+identical in both repositories), held to the review engine's results on 951
+traces. Every other check passes and fails as in v0.26.0.
+
 ### v0.26.0: what a sign-off decision means, and who decided a publication
 
 `--signoff` now prints, under the decision in force, what it means, and

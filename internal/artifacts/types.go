@@ -700,6 +700,42 @@ type AivpT4Section struct {
 	// When non-empty, the full receipt is retrievable via
 	// /runs/{id}/aivp-t4-halt-receipt.
 	HaltReceiptHash string `json:"halt_receipt_hash"`
+
+	// Review is what the live AI review did, when one ran on this record:
+	// the setup that produced the trace, the trace's hash, the checker,
+	// what the policy chose a contradiction finding does, and what the
+	// checker found. Absent on records sealed before it existed and on
+	// records with no AI output, so their section hash is unchanged.
+	Review *AivpReview `json:"review,omitempty"`
+}
+
+// AivpReviewFormulaV1 names the review block's form.
+const AivpReviewFormulaV1 = "aivp-review.v1"
+
+// AivpReview is the AI review's own record of one answer it read.
+//
+// The trace is the text the review model wrote about the answer; its nodes
+// are its blank-line separated paragraphs. TraceHash is the SHA-256 of that
+// text, which the caller keeps, so anyone holding the text re-runs the
+// checker named here and confirms the finding offline.
+type AivpReview struct {
+	Formula              string       `json:"formula"`               // aivp-review.v1
+	PromptID             string       `json:"prompt_id"`             // the review instruction, e.g. statements-v1
+	Model                string       `json:"model"`                 // the model the review's response named
+	TraceHash            string       `json:"trace_hash"`            // SHA-256 hex of the trace text
+	CheckerID            string       `json:"checker_id"`            // e.g. keyword-v1
+	ContradictionMode    string       `json:"contradiction_mode"`    // halt or record, as the policy chose
+	ContradictionOutcome string       `json:"contradiction_outcome"` // clean, halted or recorded
+	Finding              *AivpFinding `json:"finding,omitempty"`     // present unless clean
+}
+
+// AivpFinding is the contradiction a deterministic checker found: two trace
+// nodes, by id, and the opposing terms found in them.
+type AivpFinding struct {
+	NodeA    string `json:"node_a"`
+	NodeB    string `json:"node_b"`
+	Term     string `json:"term"`
+	Opposite string `json:"opposite"`
 }
 
 // RekorAnchor is the public-transparency-log evidence bundled

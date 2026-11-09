@@ -1,0 +1,28 @@
+{
+  "schema": "psl.v1",
+  "policy_id": "synthetic-ai-review",
+  "policy_name": "AI review choices on the policy and on one rule",
+  "policy_version": "1.0.0",
+  "effective_at": "2026-11-09T00:00:00Z",
+  "default_effect": "deny",
+  "ai_review": {
+    "contradiction": "halt"
+  },
+  "rules": [
+    {
+      "rule_id": "record-text-checks",
+      "effect": "allow",
+      "subject": {"type": "agent", "id_match": {"operator": "any"}},
+      "verb": {"match": {"operator": "exact", "value": "claims.rule_check"}},
+      "object": {"type": "text", "id_match": {"operator": "prefix", "value": "claims-review/"}},
+      "ai_review": {"contradiction": "record"}
+    },
+    {
+      "rule_id": "halt-actions",
+      "effect": "allow",
+      "subject": {"type": "agent", "id_match": {"operator": "any"}},
+      "verb": {"match": {"operator": "exact", "value": "payments.send"}},
+      "object": {"type": "transaction", "id_match": {"operator": "any"}}
+    }
+  ]
+}

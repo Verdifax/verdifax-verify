@@ -55,6 +55,26 @@ type jobOptions struct {
 	allowUnanchored bool
 	selfHosted      bool
 	signerKey       string
+	// traceDir, from --aivp-traces, holds the trace of every step whose AI
+	// review ran, as <step>.txt beside the step's <step>.json.
+	traceDir string
+}
+
+// jobStepTrace re-checks a step's AI review against its trace file when
+// --aivp-traces is given: a step that seals a review must have its trace,
+// and the trace must re-check. It returns "" when the step passes.
+func jobStepTrace(file string, c *AIReviewCheck, opts jobOptions) string {
+	if opts.traceDir == "" || c == nil {
+		return ""
+	}
+	path := filepath.Join(opts.traceDir, strings.TrimSuffix(file, ".json")+".txt")
+	if _, statErr := os.Stat(path); statErr != nil {
+		return "the step's AI review sealed a trace, and --aivp-traces holds no " + filepath.Base(path)
+	}
+	if checked := applyAIReviewTrace(c, path); !checked.TraceMatch {
+		return checked.Reason
+	}
+	return ""
 }
 
 func recordFromBundle(file string, data []byte, opts jobOptions) jobRecord {
@@ -74,6 +94,12 @@ func recordFromBundle(file string, data []byte, opts jobOptions) jobRecord {
 		if c := report.RequestSignature; c.Performed && !c.Match {
 			rec.Reason = c.Reason
 		}
+		if c := report.AIReview; aiReviewFailed(c) {
+			rec.Reason = c.Reason
+		}
+	}
+	if rec.Reason == "" {
+		rec.Reason = jobStepTrace(file, report.AIReview, opts)
 	}
 	return rec
 }
@@ -101,6 +127,9 @@ func recordFromReceipt(file string, data []byte, opts jobOptions) jobRecord {
 		if report.Reason != "" {
 			rec.Reason = report.Reason
 		}
+	}
+	if rec.Reason == "" {
+		rec.Reason = jobStepTrace(file, report.AIReview, opts)
 	}
 	return rec
 }
@@ -305,4 +334,4 @@ func runJobCheck(dir string, opts jobOptions, asJSON, allowOpen bool) int {
 	return 1
 }
 
-var errJobFlags = errors.New("--job takes only --json, --allow-partial, --allow-unanchored, --self-hosted-receipt and --signer-key")
+var errJobFlags = errors.New("--job takes only --json, --allow-partial, --allow-unanchored, --self-hosted-receipt, --signer-key and --aivp-traces")

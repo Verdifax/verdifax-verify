@@ -42,6 +42,17 @@ FLAGS
                           sealed inputs. An allowed run must be allowed by
                           both. The account policy is the customer's;
                           Verdifax did not write, review or approve it
+                          both, and a record's AI review must apply the
+                          contradiction choice the fired rule makes
+  -aivp-traces DIR        with -job, a folder holding the trace of every step
+                          whose AI review ran, as <step>.txt for the step's
+                          <step>.json; each must re-check as -aivp-trace
+                          checks one
+  -aivp-trace FILE        the trace the record's AI review checked, as the
+                          run's response returned it (aivp_trace_text): its
+                          SHA-256 must be the sealed trace hash, and the
+                          contradiction check run again on it must reach the
+                          sealed finding
   -account-policy-history FILE
                           check a JSON list of the account's policy changes,
                           oldest first, as -policy-history does; every change

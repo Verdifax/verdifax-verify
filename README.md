@@ -87,6 +87,7 @@ verdifax-verify --policy policy.json bundle.json  # also check a policy document
 verdifax-verify --policy-history history.json     # check a key's chain of policy changes
 verdifax-verify --account-policy account-policy.json bundle.json  # also check the account's policy and run its rules
 verdifax-verify --account-policy-history account-history.json   # check an account's chain of policy changes
+verdifax-verify --aivp-trace trace.txt bundle.json               # re-run the AI review's contradiction check from its trace
 verdifax-verify --signoff signoffs.json --approver-key approver.txt bundle.json  # check an approver's sign-off on this record
 verdifax-verify --signoff-history signoff-history.json          # check an account's chain of sign-offs
 verdifax-verify --signer-key key.txt bundle.json  # also confirm the request was signed by this public key
@@ -764,6 +765,34 @@ covers the runs its keys made through Verdifax, not runs made elsewhere.
 
 The verifier reads these fields since v0.21.0; older releases refuse fields
 they do not know. Records without the fields hash exactly as before.
+
+### The AI review: `--aivp-trace` and `--aivp-traces`
+
+Since v0.27.0, a record whose AI review ran carries a review block
+(`aivp_t4.review` in a bundle, `review` in an AI review halt receipt, which
+is then version `vfa.aivp_t4_halt.v2`): the review setup (its prompt id and
+the model that answered), the SHA-256 of the trace the review checked, the
+checker, what the account policy chose a contradiction finding does
+(`halt` or `record`), the outcome (`clean`, `halted` or `recorded`) and the
+finding (two trace nodes, by id, and the opposing terms in them). The report
+prints it, and verification fails when the block contradicts itself or the
+record, for example a `halted` outcome on a released step or a finding the
+mode does not give.
+
+The trace is the text the review model wrote about the step's AI output,
+one statement per paragraph. Verdifax returns it once, in the run's response
+(`aivp_trace_text`), and does not store it. `--aivp-trace FILE` checks a
+kept trace: its SHA-256 must be the sealed trace hash, and the contradiction
+check run again on it must reach the sealed finding, or no finding. With
+`--job`, `--aivp-traces DIR` does the same for every step whose review ran,
+reading `<step>.txt` for the step's `<step>.json`.
+
+With `--account-policy`, the sealed choice must be the one the account
+policy makes for the rule that fired: the rule's `ai_review`, else the
+policy's own, else halt.
+
+A record sealed before v0.27.0 carries no review block and verifies as
+before; an earlier release refuses a record or receipt that carries one.
 
 ### Sign-offs: `--signoff`, `--approver-key` and `--signoff-history`
 

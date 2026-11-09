@@ -32,6 +32,7 @@ var serverVectors = []struct {
 	{"profile_internal_audit_v1.json", "internal-audit-v1", "Internal Audit Baseline", "1.0.0", "85f7a338ca225d570ecee79c94c6bf6ee95f6de5235cbaac94ededcd7a10e273"},
 	{"psl_policy_minimal.json", "policy-cross-lang-test", "Cross-language determinism test policy", "1.0.0", "70a63237f8cb0538db06d82b2fc29b7cfd01159e67c12ae362173aa4614e70ac"},
 	{"psl_policy_signed.json", "policy-cross-lang-signed-test", "Cross-language determinism test policy (signed)", "1.0.0", "1a93993fd0ce09f48310a87ba22c3d4dd56b39f16d868c999ebfc3e6e09d5204"},
+	{"synthetic_ai_review.json", "synthetic-ai-review", "AI review choices on the policy and on one rule", "1.0.0", "d611a84e61116380b883a8cd1bf6f6a957c249f401afff326beea26b491d1987"},
 	{"synthetic_all_rule_shapes.json", "synthetic-all-rule-shapes", "Every subject, verb, object and condition shape", "4.2.0", "3bac3c125b3e527f49d62c525cc121d6d526172bc53751b487b68a537f2eae8a"},
 	{"synthetic_empty_optionals.json", "synthetic-empty-optionals", "Every optional part present but empty", "1.0.0", "16cd9f574245006c5eb23de21c7e571a3dc260ccbc2c9805c227191ea7169758"},
 	{"synthetic_empty_optionals_omitted.json", "synthetic-empty-optionals", "Every optional part present but empty", "1.0.0", "16cd9f574245006c5eb23de21c7e571a3dc260ccbc2c9805c227191ea7169758"},
