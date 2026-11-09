@@ -810,6 +810,13 @@ system read and its event hash, which the report prints as the next point)
 checks that the page continues from it; without it, the report says
 continuity before the first event was not checked. Run alone, with no record.
 
+An event filed while the public log could not be reached carries no entry of
+its own. Since v0.25.0 the next event that has one commits it, because that
+entry seals the chain of hashes back to it: the report names the event and
+the event that commits it, states that its time is proven only by that later
+entry, and exits 3 unless `--allow-partial` is given. An unlogged event with
+nothing logged after it fails.
+
 The feed shows the signals Verdifax recorded for the account, in the order
 it recorded them. It cannot show a signal Verdifax never recorded: a company
 that signs its requests holds its own list of what it sent. The verifier

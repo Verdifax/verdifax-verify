@@ -134,9 +134,14 @@ func checkActivationEntry(a *artifacts.PolicyActivation, at time.Time) error {
 // record's kind, hash and leaf, verifies against the log, was made by a pinned
 // Verdifax key in its accepted period, and inside the anchoring window after
 // the record's own time.
+// errNoLogEntry is a record that is sound in every other way and carries no
+// public-log entry. Alone it fails; in a signal feed a later event's entry
+// can commit it (checkSignalFeed).
+var errNoLogEntry = errors.New("it carries no public-log entry")
+
 func checkChainEntry(entry *artifacts.ReceiptAnchor, kind, hash, leaf string, at time.Time, clock string) error {
 	if entry == nil {
-		return errors.New("it carries no public-log entry")
+		return errNoLogEntry
 	}
 	if entry.Backend != "rekor" {
 		return fmt.Errorf("its entry's backend is %q, not the public log", entry.Backend)

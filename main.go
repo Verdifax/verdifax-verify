@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.24.0"
+const Version = "0.25.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -208,7 +208,7 @@ func defineFlags(fs *flag.FlagSet) options {
 	return options{
 		jsonOutput:      fs.Bool("json", false, "emit machine-readable JSON instead of human report"),
 		strictMode:      fs.Bool("strict", false, "fail (exit 1) on any scaffold-flagged value"),
-		allowPartial:    fs.Bool("allow-partial", false, "exit 0 for a record whose public-log anchor binds only part of it (a record sealed before leaf v5, or one without a verified complete-record anchor); without this flag such a record exits 3, because its unanchored sections could have been rewritten together with their hashes"),
+		allowPartial:    fs.Bool("allow-partial", false, "exit 0 for a record whose public-log anchor binds only part of it (a record sealed before leaf v5, or one without a verified complete-record anchor); without this flag such a record exits 3, because its unanchored sections could have been rewritten together with their hashes. With --signals, exit 0 for a feed in which some events carry no public-log entry of their own and a later event's entry commits them; without this flag such a feed exits 3, because their time is proven only by the later entry"),
 		allowUnanchored: fs.Bool("allow-unanchored", false, "exit 0 for a bundle with no public-log anchor; without this flag, unanchored bundles fail, because every sealing property this tool checks hangs off the anchor and an attacker can strip an anchor claim by editing one unprotected field (the documented downgrade attack)"),
 		showVersion:     fs.Bool("version", false, "print version and exit"),
 		selfHosted:      fs.Bool("self-hosted-receipt", false, "the receipt was issued by a test or self-hosted deployment that does not anchor receipts on the public log, not by the Verdifax API; exempts it from the rules that receipts dated from run 241 on must carry a public-log anchor and receipts dated from run 242 on must seal anchor_required"),
@@ -268,7 +268,7 @@ func main() {
 		os.Exit(2)
 	}
 	if *o.signals != "" {
-		os.Exit(runSignalsMode(*o.signals, *o.signalsAfter, *jsonOutput))
+		os.Exit(runSignalsMode(*o.signals, *o.signalsAfter, *jsonOutput, *allowPartial))
 	}
 	if *o.signOffHistory != "" && flag.NArg() == 0 && *o.signOff == "" {
 		os.Exit(runSignOffHistoryMode(*o.signOffHistory, *jsonOutput))

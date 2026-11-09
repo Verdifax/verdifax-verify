@@ -69,6 +69,10 @@ type SignalFeedEntry struct {
 	RunID    int64  `json:"run_id,omitempty"`
 	At       string `json:"at"`
 	LogEntry string `json:"log_entry_id"`
+	// CommittedBy, when set, is the later event whose public-log entry
+	// commits this one: this event carries no entry of its own, so its time
+	// is proven only by that later entry, not by its own clock.
+	CommittedBy int64 `json:"committed_by,omitempty"`
 }
 
 // SignalFeedCheck is the --signals result.
@@ -84,6 +88,10 @@ type SignalFeedCheck struct {
 	// (a later page read with no point given).
 	ContinuityFrom string `json:"continuity_from,omitempty"`
 	LastEventHash  string `json:"last_event_hash,omitempty"`
+	// CommittedLater counts the events with no public-log entry of their own
+	// that a later event's entry commits. The feed is then sound but partly
+	// timed: --signals exits 3 unless --allow-partial is given.
+	CommittedLater int    `json:"committed_by_a_later_event,omitempty"`
 	Reason         string `json:"reason,omitempty"`
 }
 
@@ -159,6 +167,29 @@ type checkedEntry struct {
 	hash, at, logEntry string
 	link               *artifacts.SignalLink
 	runID              int64
+	// unlogged is an entry sound in every way but one: it carries no
+	// public-log entry of its own.
+	unlogged bool
+}
+
+// unloggedOr passes a check that failed only for want of a public-log entry,
+// and returns every other failure.
+func unloggedOr(err error) (bool, error) {
+	if err == nil {
+		return false, nil
+	}
+	if errors.Is(err, errNoLogEntry) {
+		return true, nil
+	}
+	return false, err
+}
+
+// logEntryOf is an anchor's entry id, or empty for none.
+func logEntryOf(a *artifacts.ReceiptAnchor) string {
+	if a == nil {
+		return ""
+	}
+	return a.LogEntryID
 }
 
 // checkSignalEntry checks one event's entry as its own kind and returns its
@@ -171,7 +202,11 @@ func checkSignalEntry(e *signalEvent) (checkedEntry, error) {
 			return checkedEntry{}, fmt.Errorf("its entry is not a receipt document: %w", decodeErr)
 		}
 		rep := verifyReceiptDocument(&doc)
-		if !rep.AllPassed || rep.VerdictTier != "VERIFIED_ANCHORED" {
+		// A receipt sound in every way but carrying no log entry, and not
+		// sealed as requiring one, is unlogged; one sealed with
+		// anchor_required that lost its entry fails, as it does alone.
+		unlogged := rep.AllPassed && rep.VerdictTier == "SELF_CONSISTENT_NOT_ANCHORED" && doc.ReceiptAnchor == nil
+		if !unlogged && (!rep.AllPassed || rep.VerdictTier != "VERIFIED_ANCHORED") {
 			return checkedEntry{}, fmt.Errorf("its receipt does not verify as anchored: %s", rep.Reason)
 		}
 		if got := receiptSignalKind(rep.ReceiptKind); got != e.Kind {
@@ -187,7 +222,7 @@ func checkSignalEntry(e *signalEvent) (checkedEntry, error) {
 		if ctx.AccountID != e.Account {
 			return checkedEntry{}, fmt.Errorf("its receipt seals account %q, not %s", ctx.AccountID, e.Account)
 		}
-		return checkedEntry{hash: rep.ReceiptHash, at: rep.ReceiptClock, logEntry: rep.AnchorLogEntry, link: ctx.Signal, runID: doc.RunID}, nil
+		return checkedEntry{hash: rep.ReceiptHash, at: rep.ReceiptClock, logEntry: rep.AnchorLogEntry, link: ctx.Signal, runID: doc.RunID, unlogged: unlogged}, nil
 	case artifacts.SignalPolicyChanged:
 		var a artifacts.PolicyActivation
 		if decodeErr := strictDecode(e.Entry, &a); decodeErr != nil {
@@ -196,10 +231,11 @@ func checkSignalEntry(e *signalEvent) (checkedEntry, error) {
 		if a.Signal == nil {
 			return checkedEntry{}, errors.New("its policy change seals no place in the feed")
 		}
-		if checkErr := checkPolicyChangeAlone(&a); checkErr != nil {
+		unlogged, checkErr := unloggedOr(checkPolicyChangeAlone(&a))
+		if checkErr != nil {
 			return checkedEntry{}, fmt.Errorf("its policy change: %w", checkErr)
 		}
-		return checkedEntry{hash: a.ActivationHash, at: a.ActivatedAt, logEntry: a.Anchor.LogEntryID, link: a.Signal}, nil
+		return checkedEntry{hash: a.ActivationHash, at: a.ActivatedAt, logEntry: logEntryOf(a.Anchor), link: a.Signal, unlogged: unlogged}, nil
 	case artifacts.SignalSignOffRecorded:
 		var s artifacts.SignOff
 		if decodeErr := strictDecode(e.Entry, &s); decodeErr != nil {
@@ -208,29 +244,32 @@ func checkSignalEntry(e *signalEvent) (checkedEntry, error) {
 		if s.Signal == nil {
 			return checkedEntry{}, errors.New("its sign-off seals no place in the feed")
 		}
-		if checkErr := checkOneSignOff(&s); checkErr != nil {
+		unlogged, checkErr := unloggedOr(checkOneSignOff(&s))
+		if checkErr != nil {
 			return checkedEntry{}, fmt.Errorf("its sign-off: %w", checkErr)
 		}
-		return checkedEntry{hash: s.SignOffHash, at: s.RecordedAt, logEntry: s.Anchor.LogEntryID, link: s.Signal, runID: s.Target.RunID}, nil
+		return checkedEntry{hash: s.SignOffHash, at: s.RecordedAt, logEntry: logEntryOf(s.Anchor), link: s.Signal, runID: s.Target.RunID, unlogged: unlogged}, nil
 	case artifacts.SignalApproverRegistered, artifacts.SignalApproverRevoked, artifacts.SignalKeyCreated, artifacts.SignalKeyRevoked:
 		var k artifacts.KeyChange
 		if decodeErr := strictDecode(e.Entry, &k); decodeErr != nil {
 			return checkedEntry{}, fmt.Errorf("its entry is not a key change: %w", decodeErr)
 		}
-		if checkErr := checkKeyChange(&k); checkErr != nil {
+		unlogged, checkErr := unloggedOr(checkKeyChange(&k))
+		if checkErr != nil {
 			return checkedEntry{}, fmt.Errorf("its key change: %w", checkErr)
 		}
 		if k.Action != e.Kind {
 			return checkedEntry{}, fmt.Errorf("it is a %s event, and its key change is a %s", e.Kind, k.Action)
 		}
 		link := k.Signal
-		return checkedEntry{hash: k.KeyChangeHash, at: k.ChangedAt, logEntry: k.Anchor.LogEntryID, link: &link}, nil
+		return checkedEntry{hash: k.KeyChangeHash, at: k.ChangedAt, logEntry: logEntryOf(k.Anchor), link: &link, unlogged: unlogged}, nil
 	case artifacts.SignalRunPublished, artifacts.SignalRunUnpublished:
 		var p artifacts.RunPublication
 		if decodeErr := strictDecode(e.Entry, &p); decodeErr != nil {
 			return checkedEntry{}, fmt.Errorf("its entry is not a run publication: %w", decodeErr)
 		}
-		if checkErr := checkRunPublication(&p); checkErr != nil {
+		unlogged, checkErr := unloggedOr(checkRunPublication(&p))
+		if checkErr != nil {
 			return checkedEntry{}, fmt.Errorf("its run publication: %w", checkErr)
 		}
 		if p.Action != e.Kind {
@@ -240,7 +279,7 @@ func checkSignalEntry(e *signalEvent) (checkedEntry, error) {
 			return checkedEntry{}, fmt.Errorf("it names run %d, and its publication is run %d's", e.RunID, p.RunID)
 		}
 		link := p.Signal
-		return checkedEntry{hash: p.PublicationHash, at: p.ChangedAt, logEntry: p.Anchor.LogEntryID, link: &link, runID: p.RunID}, nil
+		return checkedEntry{hash: p.PublicationHash, at: p.ChangedAt, logEntry: logEntryOf(p.Anchor), link: &link, runID: p.RunID, unlogged: unlogged}, nil
 	}
 	return checkedEntry{}, fmt.Errorf("its kind %q is not one the feed emits", safePrefix(e.Kind))
 }
@@ -383,8 +422,33 @@ func checkSignalFeed(data []byte, after *signalPoint) SignalFeedCheck {
 		if d.RunID != got.runID {
 			return fail("it names run %d, and its entry names run %d", d.RunID, got.runID)
 		}
-		c.Entries = append(c.Entries, SignalFeedEntry{Sequence: d.Sequence, Kind: d.Kind, RunID: d.RunID, At: got.at, LogEntry: got.logEntry})
+		entry := SignalFeedEntry{Sequence: d.Sequence, Kind: d.Kind, RunID: d.RunID, At: got.at, LogEntry: got.logEntry}
+		if got.unlogged {
+			entry.CommittedBy = -1 // resolved below, once the later events are checked
+		}
+		c.Entries = append(c.Entries, entry)
 		previousSeq, previousHash = d.Sequence, d.EventHash
+	}
+	// An event with no public-log entry of its own is committed by the next
+	// event that has one: that entry's leaf seals the hash of the event
+	// before it, and every hash in between was recomputed above and links to
+	// the next, so changing the unlogged event would break the later entry.
+	// Its time is proven only by that later entry. With no later logged
+	// event in the feed, nothing commits it, and the feed fails.
+	var committer int64
+	for i := len(c.Entries) - 1; i >= 0; i-- {
+		e := &c.Entries[i]
+		if e.CommittedBy == 0 {
+			committer = e.Sequence
+			continue
+		}
+		if committer == 0 {
+			c.Reason = fmt.Sprintf("event %d (sequence %d): it carries no public-log entry of its own, and no later event in the feed has one that commits it", i+1, e.Sequence)
+			c.Entries = nil
+			return c
+		}
+		e.CommittedBy = committer
+		c.CommittedLater++
 	}
 	c.First, c.Last, c.LastEventHash = events[0].Data.Sequence, previousSeq, previousHash
 	c.OK = true
@@ -392,7 +456,7 @@ func checkSignalFeed(data []byte, after *signalPoint) SignalFeedCheck {
 }
 
 // runSignalsMode is --signals run alone.
-func runSignalsMode(path, after string, asJSON bool) int {
+func runSignalsMode(path, after string, asJSON, allowPartial bool) int {
 	point, pointErr := parseSignalPoint(after)
 	if pointErr != nil {
 		fmt.Fprintln(os.Stderr, "verdifax-verify:", pointErr)
@@ -413,6 +477,9 @@ func runSignalsMode(path, after string, asJSON bool) int {
 	if !c.OK {
 		return 1
 	}
+	if c.CommittedLater > 0 && !allowPartial {
+		return 3
+	}
 	return 0
 }
 
@@ -423,7 +490,13 @@ func printSignalFeed(c *SignalFeedCheck) {
 		fmt.Printf("  %-18s✗ FAILED · %s\n", "Signal feed:", c.Reason)
 		return
 	}
-	fmt.Printf("  %-18s✓ events %d to %d of %s, each entry on the public log, linked without a gap\n", "Signal feed:", c.First, c.Last, c.Account)
+	if c.CommittedLater == 0 {
+		fmt.Printf("  %-18s✓ events %d to %d of %s, each entry on the public log, linked without a gap\n", "Signal feed:", c.First, c.Last, c.Account)
+	} else {
+		fmt.Printf("  %-18s◐ events %d to %d of %s, linked without a gap; %d carry no public-log entry of their own\n", "Signal feed:", c.First, c.Last, c.Account, c.CommittedLater)
+		fmt.Println("                    Each is committed by a later event's entry, so it cannot have been changed since,")
+		fmt.Println("                    but its time is proven only by that later entry, not by its own clock")
+	}
 	switch c.ContinuityFrom {
 	case "start":
 		fmt.Println("                    Checked from the account's first event")
@@ -437,7 +510,11 @@ func printSignalFeed(c *SignalFeedCheck) {
 		if e.RunID != 0 {
 			run = " run " + strconv.FormatInt(e.RunID, 10)
 		}
-		fmt.Printf("    %d. %s  %s%s\n", e.Sequence, e.At, e.Kind, run)
+		late := ""
+		if e.CommittedBy != 0 {
+			late = fmt.Sprintf("  (no log entry of its own; committed by event %d)", e.CommittedBy)
+		}
+		fmt.Printf("    %d. %s  %s%s%s\n", e.Sequence, e.At, e.Kind, run, late)
 	}
 	fmt.Printf("  %-18s%d:%s\n", "Next point:", c.Last, c.LastEventHash)
 	fmt.Println("                    The feed shows the signals Verdifax recorded for this account; it cannot show one it never recorded")

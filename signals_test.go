@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -380,5 +382,115 @@ func TestKeyChangesAndFailureReceiptsValidate(t *testing.T) {
 		if _, err := artifacts.BuildFailureReceiptHash(&r); err == nil {
 			t.Errorf("%s built", name)
 		}
+	}
+}
+
+// publication adds a record made public by the account's owner.
+func (f *feedBuilder) publication(action string) {
+	link, at := f.next()
+	p := artifacts.RunPublication{Format: artifacts.RunPublicationFormat, Action: action, RunID: f.runID, RecordHash: strings.Repeat("7", 64),
+		JobID: "loan-1", StepID: "verdict", ChangedAt: at.Format(time.RFC3339Nano), Signal: link}
+	p.PublicationHash = p.ComputeHash()
+	p.Anchor = f.anchor(artifacts.RunPublicationKind, p.PublicationHash, p.LeafHash(), at)
+	f.add(action, link, p.PublicationHash, p.RunID, p)
+}
+
+// withoutLogEntry returns the events with event i's own public-log entry
+// removed, as when the log could not be reached when it happened. The entry's
+// hash does not cover its anchor, so the chain is unchanged.
+func withoutLogEntry(t *testing.T, events []signalCloudEvent, i int) []signalCloudEvent {
+	t.Helper()
+	out := append([]signalCloudEvent{}, events...)
+	var entry map[string]json.RawMessage
+	if err := json.Unmarshal(out[i].Data.Entry, &entry); err != nil {
+		t.Fatal(err)
+	}
+	delete(entry, "anchor")
+	delete(entry, "receipt_anchor")
+	raw, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out[i].Data.Entry = raw
+	return out
+}
+
+// R149: an event with no public-log entry of its own is committed by a later
+// event's entry and reported so, with exit 3; with nothing logged after it,
+// the feed fails. Decided by Robert, November 8, 2026.
+func TestAnEventWithoutItsOwnLogEntryIsCommittedByALaterOne(t *testing.T) {
+	f := newFeedBuilder(t)
+	events := f.full()
+	gaps := withoutLogEntry(t, withoutLogEntry(t, events, 2), 3) // the policy change and the sign-off
+	c := checkSignalFeed(feedBody(t, gaps), nil)
+	if !c.OK || c.CommittedLater != 2 || len(c.Entries) != 6 {
+		t.Fatalf("%+v", c)
+	}
+	if c.Entries[2].CommittedBy != 5 || c.Entries[3].CommittedBy != 5 || c.Entries[2].LogEntry != "" {
+		t.Fatalf("the unlogged events name %d and %d as committing them, want 5", c.Entries[2].CommittedBy, c.Entries[3].CommittedBy)
+	}
+	for _, i := range []int{0, 1, 4, 5} {
+		if c.Entries[i].CommittedBy != 0 || c.Entries[i].LogEntry == "" {
+			t.Fatalf("a logged event reads as committed later: %+v", c.Entries[i])
+		}
+	}
+	printSignalFeed(&c)
+
+	path := filepath.Join(t.TempDir(), "feed.json")
+	if err := os.WriteFile(path, feedBody(t, gaps), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code := runSignalsMode(path, "", true, false); code != 3 {
+		t.Fatalf("a feed committed in part by later entries exits %d, want 3", code)
+	}
+	if code := runSignalsMode(path, "", true, true); code != 0 {
+		t.Fatalf("with --allow-partial it exits %d, want 0", code)
+	}
+	whole := filepath.Join(t.TempDir(), "whole.json")
+	if err := os.WriteFile(whole, feedBody(t, events), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code := runSignalsMode(whole, "", true, false); code != 0 {
+		t.Fatalf("a fully logged feed exits %d", code)
+	}
+
+	// The last event unlogged: nothing after it commits it.
+	if tail := checkSignalFeed(feedBody(t, withoutLogEntry(t, events, 5)), nil); tail.OK || !strings.Contains(tail.Reason, "no later event") {
+		t.Fatalf("an unlogged last event passed: %+v", tail)
+	}
+	// A receipt sealed as requiring its entry still fails without it.
+	if receipt := checkSignalFeed(feedBody(t, withoutLogEntry(t, events, 1)), nil); receipt.OK {
+		t.Fatal("a receipt sealed with anchor_required passed without its entry")
+	}
+	// An unlogged event that was changed breaks the chain as before.
+	changed := withoutLogEntry(t, events, 2)
+	var a artifacts.PolicyActivation
+	if err := json.Unmarshal(changed[2].Data.Entry, &a); err != nil {
+		t.Fatal(err)
+	}
+	a.PolicyVersion = "2"
+	a.ActivationHash = a.ComputeHash()
+	raw, _ := json.Marshal(a)
+	changed[2].Data.Entry = raw
+	if c := checkSignalFeed(feedBody(t, changed), nil); c.OK {
+		t.Fatal("a changed unlogged event passed")
+	}
+}
+
+// A run publication with no entry of its own is committed by a later event,
+// and one carrying an entry for another record fails.
+func TestAnUnloggedPublicationIsCommittedByALaterEvent(t *testing.T) {
+	f := newFeedBuilder(t)
+	f.full()
+	f.publication(artifacts.SignalRunUnpublished)
+	f.publication(artifacts.SignalRunPublished)
+	f.keyChange(artifacts.SignalKeyCreated, artifacts.KeyScopeRun)
+	events := withoutLogEntry(t, withoutLogEntry(t, f.events, 6), 7)
+	c := checkSignalFeed(feedBody(t, events), nil)
+	if !c.OK || c.CommittedLater != 2 || c.Entries[6].CommittedBy != 9 || c.Entries[7].CommittedBy != 9 {
+		t.Fatalf("%+v", c)
+	}
+	if full := checkSignalFeed(feedBody(t, f.events), nil); !full.OK || full.CommittedLater != 0 {
+		t.Fatalf("a fully logged feed with publications: %+v", full)
 	}
 }

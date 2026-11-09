@@ -46,6 +46,13 @@ var ReceiptKinds = []string{
 	"aivp_t4_halt_receipt", "attestation_gap_receipt", "failure_receipt",
 }
 
+// ChainEntryKinds are the leaf kinds of the account records that are not
+// receipts and carry their place in the signal feed: a policy change, a
+// sign-off, a key change and a run publication. Every feed event's entry is
+// a receipt or one of these, and TestEverySignalKindsEntryCanBeLogged holds
+// the list to the feed's kinds, so a new kind cannot go unlogged (R148).
+var ChainEntryKinds = []string{PolicyActivationKind, SignOffKind, KeyChangeKind, RunPublicationKind}
+
 // ReceiptAnchor is a receipt's public-log entry. Field meanings match
 // BundleAnchor: log_entry_id is the GLOBAL entry index, log_index the
 // shard-local position the Merkle walk uses.
@@ -72,7 +79,12 @@ type ReceiptAnchor struct {
 // assumptions: a known kind, a dot-free non-empty envelope_id, and a
 // 64-character lowercase hex receipt hash.
 func ValidateReceiptLeafFields(kind, envelopeID, receiptHash string) error {
-	known := kind == PolicyActivationKind || kind == SignOffKind || kind == KeyChangeKind
+	known := false
+	for _, k := range ChainEntryKinds {
+		if k == kind {
+			known = true
+		}
+	}
 	for _, k := range ReceiptKinds {
 		if k == kind {
 			known = true

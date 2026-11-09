@@ -2,6 +2,24 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.25.0: an event committed by a later entry
+
+Each event in a signal feed names the hash of the event before it, and every
+public-log entry seals that hash with the event's own. So when an event was
+filed without a public-log entry of its own (the log could not be reached in
+the ten minutes after it), the next event that has an entry commits it: the
+event cannot have been changed since, because every hash between them is
+recomputed and linked. `--signals` now reports such an event by number, with
+the later event whose entry commits it, and says that its time is proven
+only by that later entry, not by its own clock. A feed with any such event
+exits 3 unless `--allow-partial` is given, the same code a record whose
+anchor covers only part of it gets.
+
+Nothing else changes. An event with no entry and no later logged event after
+it still fails, a receipt sealed as requiring its entry (`anchor_required`)
+still fails without it, and an event that was changed still breaks the
+chain. A fully logged feed verifies as before, exit 0.
+
 ### v0.24.0: the owner publishes records
 
 An account's owner key can now make one of the account's sealed records
