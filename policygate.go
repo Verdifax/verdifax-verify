@@ -48,12 +48,22 @@ type PolicyGateCheck struct {
 	BuiltInFile string `json:"builtin_file,omitempty"`
 	Reason      string `json:"reason,omitempty"`
 
-	inputs         *artifacts.PolicyInputs
-	identitySealed bool
+	inputs *artifacts.PolicyInputs
+	// aiOutputDeclared is whether the record or receipt seals an AI
+	// output's hash: a policy that requires an AI review refuses a step
+	// without one, and the rules are run again with it (round 56).
+	aiOutputDeclared bool
+	identitySealed   bool
 }
 
 // policyGateOf reads the policy decision an allowed run seals.
 func policyGateOf(b *artifacts.AuditBundle) PolicyGateCheck {
+	c := policyGateOfRecord(b)
+	c.aiOutputDeclared = b.AivpT4.AiOutputHash != ""
+	return c
+}
+
+func policyGateOfRecord(b *artifacts.AuditBundle) PolicyGateCheck {
 	if b.EPA.PolicyGate == nil {
 		return PolicyGateCheck{Reason: "no policy gate sealed (record predates it, or the run had no policy gate)"}
 	}
@@ -170,7 +180,9 @@ func rerunRules(c PolicyGateCheck, doc []byte) error {
 	if convertErr != nil {
 		return fmt.Errorf("the sealed inputs could not be read: %w", convertErr)
 	}
-	result, decideErr := psleval.Decide(rules.Rules, rules.DefaultEffect, inputs.Context())
+	ctx := inputs.Context()
+	ctx.AIOutputDeclared = c.aiOutputDeclared
+	result, decideErr := psleval.DecideDocument(rules, ctx)
 	if errors.Is(decideErr, psleval.ErrUnreadable) {
 		return fmt.Errorf("the rules cannot be decided on the sealed inputs: %w", decideErr)
 	}

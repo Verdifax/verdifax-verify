@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,37 +37,70 @@ type PolicyHistoryCheck struct {
 	OK            bool                 `json:"ok"`
 	Entries       []PolicyHistoryEntry `json:"entries,omitempty"`
 	RecordInChain bool                 `json:"record_in_chain,omitempty"`
-	Reason        string               `json:"reason,omitempty"`
+	// Gaps lists the restore gaps the history holds, each sealed and on the
+	// public log (round 56, E4).
+	Gaps   []string `json:"restore_gaps,omitempty"`
+	Reason string   `json:"reason,omitempty"`
 }
 
-var reflectActivationList = reflect.TypeOf([]artifacts.PolicyActivation{})
+var reflectActivation = reflect.TypeOf(artifacts.PolicyActivation{})
 
 // checkPolicyHistory reads a JSON list of activation records, oldest first, and
 // checks every one and every link.
 func checkPolicyHistory(data []byte) PolicyHistoryCheck {
 	c := PolicyHistoryCheck{Checked: true}
-	var chain []artifacts.PolicyActivation
-	if strictErr := artifacts.CheckStrict(data, reflectActivationList); strictErr != nil {
-		c.Reason = fmt.Sprintf("the policy history is not plain JSON: %v", strictErr)
+	items, readErr := readChainItems(data, reflectActivation)
+	if readErr != nil {
+		c.Reason = "the policy history: " + readErr.Error()
 		return c
 	}
-	if parseErr := json.Unmarshal(data, &chain); parseErr != nil {
-		c.Reason = fmt.Sprintf("the policy history could not be read: %v", parseErr)
-		return c
+	var chain []artifacts.PolicyActivation
+	for _, item := range items {
+		if item.gap == nil {
+			var a artifacts.PolicyActivation
+			if err := json.Unmarshal(item.raw, &a); err != nil {
+				c.Reason = fmt.Sprintf("the policy history could not be read: %v", err)
+				return c
+			}
+			chain = append(chain, a)
+		}
 	}
 	if len(chain) == 0 {
 		c.Reason = "the policy history holds no changes"
 		return c
 	}
+	// A key's chain is key-N, an account's account-N; a gap names the same
+	// chain as the changes around it.
+	gapChain, gapKey := artifacts.GapChainAccountPolicy, int64(0)
+	if rest, isKey := strings.CutPrefix(chain[0].ChainID, "key-"); isKey {
+		gapChain = artifacts.GapChainPolicy
+		gapKey, _ = strconv.ParseInt(rest, 10, 64)
+	}
 	previous := artifacts.NoPreviousActivation
 	var previousAt time.Time
-	for i := range chain {
+	next, i := int64(1), -1
+	for _, item := range items {
+		if item.gap != nil {
+			after, gapErr := checkChainGap(item.gap, gapChain, gapKey, next)
+			if gapErr == nil && gapChain == artifacts.GapChainAccountPolicy && item.gap.Signal.Account != chain[0].ChainID {
+				gapErr = fmt.Errorf("its restore gap belongs to %s, not to %s", item.gap.Signal.Account, chain[0].ChainID)
+			}
+			if gapErr != nil {
+				c.Reason = fmt.Sprintf("after change %d: %v", i+1, gapErr)
+				return c
+			}
+			next = after
+			c.Gaps = append(c.Gaps, gapLine(item.gap))
+			continue
+		}
+		i++
 		a := &chain[i]
-		at, entryErr := checkActivation(a, int64(i+1), previous, previousAt)
+		at, entryErr := checkActivation(a, next, previous, previousAt)
 		if entryErr != nil {
 			c.Reason = fmt.Sprintf("change %d: %v", i+1, entryErr)
 			return c
 		}
+		next++
 		entry := PolicyHistoryEntry{Sequence: a.Sequence, ChainID: a.ChainID, PolicyID: a.PolicyID, PolicyVersion: a.PolicyVersion, PolicyHash: a.PolicyHash,
 			ActivatedAt: a.ActivatedAt, ActivationHash: a.ActivationHash, LogEntry: a.Anchor.LogEntryID}
 		if a.Signature != nil {
@@ -217,6 +251,9 @@ func printHistoryLines(c PolicyHistoryCheck, label string) {
 		return
 	}
 	fmt.Printf("  %-18s%d change(s), each linked, on the public log\n", label, len(c.Entries))
+	for _, g := range c.Gaps {
+		fmt.Printf("  %-18s%s\n", "Restore gap:", g)
+	}
 	for _, e := range c.Entries {
 		signed := "not signed"
 		if e.SignedBy != "" {

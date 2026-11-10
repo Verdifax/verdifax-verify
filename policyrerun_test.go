@@ -154,3 +154,40 @@ func TestTheInputTypesHoldTheSameFields(t *testing.T) {
 		t.Fatalf("%s\n%s", back, want)
 	}
 }
+
+// Round 56: a policy that requires an AI review refuses an allowed step that
+// declared no AI output. The verifier runs the rules again with what the
+// record or receipt seals about the AI output, so a refusal it records is
+// reached again, and an allowed record with no AI output fails.
+func TestARequiredReviewIsRunAgainFromTheSealedOutput(t *testing.T) {
+	requiring := strings.Replace(rerunPolicy, `"rules":[`, `"ai_review":{"contradiction":"halt","required":true},"rules":[`, 1)
+	r, hashErr := policyhash.FromDocument([]byte(requiring))
+	if hashErr != nil {
+		t.Fatal(hashErr)
+	}
+	plain, _ := policyhash.FromDocument([]byte(rerunPolicy))
+	if r.PolicyHash == plain.PolicyHash {
+		t.Fatal("the requirement must change the policy hash")
+	}
+	// The server's psl.PolicyHash of the same document (orchestrator, round
+	// 56), so the two hash implementations cannot drift apart.
+	if want := "9443866aa7b3d22c396c2038fdbd3f3a25567c2024136663ce7851e30f921d68"; r.PolicyHash != want {
+		t.Fatalf("the verifier hashes the requiring policy to %s, the server to %s", r.PolicyHash, want)
+	}
+	sum := sha256.Sum256([]byte(requiring))
+	check := func(outcome, reason string, declared bool) PolicyGateCheck {
+		c := policyBindingOf(&artifacts.PolicyBinding{Source: artifacts.PolicySourceCustomer, PolicyHash: r.PolicyHash,
+			DocumentHash: hex.EncodeToString(sum[:]), Outcome: outcome, FiredRuleID: "emails", Inputs: rerunInputs()})
+		c.aiOutputDeclared = declared
+		return checkPolicyDocument(c, []byte(requiring))
+	}
+	if got := check("deny", "ai_review_required", false); !got.RulesChecked || got.Reason != "" {
+		t.Fatalf("a refusal of a step with no AI output must be reached again: %+v", got)
+	}
+	if got := check("allow", "", false); got.RulesChecked && got.Reason == "" {
+		t.Fatalf("an allowed step with no AI output under a policy that requires a review must fail: %+v", got)
+	}
+	if got := check("allow", "", true); !got.RulesChecked || got.Reason != "" {
+		t.Fatalf("an allowed step with an AI output must pass: %+v", got)
+	}
+}

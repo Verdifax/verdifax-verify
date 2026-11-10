@@ -80,7 +80,9 @@ func accountGateOfBundle(b *artifacts.AuditBundle) *PolicyGateCheck {
 	if b.EPA.AccountPolicyGate == nil {
 		return nil
 	}
-	c := checkAccountGate(gateOf(b.EPA.AccountPolicyGate), b.Nrep.AccountID)
+	g := gateOf(b.EPA.AccountPolicyGate)
+	g.aiOutputDeclared = b.AivpT4.AiOutputHash != ""
+	c := checkAccountGate(g, b.Nrep.AccountID)
 	return &c
 }
 
@@ -89,7 +91,9 @@ func accountGateOfReceipt(ctx *artifacts.ReceiptContext) *PolicyGateCheck {
 	if ctx == nil || ctx.AccountPolicy == nil {
 		return nil
 	}
-	c := checkAccountGate(policyBindingOf(ctx.AccountPolicy), ctx.AccountID)
+	g := policyBindingOf(ctx.AccountPolicy)
+	g.aiOutputDeclared = ctx.Request.AiOutputHash != ""
+	c := checkAccountGate(g, ctx.AccountID)
 	return &c
 }
 

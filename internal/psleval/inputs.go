@@ -14,6 +14,11 @@ type EvaluationContext struct {
 	ClockEpoch        string
 	EnvelopeID        string
 	EnvelopeHash      string
+	// AIOutputDeclared is whether the request declared an AI output for the
+	// review. It is not one of the sealed inputs: every record and receipt
+	// already seals the output's hash, empty when none was declared, and a
+	// reader sets this from it.
+	AIOutputDeclared bool
 
 	// RateCounts maps a rule_id with a rate_limit condition to the runs that
 	// rule has admitted for this key inside its window.

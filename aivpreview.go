@@ -125,7 +125,11 @@ func sameReviewFinding(got *aivpcheck.Finding, sealed *artifacts.AivpFinding) bo
 // account policy document makes for the rule the record says fired. The
 // document itself is checked against the sealed hashes by --account-policy.
 func applyAIReviewMode(c *AIReviewCheck, doc []byte, gate *PolicyGateCheck) *AIReviewCheck {
-	if c == nil || doc == nil || gate == nil || !gate.Present || gate.Outcome != string(psleval.EffectAllow) {
+	// The policy's contradiction choice governs only a step that sealed an
+	// AI review. A step that declared no AI output records no review, a
+	// sealed state of its own, and keeps the reason the trace check gave
+	// (round 56, F1: this once replaced it with a truncated mode message).
+	if c == nil || !c.Present || doc == nil || gate == nil || !gate.Present || gate.Outcome != string(psleval.EffectAllow) {
 		return c
 	}
 	c.ModeChecked = true
@@ -142,7 +146,11 @@ func applyAIReviewMode(c *AIReviewCheck, doc []byte, gate *PolicyGateCheck) *AIR
 	}
 	want := psleval.ContradictionModeFor(fired, policy.AIReview)
 	if string(want) != c.Mode {
-		c.Reason = fmt.Sprintf("the account policy's rule %q makes a contradiction %s, but the record seals %s", gate.FiredRuleID, want, c.Mode)
+		sealed := c.Mode
+		if sealed == "" {
+			sealed = "no contradiction choice"
+		}
+		c.Reason = fmt.Sprintf("the account policy's rule %q makes a contradiction %s, but the record seals %s", gate.FiredRuleID, want, sealed)
 		return c
 	}
 	c.ModeMatch = true

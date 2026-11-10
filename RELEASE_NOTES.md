@@ -2,6 +2,29 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.28.0: successful runs in the feed, restore gaps, and a required AI review
+
+- `--signals` reads two new kinds of event: `run.sealed`, a successful run's
+  record naming the run and the exact record it sealed, and `chain.gap`, a
+  restore gap.
+- A restore gap is a sealed record, anchored as its own entry, that names the
+  places a chain skips after a restore from backup. `--signals`,
+  `--signoff-history`, `--policy-history` and `--account-policy-history`
+  accept a skip only through one that names that chain and exactly the
+  places skipped, and the report lists each gap. When the point given to
+  `--signals-after` lies inside a gap, the check fails and names it.
+- A policy's `ai_review` may carry `"required": true`; `policyhash` binds it,
+  and `--policy` and `--account-policy` run the requirement again from the
+  sealed answer hash.
+- `--aivp-trace` given for a step that sealed no AI review, with
+  `--account-policy`, now fails with the trace check's own reason (the step
+  records no review to check the trace against) instead of a truncated line
+  about the policy's contradiction choice. A step that sealed a review is
+  checked as before.
+
+Every other check passes and fails as in v0.27.0. Records sealed before this
+release hash and verify exactly as before.
+
 ### v0.27.0: what the AI review found, and the trace that proves it
 
 A record whose AI review ran now carries a review block: the review setup,

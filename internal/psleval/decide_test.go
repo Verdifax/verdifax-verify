@@ -88,7 +88,10 @@ func TestInputsCarryEveryField(t *testing.T) {
 	v := reflect.ValueOf(ctx)
 	for i := 0; i < v.NumField(); i++ {
 		name := v.Type().Field(i).Name
-		if name == "EnvelopeID" || name == "EnvelopeHash" {
+		// The envelope binds the evaluation hash only. AIOutputDeclared is
+		// sealed already, as the record's and receipt's ai_output_hash; a
+		// reader sets it from that, so the inputs carry no second copy.
+		if name == "EnvelopeID" || name == "EnvelopeHash" || name == "AIOutputDeclared" {
 			continue
 		}
 		if v.Field(i).IsZero() {
@@ -97,5 +100,39 @@ func TestInputsCarryEveryField(t *testing.T) {
 	}
 	if got := InputsOf(&ctx).Context(); !reflect.DeepEqual(*got, ctx) {
 		t.Fatalf("got %+v, want %+v", *got, ctx)
+	}
+}
+
+// Round 56: a policy that requires an AI review refuses an allowed step that
+// declared no AI output, through the policy or through the rule, and a rule
+// that sets only its contradiction choice never lifts the policy's
+// requirement. Every other decision is Decide's.
+func TestDecideDocumentAppliesTheReviewRequirement(t *testing.T) {
+	allowAll := Rule{RuleID: "steps", Effect: EffectAllow, Subject: Subject{Type: SubjectTypeAny, IDMatch: Matcher{Operator: "any"}},
+		Verb: Verb{Match: Matcher{Operator: "any"}}, Object: Object{Type: ObjectTypeAny, IDMatch: Matcher{Operator: "any"}}}
+	ctx := &EvaluationContext{SubjectID: "a", SubjectType: SubjectTypeAgent, Verb: "v", ObjectType: ObjectTypeData, ObjectID: "o",
+		Classification: ClassificationInternal}
+	contradictionOnly := allowAll
+	contradictionOnly.AIReview = &AIReview{Contradiction: ContradictionRecord}
+	requiringRule := allowAll
+	requiringRule.AIReview = &AIReview{Contradiction: ContradictionHalt, Required: true}
+	for name, c := range map[string]struct {
+		doc      Document
+		declared bool
+		want     Effect
+		reason   string
+	}{
+		"policy requires, none declared":       {Document{DefaultEffect: EffectDeny, Rules: []Rule{allowAll}, AIReview: &AIReview{Contradiction: ContradictionHalt, Required: true}}, false, EffectDeny, ReasonAIReviewRequired},
+		"policy requires, declared":            {Document{DefaultEffect: EffectDeny, Rules: []Rule{allowAll}, AIReview: &AIReview{Contradiction: ContradictionHalt, Required: true}}, true, EffectAllow, ReasonRuleAllowed},
+		"rule requires, none declared":         {Document{DefaultEffect: EffectDeny, Rules: []Rule{requiringRule}}, false, EffectDeny, ReasonAIReviewRequired},
+		"rule sets only its contradiction":     {Document{DefaultEffect: EffectDeny, Rules: []Rule{contradictionOnly}, AIReview: &AIReview{Contradiction: ContradictionHalt, Required: true}}, false, EffectDeny, ReasonAIReviewRequired},
+		"nothing required, none declared":      {Document{DefaultEffect: EffectDeny, Rules: []Rule{allowAll}}, false, EffectAllow, ReasonRuleAllowed},
+		"default allow, policy requires, none": {Document{DefaultEffect: EffectAllow, AIReview: &AIReview{Contradiction: ContradictionHalt, Required: true}}, false, EffectDeny, ReasonAIReviewRequired},
+	} {
+		ctx.AIOutputDeclared = c.declared
+		got, err := DecideDocument(c.doc, ctx)
+		if err != nil || got.Outcome != c.want || got.ReasonCode != c.reason {
+			t.Errorf("%s: got %+v %v, want %s %s", name, got, err, c.want, c.reason)
+		}
 	}
 }

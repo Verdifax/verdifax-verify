@@ -137,3 +137,19 @@ func TestAJobStepsTraceIsRequiredAndChecked(t *testing.T) {
 		t.Fatal("without --aivp-traces nothing is required")
 	}
 }
+
+// Round 56, F1: on a step that sealed no AI review, --aivp-trace with the
+// account policy reports that the record has no review to compare the trace
+// with. The policy's contradiction check once ran on the empty review and
+// replaced that reason with a truncated one ("... but the record seals ").
+func TestATraceForAStepWithNoReviewKeepsItsReason(t *testing.T) {
+	c := applyAIReviewTrace(nil, "traces/verdict.txt")
+	gate := &PolicyGateCheck{Present: true, Outcome: "allow", FiredRuleID: "review-steps"}
+	c = applyAIReviewMode(c, []byte(`{"not":"read"}`), gate)
+	if c.ModeChecked || c.Reason != "--aivp-trace given, but this record seals no AI review to compare it with" {
+		t.Fatalf("the trace check's reason must stand: %+v", c)
+	}
+	if !aiReviewFailed(c) {
+		t.Fatal("a trace given for a step with no review must still fail the check, as the documented exit code says")
+	}
+}

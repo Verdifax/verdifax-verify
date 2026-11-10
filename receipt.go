@@ -362,7 +362,9 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		if jobErr := validateContextJob(d.ReceiptContext); jobErr != nil {
 			return failEntry("%v", jobErr)
 		}
-		rep.PolicyGate = checkBuiltIn(policyBindingOf(d.ReceiptContext.Policy))
+		keyGate := policyBindingOf(d.ReceiptContext.Policy)
+		keyGate.aiOutputDeclared = d.ReceiptContext.Request.AiOutputHash != ""
+		rep.PolicyGate = checkBuiltIn(keyGate)
 		if policyFailed(rep.PolicyGate) {
 			return failEntry("the receipt's policy decision fails: %s", rep.PolicyGate.Reason)
 		}

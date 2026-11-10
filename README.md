@@ -791,6 +791,15 @@ With `--account-policy`, the sealed choice must be the one the account
 policy makes for the rule that fired: the rule's `ai_review`, else the
 policy's own, else halt.
 
+Since v0.28.0 a policy's `ai_review` may carry `"required": true`, on the
+policy or on an allow rule, and `policyhash` binds it. The server then
+refuses, with reason `ai_review_required`, any step under the requirement
+that declares no AI output. With `--account-policy` or `--policy`, the
+verifier runs the requirement again: a step counts as declaring an answer
+when the record seals an answer hash, so an allowed step under the
+requirement with no sealed answer fails, and a refusal for it must be the one
+the rules give.
+
 A record sealed before v0.27.0 carries no review block and verifies as
 before; an earlier release refuses a record or receipt that carries one.
 
@@ -838,8 +847,9 @@ fixes both what happened and its place.
 
 `--signals FILE` checks a saved response: each entry must verify on the
 public log as its own kind (a receipt, a policy change, a sign-off, a key
-change or a run publication), seal the event's place, belong to one account, and link to the
-event before it without a gap. A feed that starts at event 1 is checked from
+change, a run publication, a successful run or a restore gap), seal the
+event's place, belong to one account, and link to the event before it
+without a gap, except through a restore gap (below). A feed that starts at event 1 is checked from
 the start. For a later page, `--signals-after N:hash` (the last sequence a
 system read and its event hash, which the report prints as the next point)
 checks that the page continues from it; without it, the report says
@@ -861,6 +871,22 @@ A run that fails with a server error seals a failure receipt naming the
 request, the stage that failed and an error class, anchored on the public log
 like every receipt; `GET /runs/{id}/failure-receipt` serves it and the
 verifier checks it as it checks any receipt.
+
+Since v0.28.0 a successful run is an event too (`run.sealed`): a run-sealed
+record names the run and the hash of the exact record it sealed, with its
+place in the feed, anchored as its own entry.
+
+A restore from backup could lose the last entries of an account's chain
+that were already on the public log. The server then seals one restore-gap
+record per affected chain (`chain.gap` in the feed), naming the places the
+chain skips, anchored as its own entry, and continues after it. Since
+v0.28.0, `--signals`, `--signoff-history`, `--policy-history` and
+`--account-policy-history` accept a skip only through such a record, which
+must name this chain and exactly the places skipped; the report lists each
+gap, and any other skip fails. When the point given to `--signals-after` is
+an event inside a gap, the check fails and says so: a restore lost events
+the reader already read, and the reader's copies of them, with the gap's
+entry, are the evidence of the loss.
 
 ### `--job`: checking a job's records together
 

@@ -59,6 +59,27 @@ func Decide(rules []Rule, defaultEffect Effect, ctx *EvaluationContext) (Result,
 	return Result{Outcome: defaultEffect, FiredRuleID: DefaultRuleID, ReasonCode: ReasonDefaultEffectApplied}, nil
 }
 
+// DecideDocument decides with a whole policy: Decide, then a step the policy
+// allows is refused, with ReasonAIReviewRequired and the rule that allowed
+// it, when the policy requires an AI review and the request declared no AI
+// output (round 56).
+func DecideDocument(d Document, ctx *EvaluationContext) (Result, error) {
+	result, err := Decide(d.Rules, d.DefaultEffect, ctx)
+	if err != nil || result.Outcome != EffectAllow || ctx.AIOutputDeclared {
+		return result, err
+	}
+	var fired *Rule
+	for i := range d.Rules {
+		if d.Rules[i].RuleID == result.FiredRuleID {
+			fired = &d.Rules[i]
+		}
+	}
+	if ReviewRequired(fired, d.AIReview) {
+		return Result{Outcome: EffectDeny, FiredRuleID: result.FiredRuleID, ReasonCode: ReasonAIReviewRequired}, nil
+	}
+	return result, nil
+}
+
 func checkReadable(rules []Rule, ctx *EvaluationContext) error {
 	for i := range rules {
 		rule := &rules[i]

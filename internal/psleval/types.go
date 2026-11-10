@@ -39,9 +39,24 @@ const (
 	ContradictionRecord ContradictionMode = "record"
 )
 
-// AIReview is a policy's choice about the AI review of the steps it allows.
+// AIReview is a policy's choice about the AI review of the steps it allows:
+// what a contradiction does, and whether every step it allows must carry an
+// AI review (Required), so a step that declares no AI output is refused.
 type AIReview struct {
 	Contradiction ContradictionMode `json:"contradiction"`
+	Required      bool              `json:"required,omitempty"`
+}
+
+// ReasonAIReviewRequired is the reason a step is refused when its policy
+// requires an AI review and the request declared no AI output.
+const ReasonAIReviewRequired = "ai_review_required"
+
+// ReviewRequired reports whether a step the policy allowed must carry an AI
+// review: when the policy requires it, or the fired rule does. A rule that
+// sets only its contradiction choice never lifts the policy's requirement.
+func ReviewRequired(fired *Rule, policyDefault *AIReview) bool {
+	return (fired != nil && fired.AIReview != nil && fired.AIReview.Required) ||
+		(policyDefault != nil && policyDefault.Required)
 }
 
 // KnownContradictionMode reports whether m is a mode the review applies.

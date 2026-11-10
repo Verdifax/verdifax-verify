@@ -48,10 +48,10 @@ var ReceiptKinds = []string{
 
 // ChainEntryKinds are the leaf kinds of the account records that are not
 // receipts and carry their place in the signal feed: a policy change, a
-// sign-off, a key change and a run publication. Every feed event's entry is
+// sign-off, a key change, a run publication, a restore gap and a successful run's notice. Every feed event's entry is
 // a receipt or one of these, and TestEverySignalKindsEntryCanBeLogged holds
 // the list to the feed's kinds, so a new kind cannot go unlogged (R148).
-var ChainEntryKinds = []string{PolicyActivationKind, SignOffKind, KeyChangeKind, RunPublicationKind}
+var ChainEntryKinds = []string{PolicyActivationKind, SignOffKind, KeyChangeKind, RunPublicationKind, RestoreGapKind, RunSealedKind}
 
 // ReceiptAnchor is a receipt's public-log entry. Field meanings match
 // BundleAnchor: log_entry_id is the GLOBAL entry index, log_index the

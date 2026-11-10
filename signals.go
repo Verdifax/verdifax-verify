@@ -76,6 +76,11 @@ type SignalFeedEntry struct {
 	// commits this one: this event carries no entry of its own, so its time
 	// is proven only by that later entry, not by its own clock.
 	CommittedBy int64 `json:"committed_by,omitempty"`
+	// GapChain, GapFrom and GapTo, on a chain.gap event, are the chain and
+	// the places a restore from backup made it skip (round 56, E4).
+	GapChain string `json:"gap_chain,omitempty"`
+	GapFrom  int64  `json:"gap_from,omitempty"`
+	GapTo    int64  `json:"gap_to,omitempty"`
 }
 
 // SignalFeedCheck is the --signals result.
@@ -94,8 +99,11 @@ type SignalFeedCheck struct {
 	// CommittedLater counts the events with no public-log entry of their own
 	// that a later event's entry commits. The feed is then sound but partly
 	// timed: --signals exits 3 unless --allow-partial is given.
-	CommittedLater int    `json:"committed_by_a_later_event,omitempty"`
-	Reason         string `json:"reason,omitempty"`
+	CommittedLater int `json:"committed_by_a_later_event,omitempty"`
+	// DeclaredGaps counts the chain.gap events: places a restore made one of
+	// the account's chains skip, each sealed and named by its own entry.
+	DeclaredGaps int    `json:"declared_gaps,omitempty"`
+	Reason       string `json:"reason,omitempty"`
 }
 
 var signalAfterPattern = regexp.MustCompile(`^(0|[1-9][0-9]{0,18}):([0-9a-f]{64})$`)
@@ -174,6 +182,8 @@ type checkedEntry struct {
 	// unlogged is an entry sound in every way but one: it carries no
 	// public-log entry of its own.
 	unlogged bool
+	// gap is the restore gap a chain.gap event's entry records.
+	gap *artifacts.RestoreGap
 }
 
 // unloggedOr passes a check that failed only for want of a public-log entry,
@@ -285,6 +295,33 @@ func checkSignalEntry(e *signalEvent) (checkedEntry, error) {
 		link := p.Signal
 		return checkedEntry{hash: p.PublicationHash, at: p.ChangedAt, logEntry: logEntryOf(p.Anchor), link: &link, runID: p.RunID,
 			decidedBy: p.Decider(), unlogged: unlogged}, nil
+	case artifacts.SignalRunSealed:
+		var rs artifacts.RunSealed
+		if decodeErr := strictDecode(e.Entry, &rs); decodeErr != nil {
+			return checkedEntry{}, fmt.Errorf("its entry is not a run-sealed record: %w", decodeErr)
+		}
+		unlogged, checkErr := unloggedOr(checkSealedEntry(rs.Validate(), rs.ComputeHash(), rs.RunSealedHash, rs.SealedAt, "sealed_at",
+			rs.Anchor, artifacts.RunSealedKind, rs.LeafHash()))
+		if checkErr != nil {
+			return checkedEntry{}, fmt.Errorf("its run-sealed record: %w", checkErr)
+		}
+		if e.RunID != rs.RunID {
+			return checkedEntry{}, fmt.Errorf("it names run %d, and its record is run %d's", e.RunID, rs.RunID)
+		}
+		link := rs.Signal
+		return checkedEntry{hash: rs.RunSealedHash, at: rs.SealedAt, logEntry: logEntryOf(rs.Anchor), link: &link, runID: rs.RunID, unlogged: unlogged}, nil
+	case artifacts.SignalChainGap:
+		var g artifacts.RestoreGap
+		if decodeErr := strictDecode(e.Entry, &g); decodeErr != nil {
+			return checkedEntry{}, fmt.Errorf("its entry is not a restore gap: %w", decodeErr)
+		}
+		unlogged, checkErr := unloggedOr(checkSealedEntry(g.Validate(), g.ComputeHash(), g.RestoreGapHash, g.RecordedAt, "recorded_at",
+			g.Anchor, artifacts.RestoreGapKind, g.LeafHash()))
+		if checkErr != nil {
+			return checkedEntry{}, fmt.Errorf("its restore gap: %w", checkErr)
+		}
+		link := g.Signal
+		return checkedEntry{hash: g.RestoreGapHash, at: g.RecordedAt, logEntry: logEntryOf(g.Anchor), link: &link, unlogged: unlogged, gap: &g}, nil
 	}
 	return checkedEntry{}, fmt.Errorf("its kind %q is not one the feed emits", safePrefix(e.Kind))
 }
@@ -305,6 +342,22 @@ func checkRunPublication(p *artifacts.RunPublication) error {
 		return fmt.Errorf("changed_at %q is not an RFC 3339 time", safePrefix(p.ChangedAt))
 	}
 	return checkChainEntry(p.Anchor, artifacts.RunPublicationKind, p.PublicationHash, p.LeafHash(), at, "changed_at")
+}
+
+// checkSealedEntry checks one account record that carries its place in the
+// feed: its shape, its hash, its clock and its public-log entry.
+func checkSealedEntry(shapeErr error, recomputed, sealed, clock, clockName string, anchor *artifacts.ReceiptAnchor, kind, leaf string) error {
+	if shapeErr != nil {
+		return shapeErr
+	}
+	if recomputed != sealed {
+		return fmt.Errorf("its hash recomputes to %s, not %s", truncate(recomputed, 16), truncate(sealed, 16))
+	}
+	at, clockErr := time.Parse(time.RFC3339Nano, clock)
+	if clockErr != nil {
+		return fmt.Errorf("%s %q is not an RFC 3339 time", clockName, safePrefix(clock))
+	}
+	return checkChainEntry(anchor, kind, sealed, leaf, at, clockName)
 }
 
 // checkPolicyChangeAlone checks one policy change without its chain: its
@@ -385,7 +438,10 @@ func checkSignalFeed(data []byte, after *signalPoint) SignalFeedCheck {
 	switch {
 	case after != nil:
 		previousSeq, previousHash, c.ContinuityFrom = after.sequence, after.hash, "given point"
-	case events[0].Data.Sequence == 1:
+	case events[0].Data.Sequence == 1,
+		// A restore that lost an account's whole feed: its first event is a
+		// gap following no event.
+		events[0].Data.Kind == artifacts.SignalChainGap && events[0].Data.PreviousSignalHash == artifacts.NoPreviousSignal:
 		previousSeq, previousHash, c.ContinuityFrom = 0, artifacts.NoPreviousSignal, "start"
 	default:
 		c.ContinuityFrom = "not checked"
@@ -406,17 +462,29 @@ func checkSignalFeed(data []byte, after *signalPoint) SignalFeedCheck {
 		} else if d.Account != c.Account {
 			return fail("it belongs to %s, and the feed began with %s", d.Account, c.Account)
 		}
+		got, entryErr := checkSignalEntry(d)
+		if entryErr != nil {
+			return fail("%v", entryErr)
+		}
+		// A feed skips places only where a sealed restore gap, anchored as
+		// its own entry, names exactly the places skipped (round 56, E4).
+		feedGap := got.gap != nil && got.gap.Chain == artifacts.GapChainSignals
 		if previousHash != "" {
-			if d.Sequence != previousSeq+1 {
+			switch {
+			case feedGap && i == 0 && after != nil && after.sequence >= got.gap.LostFrom && after.sequence <= got.gap.LostTo:
+				// The reader holds events the server lost in a restore.
+				return fail("your point, event %d, is inside a restore gap that skips places %d to %d: a restore from backup lost events you already read. "+
+					"Keep your copies of them; they and this gap's entry are the evidence of the loss. Check the feed from its start, or from event %d, to continue",
+					after.sequence, got.gap.LostFrom, got.gap.LostTo, got.gap.LostFrom-1)
+			case feedGap && (got.gap.LostFrom != previousSeq+1 || d.Sequence != got.gap.LostTo+1):
+				return fail("its restore gap names places %d to %d, which are not the places between event %d and it",
+					got.gap.LostFrom, got.gap.LostTo, previousSeq)
+			case !feedGap && d.Sequence != previousSeq+1:
 				return fail("it follows event %d, so an event is missing or out of order", previousSeq)
 			}
 			if d.PreviousSignalHash != previousHash {
 				return fail("it does not name the event before it, so an event was removed, reordered or rewritten")
 			}
-		}
-		got, entryErr := checkSignalEntry(d)
-		if entryErr != nil {
-			return fail("%v", entryErr)
 		}
 		link := artifacts.SignalLink{Account: d.Account, Sequence: d.Sequence, PreviousSignalHash: d.PreviousSignalHash}
 		if *got.link != link {
@@ -431,6 +499,10 @@ func checkSignalFeed(data []byte, after *signalPoint) SignalFeedCheck {
 		entry := SignalFeedEntry{Sequence: d.Sequence, Kind: d.Kind, RunID: d.RunID, DecidedBy: got.decidedBy, At: got.at, LogEntry: got.logEntry}
 		if got.unlogged {
 			entry.CommittedBy = -1 // resolved below, once the later events are checked
+		}
+		if got.gap != nil {
+			entry.GapChain, entry.GapFrom, entry.GapTo = got.gap.Chain, got.gap.LostFrom, got.gap.LostTo
+			c.DeclaredGaps++
 		}
 		c.Entries = append(c.Entries, entry)
 		previousSeq, previousHash = d.Sequence, d.EventHash
@@ -524,7 +596,14 @@ func printSignalFeed(c *SignalFeedCheck) {
 		if e.DecidedBy == artifacts.PublicationByVerdifax {
 			by = " by a Verdifax admin key"
 		}
+		if e.GapChain != "" {
+			by = fmt.Sprintf(": after a restore from backup, the %s chain skips places %d to %d, which may hold entries the restore lost",
+				e.GapChain, e.GapFrom, e.GapTo)
+		}
 		fmt.Printf("    %d. %s  %s%s%s%s\n", e.Sequence, e.At, e.Kind, run, by, late)
+	}
+	if c.DeclaredGaps > 0 {
+		fmt.Printf("  %-18s%d declared restore gap(s): each is sealed and on the public log, and names the places it skips\n", "Restore gaps:", c.DeclaredGaps)
 	}
 	fmt.Printf("  %-18s%d:%s\n", "Next point:", c.Last, c.LastEventHash)
 	fmt.Println("                    The feed shows the signals Verdifax recorded for this account; it cannot show one it never recorded")

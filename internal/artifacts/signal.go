@@ -49,7 +49,7 @@ const (
 // SignalKinds lists every event kind, in a fixed order.
 var SignalKinds = []string{SignalRunRefused, SignalRunHalted, SignalRunFailed, SignalPolicyChanged,
 	SignalSignOffRecorded, SignalApproverRegistered, SignalApproverRevoked, SignalKeyCreated, SignalKeyRevoked,
-	SignalRunPublished, SignalRunUnpublished}
+	SignalRunPublished, SignalRunUnpublished, SignalChainGap, SignalRunSealed}
 
 // IsSignalKind reports a kind the feed emits.
 func IsSignalKind(kind string) bool {

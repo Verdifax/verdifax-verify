@@ -117,6 +117,10 @@ type policy struct {
 // contradiction finding does, halt or record.
 type aiReview struct {
 	Contradiction string `json:"contradiction"`
+	// Required is the policy's requirement that every step it allows carry
+	// an AI review (round 56); hashed only when true, so every policy
+	// written before it hashes as it did.
+	Required bool `json:"required,omitempty"`
 }
 
 type policySignature struct {
@@ -259,7 +263,7 @@ func canonicalPolicyForHash(p *policy) map[string]any {
 		out["profile_tag"] = p.ProfileTag
 	}
 	if p.AIReview != nil {
-		out["ai_review"] = map[string]any{"contradiction": p.AIReview.Contradiction}
+		out["ai_review"] = aiReviewHashFields(p.AIReview)
 	}
 	return out
 }
@@ -314,7 +318,7 @@ func ruleHashPreimage(r rule) map[string]any {
 		out["reason_code"] = r.ReasonCodeOverride
 	}
 	if r.AIReview != nil {
-		out["ai_review"] = map[string]any{"contradiction": r.AIReview.Contradiction}
+		out["ai_review"] = aiReviewHashFields(r.AIReview)
 	}
 	return out
 }
@@ -488,4 +492,14 @@ func writeCanonicalNumber(w *bytes.Buffer, s string) error {
 		return nil
 	}
 	return fmt.Errorf("canonicalize: unparseable number %q", s)
+}
+
+// aiReviewHashFields is a policy's or rule's ai_review as the hash covers it,
+// the server's psl.aiReviewPreimage exactly.
+func aiReviewHashFields(a *aiReview) map[string]any {
+	out := map[string]any{"contradiction": a.Contradiction}
+	if a.Required {
+		out["required"] = true
+	}
+	return out
 }

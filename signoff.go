@@ -50,7 +50,10 @@ type SignOffCheck struct {
 	// wrong. A sign-off releases or blocks nothing on its own (R159).
 	LatestMeaning  string `json:"latest_meaning,omitempty"`
 	ApproverPinned bool   `json:"approver_pinned,omitempty"`
-	Reason         string `json:"reason,omitempty"`
+	// Gaps lists the restore gaps the history holds, each sealed and on the
+	// public log (round 56, E4).
+	Gaps   []string `json:"restore_gaps,omitempty"`
+	Reason string   `json:"reason,omitempty"`
 }
 
 // signOffSubject is the result a record's sign-offs must name.
@@ -196,16 +199,35 @@ func namesSubject(t artifacts.SignOffTarget, subject signOffSubject) error {
 // removed, reordered or rewritten sign-off fails.
 func checkSignOffHistory(data []byte) SignOffCheck {
 	c := SignOffCheck{Checked: true}
-	list, readErr := readSignOffs(data)
+	items, readErr := readChainItems(data, reflect.TypeOf(artifacts.SignOff{}))
 	if readErr != nil {
-		c.Reason = readErr.Error()
+		c.Reason = "the sign-off history: " + readErr.Error()
 		return c
 	}
+	var list []artifacts.SignOff
 	previous := artifacts.NoPreviousSignOff
-	for i := range list {
+	next := int64(1)
+	for _, item := range items {
+		if item.gap != nil {
+			after, gapErr := checkChainGap(item.gap, artifacts.GapChainSignOffs, 0, next)
+			if gapErr != nil {
+				c.Reason = fmt.Sprintf("after sign-off %d: %v", len(list), gapErr)
+				return c
+			}
+			next = after
+			c.Gaps = append(c.Gaps, gapLine(item.gap))
+			continue
+		}
+		var so artifacts.SignOff
+		if err := json.Unmarshal(item.raw, &so); err != nil {
+			c.Reason = fmt.Sprintf("sign-off %d could not be read: %v", len(list)+1, err)
+			return c
+		}
+		list = append(list, so)
+		i := len(list) - 1
 		s := &list[i]
 		switch {
-		case s.Sequence != int64(i+1):
+		case s.Sequence != next:
 			c.Reason = fmt.Sprintf("sign-off %d: sequence is %d, so a sign-off is missing or out of order", i+1, s.Sequence)
 			return c
 		case s.PreviousSignOffHash != previous:
@@ -221,6 +243,11 @@ func checkSignOffHistory(data []byte) SignOffCheck {
 		}
 		c.Entries = append(c.Entries, entryOf(s))
 		previous = s.SignOffHash
+		next++
+	}
+	if len(list) == 0 {
+		c.Reason = "the sign-off history holds no sign-offs"
+		return c
 	}
 	// A later sign-off on the same result supersedes the earlier one.
 	last := map[string]int{}
@@ -395,5 +422,8 @@ func printSignOffs(given, history *SignOffCheck) {
 			return
 		}
 		fmt.Printf("  %-18s%d sign-off(s), each linked, on the public log\n", "Sign-off history:", len(history.Entries))
+		for _, g := range history.Gaps {
+			fmt.Printf("  %-18s%s\n", "Restore gap:", g)
+		}
 	}
 }
