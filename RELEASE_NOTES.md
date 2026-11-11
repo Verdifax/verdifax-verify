@@ -2,6 +2,16 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.29.1: built with Go 1.27.4
+
+The same verification code as v0.29.0 (only the version string changes),
+built with Go 1.27.4, which fixes a Go standard-library advisory
+(GO-2026-6859: a race in net/http's MaxBytesReader could crash an HTTP/1
+server). The verifier reaches net/http only as a client of the public log;
+no check, verdict or exit code changes. Every workflow (tests, fuzzing,
+CodeQL and release) now uses Go 1.27.4, and `govulncheck` reports no
+vulnerabilities.
+
 ### v0.29.0: a required review must be sealed, and interrupted chain places
 
 - A policy rule with `"required": true` in its `ai_review` is met only by a
