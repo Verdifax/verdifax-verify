@@ -82,17 +82,21 @@ func accountGateOfBundle(b *artifacts.AuditBundle) *PolicyGateCheck {
 	}
 	g := gateOf(b.EPA.AccountPolicyGate)
 	g.aiOutputDeclared = b.AivpT4.AiOutputHash != ""
+	g.reviewCheck, g.reviewSealed = "record", b.AivpT4.Review != nil
 	c := checkAccountGate(g, b.Nrep.AccountID)
 	return &c
 }
 
 // accountGateOfReceipt reads a refused or halted run's account decision.
-func accountGateOfReceipt(ctx *artifacts.ReceiptContext) *PolicyGateCheck {
+// reviewCheck is "review-required-halt" for an AI review halt that names a
+// missing required review, else empty.
+func accountGateOfReceipt(ctx *artifacts.ReceiptContext, reviewCheck string) *PolicyGateCheck {
 	if ctx == nil || ctx.AccountPolicy == nil {
 		return nil
 	}
 	g := policyBindingOf(ctx.AccountPolicy)
 	g.aiOutputDeclared = ctx.Request.AiOutputHash != ""
+	g.reviewCheck = reviewCheck
 	c := checkAccountGate(g, ctx.AccountID)
 	return &c
 }

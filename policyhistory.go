@@ -56,7 +56,7 @@ func checkPolicyHistory(data []byte) PolicyHistoryCheck {
 	}
 	var chain []artifacts.PolicyActivation
 	for _, item := range items {
-		if item.gap == nil {
+		if !item.isSkip() {
 			var a artifacts.PolicyActivation
 			if err := json.Unmarshal(item.raw, &a); err != nil {
 				c.Reason = fmt.Sprintf("the policy history could not be read: %v", err)
@@ -80,17 +80,17 @@ func checkPolicyHistory(data []byte) PolicyHistoryCheck {
 	var previousAt time.Time
 	next, i := int64(1), -1
 	for _, item := range items {
-		if item.gap != nil {
-			after, gapErr := checkChainGap(item.gap, gapChain, gapKey, next)
-			if gapErr == nil && gapChain == artifacts.GapChainAccountPolicy && item.gap.Signal.Account != chain[0].ChainID {
-				gapErr = fmt.Errorf("its restore gap belongs to %s, not to %s", item.gap.Signal.Account, chain[0].ChainID)
+		if item.isSkip() {
+			after, line, gapErr := item.checkSkip(gapChain, gapKey, next)
+			if gapErr == nil && gapChain == artifacts.GapChainAccountPolicy && item.skipAccount() != chain[0].ChainID {
+				gapErr = fmt.Errorf("its record belongs to %s, not to %s", item.skipAccount(), chain[0].ChainID)
 			}
 			if gapErr != nil {
 				c.Reason = fmt.Sprintf("after change %d: %v", i+1, gapErr)
 				return c
 			}
 			next = after
-			c.Gaps = append(c.Gaps, gapLine(item.gap))
+			c.Gaps = append(c.Gaps, line)
 			continue
 		}
 		i++

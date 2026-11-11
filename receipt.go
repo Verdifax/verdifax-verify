@@ -364,6 +364,11 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		}
 		keyGate := policyBindingOf(d.ReceiptContext.Policy)
 		keyGate.aiOutputDeclared = d.ReceiptContext.Request.AiOutputHash != ""
+		reviewCheck := ""
+		if d.AivpT4HaltReceipt != nil && d.AivpT4HaltReceipt.HaltReasonCode == haltReasonReviewRequired {
+			reviewCheck = "review-required-halt"
+		}
+		keyGate.reviewCheck = reviewCheck
 		rep.PolicyGate = checkBuiltIn(keyGate)
 		if policyFailed(rep.PolicyGate) {
 			return failEntry("the receipt's policy decision fails: %s", rep.PolicyGate.Reason)
@@ -381,7 +386,7 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 			}
 			rep.SignalSequence = sig.Sequence
 		}
-		rep.AccountPolicyGate = accountGateOfReceipt(d.ReceiptContext)
+		rep.AccountPolicyGate = accountGateOfReceipt(d.ReceiptContext, reviewCheck)
 		if accountFailed(rep.AccountPolicyGate, nil) {
 			return failEntry("the receipt's account policy decision fails: %s", rep.AccountPolicyGate.Reason)
 		}

@@ -54,12 +54,25 @@ type PolicyGateCheck struct {
 	// without one, and the rules are run again with it (round 56).
 	aiOutputDeclared bool
 	identitySealed   bool
+	// reviewCheck is how the rules' review requirement is held to this
+	// decision when the rules are run again (round 57, N1): a completed
+	// record ("record") must seal a review when the rule that allowed it
+	// requires one, and a halt for a missing required review
+	// ("review-required-halt") stands only when the rule requires one.
+	// Empty for refusals, where no step ran.
+	reviewCheck  string
+	reviewSealed bool
 }
+
+// haltReasonReviewRequired is the AI review halt of a step whose policy
+// requires a review when none was sealed (orchestrator, round 57, N1).
+const haltReasonReviewRequired = "AIVP_T4_REVIEW_REQUIRED"
 
 // policyGateOf reads the policy decision an allowed run seals.
 func policyGateOf(b *artifacts.AuditBundle) PolicyGateCheck {
 	c := policyGateOfRecord(b)
 	c.aiOutputDeclared = b.AivpT4.AiOutputHash != ""
+	c.reviewCheck, c.reviewSealed = "record", b.AivpT4.Review != nil
 	return c
 }
 
@@ -192,6 +205,23 @@ func rerunRules(c PolicyGateCheck, doc []byte) error {
 	if result.FiredRuleID != c.FiredRuleID || string(result.Outcome) != c.Outcome {
 		return fmt.Errorf("running the rules on the sealed inputs gives %s by rule %q, the record says %s by rule %q",
 			result.Outcome, result.FiredRuleID, c.Outcome, c.FiredRuleID)
+	}
+	if result.Outcome != psleval.EffectAllow {
+		return nil
+	}
+	var fired *psleval.Rule
+	for i := range rules.Rules {
+		if rules.Rules[i].RuleID == result.FiredRuleID {
+			fired = &rules.Rules[i]
+			break
+		}
+	}
+	required := psleval.ReviewRequired(fired, rules.AIReview)
+	switch {
+	case c.reviewCheck == "record" && required && !c.reviewSealed:
+		return fmt.Errorf("the policy requires an AI review on the steps rule %q allows, and the record seals none", result.FiredRuleID)
+	case c.reviewCheck == "review-required-halt" && !required:
+		return fmt.Errorf("the receipt says the step stopped because its policy requires an AI review, and rule %q requires none", result.FiredRuleID)
 	}
 	return nil
 }

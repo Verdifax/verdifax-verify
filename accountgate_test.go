@@ -291,7 +291,7 @@ func TestAReceiptsAccountDecisionIsRead(t *testing.T) {
 		ActivationHash: strings.Repeat("a", 64), Outcome: "deny", FiredRuleID: "no-restricted", Inputs: rerunInputs()}
 	binding.Inputs.Classification = "RESTRICTED"
 	ctx := &artifacts.ReceiptContext{AccountID: "account-7", AccountPolicy: binding}
-	got := accountGateOfReceipt(ctx)
+	got := accountGateOfReceipt(ctx, "")
 	if got == nil || policyFailed(*got) || got.Outcome != "deny" {
 		t.Fatalf("%+v", got)
 	}
@@ -300,10 +300,10 @@ func TestAReceiptsAccountDecisionIsRead(t *testing.T) {
 		t.Fatalf("the account's rules must reach the sealed refusal: %+v", checked)
 	}
 	ctx.AccountID = ""
-	if got := accountGateOfReceipt(ctx); !policyFailed(*got) {
+	if got := accountGateOfReceipt(ctx, ""); !policyFailed(*got) {
 		t.Fatal("a receipt's account decision with no account passed")
 	}
-	if accountGateOfReceipt(&artifacts.ReceiptContext{}) != nil {
+	if accountGateOfReceipt(&artifacts.ReceiptContext{}, "") != nil {
 		t.Fatal("a receipt with no account decision reported one")
 	}
 }

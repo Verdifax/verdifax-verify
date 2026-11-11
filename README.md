@@ -798,7 +798,12 @@ that declares no AI output. With `--account-policy` or `--policy`, the
 verifier runs the requirement again: a step counts as declaring an answer
 when the record seals an answer hash, so an allowed step under the
 requirement with no sealed answer fails, and a refusal for it must be the one
-the rules give.
+the rules give. Since v0.29.0 the requirement is met only by a sealed review:
+a record whose rule required a review and that seals none fails, even when it
+seals an answer (an answer of only white space is sealed exactly and not
+reviewed), and the server stops such a step with an AI review halt receipt
+naming `AIVP_T4_REVIEW_REQUIRED`, which passes only when the rule that
+allowed the step requires a review.
 
 A record sealed before v0.27.0 carries no review block and verifies as
 before; an earlier release refuses a record or receipt that carries one.
@@ -887,6 +892,18 @@ gap, and any other skip fails. When the point given to `--signals-after` is
 an event inside a gap, the check fails and says so: a restore lost events
 the reader already read, and the reader's copies of them, with the gap's
 entry, are the evidence of the loss.
+
+A sign-off or a policy change takes its place in its chain before its
+public-log entry is made, and is recorded only once the log confirms it.
+When the log never confirms it and the planned entry cannot be found on the
+log afterwards, the server closes the place with one interrupted record
+(`chain.interrupted` in the feed): it names the chain, the place, the kind
+and hash of the record that was being logged, and the leaf its entry would
+carry, so an entry the log may still hold is named by a sealed record. It is
+anchored as its own entry. Since v0.29.0, `--signals`, `--signoff-history`,
+`--policy-history` and `--account-policy-history` accept a skipped place
+through such a record, which must name this chain and that place, and the
+report lists each one.
 
 ### `--job`: checking a job's records together
 

@@ -62,6 +62,9 @@ jobs:
   create-release:
     name: Create release for ${{ github.ref_name }}
     runs-on: ubuntu-latest
+    # A hung job fails here, not at GitHub's default limit: about three times
+    # its longest recent run (0.3 min) (round 57).
+    timeout-minutes: 15
     needs: test
     permissions:
       contents: write
@@ -79,6 +82,9 @@ jobs:
   build:
     name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
     runs-on: ubuntu-latest
+    # A hung job fails here, not at GitHub's default limit: about three times
+    # its longest recent run (0.8 min) (round 57).
+    timeout-minutes: 15
     needs: create-release
     permissions:
       contents: write
@@ -161,6 +167,9 @@ jobs:
   hashes:
     name: Compute provenance subjects
     runs-on: ubuntu-latest
+    # A hung job fails here, not at GitHub's default limit: about three times
+    # its longest recent run (0.1 min) (round 57).
+    timeout-minutes: 15
     needs: build
     outputs:
       hashes: ${{ steps.subjects.outputs.hashes }}

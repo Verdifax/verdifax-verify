@@ -2,6 +2,28 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.29.0: a required review must be sealed, and interrupted chain places
+
+- A policy rule with `"required": true` in its `ai_review` is met only by a
+  sealed review. `--policy` and `--account-policy` fail a record whose rule
+  required a review and that seals none, even when it seals an answer hash,
+  and accept an AI review halt receipt naming `AIVP_T4_REVIEW_REQUIRED` only
+  when the rule that allowed the step requires a review. Until now a step
+  whose answer was only white space sealed its answer, ran no review and
+  verified.
+- `--signals` reads a new kind of event, `chain.interrupted`: a sign-off or
+  policy change whose public-log entry was never confirmed has its place
+  closed by a sealed, anchored record that names the chain, the place, the
+  record that was being logged and the leaf its entry would carry.
+  `--signals`, `--signoff-history`, `--policy-history` and
+  `--account-policy-history` accept a skipped place through one that names
+  that chain and place, and the report lists each. The sign-off history also
+  fails a skip whose record names another account.
+
+Every other check passes and fails as in v0.28.0. Records sealed before this
+release hash exactly as before; the one record v0.28.0 accepted that this
+release fails is one whose rule required a review and that sealed none.
+
 ### v0.28.0: successful runs in the feed, restore gaps, and a required AI review
 
 - `--signals` reads two new kinds of event: `run.sealed`, a successful run's

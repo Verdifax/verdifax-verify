@@ -191,3 +191,39 @@ func TestARequiredReviewIsRunAgainFromTheSealedOutput(t *testing.T) {
 		t.Fatalf("an allowed step with an AI output must pass: %+v", got)
 	}
 }
+
+// Round 57, N1: a required review is satisfied only by a sealed review. A
+// record the rule allowed must carry a review when the rule requires one, even
+// when an answer was sent (a blank answer seals its hash and no review); and a
+// halt that names a missing required review stands only when the rule
+// requires one, so neither can be forged in the other direction.
+func TestARequiredReviewMustBeSealedNotOnlyAnAnswer(t *testing.T) {
+	requiring := strings.Replace(rerunPolicy, `"rules":[`, `"ai_review":{"contradiction":"halt","required":true},"rules":[`, 1)
+	r, _ := policyhash.FromDocument([]byte(requiring))
+	plainHash, _ := policyhash.FromDocument([]byte(rerunPolicy))
+	check := func(doc string, hash, reviewCheck string, reviewSealed bool) PolicyGateCheck {
+		sum := sha256.Sum256([]byte(doc))
+		c := policyBindingOf(&artifacts.PolicyBinding{Source: artifacts.PolicySourceCustomer, PolicyHash: hash,
+			DocumentHash: hex.EncodeToString(sum[:]), Outcome: "allow", FiredRuleID: "emails", Inputs: rerunInputs()})
+		c.aiOutputDeclared = true
+		c.reviewCheck, c.reviewSealed = reviewCheck, reviewSealed
+		return checkPolicyDocument(c, []byte(doc))
+	}
+	if got := check(requiring, r.PolicyHash, "record", false); got.Reason == "" ||
+		!strings.Contains(got.Reason, "requires an AI review") {
+		t.Fatalf("a record with an answer but no sealed review under a required review must fail: %+v", got)
+	}
+	if got := check(requiring, r.PolicyHash, "record", true); got.Reason != "" {
+		t.Fatalf("a record with a sealed review must pass: %+v", got)
+	}
+	if got := check(rerunPolicy, plainHash.PolicyHash, "record", false); got.Reason != "" {
+		t.Fatalf("a record with no review under a rule that requires none must pass: %+v", got)
+	}
+	if got := check(requiring, r.PolicyHash, "review-required-halt", false); got.Reason != "" {
+		t.Fatalf("a review-required halt under a rule that requires a review must pass: %+v", got)
+	}
+	if got := check(rerunPolicy, plainHash.PolicyHash, "review-required-halt", false); got.Reason == "" ||
+		!strings.Contains(got.Reason, "requires none") {
+		t.Fatalf("a review-required halt under a rule that requires none must fail: %+v", got)
+	}
+}

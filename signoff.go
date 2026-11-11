@@ -207,15 +207,18 @@ func checkSignOffHistory(data []byte) SignOffCheck {
 	var list []artifacts.SignOff
 	previous := artifacts.NoPreviousSignOff
 	next := int64(1)
+	// The account each skip's event belongs to: one account throughout.
+	var skipAccounts []string
 	for _, item := range items {
-		if item.gap != nil {
-			after, gapErr := checkChainGap(item.gap, artifacts.GapChainSignOffs, 0, next)
+		if item.isSkip() {
+			after, line, gapErr := item.checkSkip(artifacts.GapChainSignOffs, 0, next)
 			if gapErr != nil {
 				c.Reason = fmt.Sprintf("after sign-off %d: %v", len(list), gapErr)
 				return c
 			}
 			next = after
-			c.Gaps = append(c.Gaps, gapLine(item.gap))
+			c.Gaps = append(c.Gaps, line)
+			skipAccounts = append(skipAccounts, item.skipAccount())
 			continue
 		}
 		var so artifacts.SignOff
@@ -248,6 +251,12 @@ func checkSignOffHistory(data []byte) SignOffCheck {
 	if len(list) == 0 {
 		c.Reason = "the sign-off history holds no sign-offs"
 		return c
+	}
+	for _, account := range skipAccounts {
+		if account != list[0].ChainID {
+			c.Reason = fmt.Sprintf("a record that skips places belongs to %s, not to %s", account, list[0].ChainID)
+			return c
+		}
 	}
 	// A later sign-off on the same result supersedes the earlier one.
 	last := map[string]int{}

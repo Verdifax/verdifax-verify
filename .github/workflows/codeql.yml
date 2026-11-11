@@ -22,6 +22,9 @@ permissions:
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    # A hung job fails here, not at GitHub's default limit: about three times
+    # its longest recent run (1.4 min) (round 57).
+    timeout-minutes: 15
     permissions:
       contents: read
       security-events: write

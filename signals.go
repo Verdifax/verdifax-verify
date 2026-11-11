@@ -322,6 +322,21 @@ func checkSignalEntry(e *signalEvent) (checkedEntry, error) {
 		}
 		link := g.Signal
 		return checkedEntry{hash: g.RestoreGapHash, at: g.RecordedAt, logEntry: logEntryOf(g.Anchor), link: &link, unlogged: unlogged, gap: &g}, nil
+	case artifacts.SignalChainInterrupted:
+		// Round 57, N2: a sign-off or policy change the log never confirmed;
+		// its record closes one place of its chain and names the entry it
+		// would have made. It takes its own place in the feed.
+		var c artifacts.ChainInterrupted
+		if decodeErr := strictDecode(e.Entry, &c); decodeErr != nil {
+			return checkedEntry{}, fmt.Errorf("its entry is not an interrupted record: %w", decodeErr)
+		}
+		unlogged, checkErr := unloggedOr(checkSealedEntry(c.Validate(), c.ComputeHash(), c.InterruptedHash, c.RecordedAt, "recorded_at",
+			c.Anchor, artifacts.ChainInterruptedKind, c.LeafHash()))
+		if checkErr != nil {
+			return checkedEntry{}, fmt.Errorf("its interrupted record: %w", checkErr)
+		}
+		link := c.Signal
+		return checkedEntry{hash: c.InterruptedHash, at: c.RecordedAt, logEntry: logEntryOf(c.Anchor), link: &link, unlogged: unlogged}, nil
 	}
 	return checkedEntry{}, fmt.Errorf("its kind %q is not one the feed emits", safePrefix(e.Kind))
 }
