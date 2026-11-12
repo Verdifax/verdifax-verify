@@ -271,3 +271,33 @@ func TestASignOffMustBeInTheHistoryGiven(t *testing.T) {
 		t.Fatal("--approver-key alone passed")
 	}
 }
+
+// --signoff and --signoff-history together: a later decision on the record
+// that the sign-offs given leave out fails, so an earlier approval cannot be
+// shown as the decision in force; and the history must be the record's
+// account's, matched by each sign-off's own hash.
+func TestALaterSignOffLeftOutOfTheGivenFails(t *testing.T) {
+	l := newTestLog(t)
+	l.install(t)
+	b, subject := signOffRecord(t)
+	a := newApprover(t)
+	target := artifacts.SignOffTarget{Kind: artifacts.SignOffTargetRecord, RunID: subject.runID, Digest: subject.digest}
+	chain := signOffChain(t, l, subject.account, a, []artifacts.SignOffTarget{target, target}, []string{artifacts.SignOffApprove, artifacts.SignOffReject})
+	whole := writeTemp(t, "whole.json", encode(t, chain))
+	r := verify(b)
+	applySignOffFlags(r, b, writeTemp(t, "both.json", encode(t, chain)), "", whole)
+	if !r.AllPassed || r.SignOffs.Latest != artifacts.SignOffReject {
+		t.Fatalf("the whole list: %+v %+v", r.SignOffs, r.SignOffHistory)
+	}
+	r = verify(b)
+	applySignOffFlags(r, b, writeTemp(t, "first.json", encode(t, chain[:1])), "", whole)
+	if r.AllPassed || r.SignOffHistory == nil || !strings.Contains(r.SignOffHistory.Reason, "leave out") {
+		t.Fatalf("an approval with the later reject left out passed: %+v", r.SignOffHistory)
+	}
+	elsewhere := signOffChain(t, l, "account-9", a, []artifacts.SignOffTarget{target, target}, []string{artifacts.SignOffApprove, artifacts.SignOffReject})
+	r = verify(b)
+	applySignOffFlags(r, b, writeTemp(t, "both2.json", encode(t, chain)), "", writeTemp(t, "other.json", encode(t, elsewhere)))
+	if r.AllPassed || r.SignOffHistory == nil || !strings.Contains(r.SignOffHistory.Reason, "belongs to account-9") {
+		t.Fatalf("another account's history passed: %+v", r.SignOffHistory)
+	}
+}

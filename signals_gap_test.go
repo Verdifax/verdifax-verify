@@ -23,6 +23,22 @@ func (f *feedBuilder) runSealed() {
 	f.add(artifacts.SignalRunSealed, link, r.RunSealedHash, f.runID, r)
 }
 
+// runSealedRequiringSignOff adds a successful run's event whose allowing rule
+// requires a person's sign-off (round 59 batch, B7). With dropped, the entry
+// leaves signoff_required out after it was sealed, as a forger would.
+func (f *feedBuilder) runSealedRequiringSignOff(dropped bool) {
+	link, at := f.next()
+	f.runID++
+	r := artifacts.RunSealed{Format: artifacts.RunSealedFormat, RunID: f.runID, RecordHash: strings.Repeat("7", 64),
+		SealedAt: at.Format(time.RFC3339Nano), SignOffRequired: true, Signal: link}
+	r.RunSealedHash = r.ComputeHash()
+	r.Anchor = f.anchor(artifacts.RunSealedKind, r.RunSealedHash, r.LeafHash(), at)
+	if dropped {
+		r.SignOffRequired = false
+	}
+	f.add(artifacts.SignalRunSealed, link, r.RunSealedHash, f.runID, r)
+}
+
 // gap adds a restore gap on chain, skipping places from lostFrom to lostTo,
 // at the feed place seq (round 56, E4).
 func (f *feedBuilder) gap(chain string, lostFrom, lostTo, seq int64) {
@@ -45,6 +61,23 @@ func TestASuccessfulRunsEventVerifies(t *testing.T) {
 	c := checkSignalFeed(feedBody(t, f.events), nil)
 	if !c.OK || len(c.Entries) != 3 || c.Entries[1].Kind != artifacts.SignalRunSealed || c.Entries[1].RunID == 0 {
 		t.Fatalf("%+v", c)
+	}
+}
+
+// A successful run whose rule requires a sign-off says so in its sealed
+// entry; an entry with the requirement left out after sealing fails.
+func TestASuccessfulRunsEventSealsASignOffRequirement(t *testing.T) {
+	f := newFeedBuilder(t)
+	f.keyChange(artifacts.SignalKeyCreated, artifacts.KeyScopeSignals)
+	f.runSealedRequiringSignOff(false)
+	if c := checkSignalFeed(feedBody(t, f.events), nil); !c.OK || len(c.Entries) != 2 {
+		t.Fatalf("a run that requires a sign-off: %+v", c)
+	}
+	g := newFeedBuilder(t)
+	g.keyChange(artifacts.SignalKeyCreated, artifacts.KeyScopeSignals)
+	g.runSealedRequiringSignOff(true)
+	if c := checkSignalFeed(feedBody(t, g.events), nil); c.OK {
+		t.Fatal("an entry with its sign-off requirement left out passed")
 	}
 }
 

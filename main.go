@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.29.1"
+const Version = "0.30.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -109,17 +109,20 @@ type RekorAnchorCheck struct {
 
 // Report is the structured verdict emitted by --json mode.
 type Report struct {
-	Tool          string           `json:"tool"`
-	ToolVersion   string           `json:"tool_version"`
-	BundleSchema  string           `json:"bundle_schema"`
-	BundleHashOK  bool             `json:"bundle_hash_ok"`
-	Artifacts     []HashCheck      `json:"artifacts"`
-	Categories    []HashCheck      `json:"categories"`
-	BundleHash    HashCheck        `json:"bundle_hash"`
-	Seals         []SealCheck      `json:"seal_references"`
-	RekorAnchor   RekorAnchorCheck `json:"rekor_anchor"`
-	LeafBinding   LeafBindingCheck `json:"leaf_binding"`
-	NrepSignature NrepCheck        `json:"nrep_signature"`
+	Tool         string      `json:"tool"`
+	ToolVersion  string      `json:"tool_version"`
+	BundleSchema string      `json:"bundle_schema"`
+	BundleHashOK bool        `json:"bundle_hash_ok"`
+	Artifacts    []HashCheck `json:"artifacts"`
+	Categories   []HashCheck `json:"categories"`
+	BundleHash   HashCheck   `json:"bundle_hash"`
+	// BundleHashRecipe names an earlier recipe when the record was sealed
+	// with one; empty for the current recipe.
+	BundleHashRecipe string           `json:"bundle_hash_recipe,omitempty"`
+	Seals            []SealCheck      `json:"seal_references"`
+	RekorAnchor      RekorAnchorCheck `json:"rekor_anchor"`
+	LeafBinding      LeafBindingCheck `json:"leaf_binding"`
+	NrepSignature    NrepCheck        `json:"nrep_signature"`
 	// RequestSignature is the key holder's own signature over the
 	// request (v0.18.0), checked here and pinned by --signer-key.
 	RequestSignature RequestSignatureCheck `json:"request_signature"`
@@ -159,6 +162,10 @@ type Report struct {
 	// this record. SignOffHistory is the account's whole chain.
 	SignOffs       *SignOffCheck `json:"signoffs,omitempty"`
 	SignOffHistory *SignOffCheck `json:"signoff_history,omitempty"`
+	// SignOffRequirement is the check of a sign-off the policy rule that
+	// allowed the run requires (round 58, B7): present only when the rules,
+	// run again from --policy or --account-policy, show such a rule fired.
+	SignOffRequirement *SignOffRequirementCheck `json:"signoff_requirement,omitempty"`
 	// RecordValues are the decision-bearing values as checked (v0.12.1).
 	RecordValues RecordValues `json:"record_values"`
 	CrossChecks  []string     `json:"cross_check_failures,omitempty"`
@@ -911,14 +918,19 @@ func verify(b *artifacts.AuditBundle) *Report {
 		mk("regulatory_scaffolding", b.RegulatoryScaffolding.Hash, artifacts.RecomputeRegulatoryScaffoldingHash(b.RegulatoryScaffolding), false),
 		mk("causal_graph", b.CausalGraph.Hash, artifacts.RecomputeCausalGraphHash(b.CausalGraph), false),
 		mk("system_provenance", b.SystemProvenance.Hash, artifacts.RecomputeSystemProvenanceHash(b.SystemProvenance), false),
-		// Category 6 is inside bundle_hash but went unrecomputed
-		// until v0.10.0, so its stored hash vouched for content no
-		// check read.
-		mk("reproducibility_context", b.ReproducibilityContext.Hash, artifacts.RecomputeReproducibilityContextHash(b.ReproducibilityContext), false),
 	}
-
-	// Bundle
-	r.BundleHash = mk("bundle", b.BundleHash, artifacts.RecomputeBundleHash(b), false)
+	// Category 6 is inside bundle_hash but went unrecomputed until
+	// v0.10.0, so its stored hash vouched for content no check read. A
+	// record sealed before category 6 existed has no section and an
+	// earlier bundle hash recipe (v0.30.0).
+	if sealedBeforeReproducibilityContext(b) {
+		r.BundleHash = mk("bundle", b.BundleHash, artifacts.RecomputeBundleHashWithoutReproducibilityContext(b), false)
+		r.BundleHashRecipe = bundleRecipeBeforeReproducibility
+	} else {
+		r.Categories = append(r.Categories,
+			mk("reproducibility_context", b.ReproducibilityContext.Hash, artifacts.RecomputeReproducibilityContextHash(b.ReproducibilityContext), false))
+		r.BundleHash = mk("bundle", b.BundleHash, artifacts.RecomputeBundleHash(b), false)
+	}
 	r.BundleHashOK = r.BundleHash.Match
 
 	// Seal references, every artifact's seal must point to the bundle's
@@ -1328,6 +1340,32 @@ func verifyExecutionRecord(b *artifacts.AuditBundle) []HashCheck {
 	}
 }
 
+// bundleRecipeBeforeReproducibility describes the earlier recipe.
+const bundleRecipeBeforeReproducibility = "a record sealed before 2026-05-11T02:02:16Z, which has no reproducibility_context section; its bundle hash leaves that hash out"
+
+// sealedBeforeReproducibilityContext reports whether the record was sealed
+// before category 6 existed: it carries no reproducibility_context key at
+// all, its envelope timestamp (inside the envelope hash, and equal to every
+// other copy of the record clock, which the copy check enforces) is before
+// then, and, when it is on the public log, the log integrated its entry
+// before then. The log's time is signed by the log, so a later record with
+// its section removed cannot pass for an earlier one; a record on no public
+// log proves only its own consistency.
+func sealedBeforeReproducibilityContext(b *artifacts.AuditBundle) bool {
+	if !b.ReproducibilityContextAbsent {
+		return false
+	}
+	sealed, parseErr := time.Parse(time.RFC3339Nano, b.Envelope.Timestamp)
+	if parseErr != nil || !sealed.Before(artifacts.ReproducibilityContextAdded) {
+		return false
+	}
+	if b.RekorAnchor.Backend == "rekor" {
+		logged := time.Unix(b.RekorAnchor.IntegratedTime, 0).UTC()
+		return b.RekorAnchor.IntegratedTime != 0 && logged.Before(artifacts.ReproducibilityContextAdded)
+	}
+	return true
+}
+
 func mk(name, recorded, computed string, scaffold bool) HashCheck {
 	return HashCheck{
 		Name:     name,
@@ -1373,6 +1411,9 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 
 	fmt.Println("BUNDLE HASH")
 	printCheck(r.BundleHash)
+	if r.BundleHashRecipe != "" {
+		fmt.Printf("  Recipe:  %s\n", r.BundleHashRecipe)
+	}
 	fmt.Println()
 
 	fmt.Println("SIGSTORE REKOR ANCHOR")
@@ -1395,6 +1436,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	}
 	printAccount(r.AccountID, r.AccountPolicyGate, r.AccountPolicyHistory)
 	printSignOffs(r.SignOffs, r.SignOffHistory)
+	printSignOffRequirement(r.SignOffRequirement)
 	for _, f := range r.CrossChecks {
 		fmt.Printf("  Cross-check:      ✗ FAILED · %s\n", f)
 	}

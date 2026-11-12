@@ -113,6 +113,13 @@ func checkCondition(ruleID string, c Condition, ctx *EvaluationContext) error {
 	switch c.Type {
 	case ConditionMFARequired, ConditionMinSessionAge, ConditionRequiresRole, ConditionRateLimit:
 		return nil
+	case ConditionDataQuality:
+		// The data's own as_of may be anything a caller wrote; a bad one
+		// makes the condition fail. The decision's clock must be readable.
+		if _, clockErr := time.Parse(time.RFC3339, ctx.ClockEpoch); c.MaxAgeSeconds > 0 && clockErr != nil {
+			return fmt.Errorf("%w: rule %q has a data_quality age at clock %q", ErrUnreadable, ruleID, ctx.ClockEpoch)
+		}
+		return nil
 	case ConditionTimeWindow:
 		_, startOK := ParseHHMM(c.StartUTC)
 		_, endOK := ParseHHMM(c.EndUTC)
@@ -184,9 +191,45 @@ func matchOneCondition(ruleID string, c Condition, ctx *EvaluationContext) bool 
 		// RateCounts holds the runs this rule has already admitted for this
 		// key inside the window. The caller reads it before deciding and seals it.
 		return ctx.RateCounts[ruleID] < c.MaxPerWindow
+	case ConditionDataQuality:
+		return dataQualityHolds(c, ctx)
 	default:
 		return false
 	}
+}
+
+// dataQualityHolds reports whether the request's data-quality declaration
+// meets a data_quality condition: it was made, every check the condition
+// names was declared with the result pass, and, when max_age_seconds is set,
+// its as_of is at most that long before the decision and not after it.
+func dataQualityHolds(c Condition, ctx *EvaluationContext) bool {
+	dq := ctx.DataQuality
+	if dq == nil {
+		return false
+	}
+	for _, name := range c.Checks {
+		passed := false
+		for _, check := range dq.Checks {
+			if check.Name == name && check.Result == DataCheckPass {
+				passed = true
+			}
+		}
+		if !passed {
+			return false
+		}
+	}
+	if c.MaxAgeSeconds > 0 {
+		asOf, asOfErr := time.Parse(time.RFC3339, dq.AsOf)
+		clock, clockErr := time.Parse(time.RFC3339, ctx.ClockEpoch)
+		if asOfErr != nil || clockErr != nil {
+			return false
+		}
+		age := clock.Sub(asOf)
+		if age < 0 || age > time.Duration(c.MaxAgeSeconds)*time.Second {
+			return false
+		}
+	}
+	return true
 }
 
 // inTimeWindow reports whether the time of day falls inside the window, whose

@@ -84,7 +84,8 @@ func TestUnreadableTimesAreRefusedNotFatal(t *testing.T) {
 func TestInputsCarryEveryField(t *testing.T) {
 	ctx := EvaluationContext{SubjectID: "a", SubjectType: SubjectTypeAgent, SubjectRole: "b", Verb: "c", ObjectType: ObjectTypeData,
 		ObjectID: "d", Classification: ClassificationInternal, MFASatisfied: true, SessionAgeSeconds: 5, ClockEpoch: "e",
-		RateCounts: map[string]int{"r": 1}}
+		RateCounts:  map[string]int{"r": 1},
+		DataQuality: &DataQuality{Source: "ledger", AsOf: "2026-11-11T00:00:00Z", Checks: []DataCheck{{Name: "complete", Result: DataCheckPass}}}}
 	v := reflect.ValueOf(ctx)
 	for i := 0; i < v.NumField(); i++ {
 		name := v.Type().Field(i).Name
@@ -133,6 +134,40 @@ func TestDecideDocumentAppliesTheReviewRequirement(t *testing.T) {
 		got, err := DecideDocument(c.doc, ctx)
 		if err != nil || got.Outcome != c.want || got.ReasonCode != c.reason {
 			t.Errorf("%s: got %+v %v, want %s %s", name, got, err, c.want, c.reason)
+		}
+	}
+}
+
+// Round 58, B9: a data_quality condition holds only for a declared data
+// quality whose named checks all passed and, with max_age_seconds, whose
+// as_of is no older than that at the decision and not after it.
+func TestADataQualityConditionTestsTheDeclaration(t *testing.T) {
+	clock := "2026-11-11T12:00:00Z"
+	dq := func(asOf string, checks ...DataCheck) *DataQuality {
+		return &DataQuality{Source: "core-ledger", AsOf: asOf, Checks: checks}
+	}
+	pass := func(name string) DataCheck { return DataCheck{Name: name, Result: DataCheckPass} }
+	cond := Condition{Type: ConditionDataQuality, MaxAgeSeconds: 3600, Checks: []string{"complete", "schema"}}
+	cases := []struct {
+		name string
+		data *DataQuality
+		cond Condition
+		want bool
+	}{
+		{"nothing declared", nil, Condition{Type: ConditionDataQuality}, false},
+		{"declared, nothing required", dq(""), Condition{Type: ConditionDataQuality}, true},
+		{"fresh, both checks passed", dq("2026-11-11T11:30:00Z", pass("complete"), pass("schema")), cond, true},
+		{"a named check failed", dq("2026-11-11T11:30:00Z", pass("complete"), DataCheck{Name: "schema", Result: "fail"}), cond, false},
+		{"a named check missing", dq("2026-11-11T11:30:00Z", pass("complete")), cond, false},
+		{"too old", dq("2026-11-11T10:59:59Z", pass("complete"), pass("schema")), cond, false},
+		{"exactly the limit", dq("2026-11-11T11:00:00Z", pass("complete"), pass("schema")), cond, true},
+		{"dated after the decision", dq("2026-11-11T12:00:01Z", pass("complete"), pass("schema")), cond, false},
+		{"as_of unreadable", dq("yesterday", pass("complete"), pass("schema")), cond, false},
+	}
+	for _, c := range cases {
+		ctx := &EvaluationContext{ClockEpoch: clock, DataQuality: c.data}
+		if got := matchOneCondition("r", c.cond, ctx); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
 		}
 	}
 }

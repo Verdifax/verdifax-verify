@@ -27,6 +27,24 @@ type Rule struct {
 	Priority           int         `json:"priority,omitempty"` // reserved; validation refuses a non-zero value
 	ReasonCodeOverride string      `json:"reason_code,omitempty"`
 	AIReview           *AIReview   `json:"ai_review,omitempty"` // allow rules only
+	// SignOff is the rule's choice about a person's sign-off on the results
+	// of the steps it allows (round 58, B7): a customer marks the rules for
+	// its higher-risk decisions. Allow rules only.
+	SignOff *SignOff `json:"signoff,omitempty"`
+}
+
+// SignOff is a rule's sign-off requirement. Required means a result the rule
+// allowed counts as signed off only once an approver of the account has
+// approved it; the run's answer is returned at once as for any other rule,
+// and the requirement is sealed through the policy hash.
+type SignOff struct {
+	Required bool `json:"required,omitempty"`
+}
+
+// SignOffRequired reports whether the rule that allowed a step requires a
+// person's sign-off on its result.
+func SignOffRequired(fired *Rule) bool {
+	return fired != nil && fired.SignOff != nil && fired.SignOff.Required
 }
 
 // ContradictionMode is what a contradiction the AI review finds in a step's
@@ -144,6 +162,11 @@ type Condition struct {
 	Required      bool          `json:"required,omitempty"`
 	Seconds       int           `json:"seconds,omitempty"`
 	Role          string        `json:"role,omitempty"`
+	// MaxAgeSeconds and Checks belong to a data_quality condition (round 58,
+	// B9): the data's as_of at most this many seconds before the decision,
+	// when set, and each named check declared with the result pass.
+	MaxAgeSeconds int      `json:"max_age_seconds,omitempty"`
+	Checks        []string `json:"checks,omitempty"`
 }
 
 // ConditionType is one of the documented condition kinds.
@@ -155,6 +178,10 @@ const (
 	ConditionMFARequired   ConditionType = "mfa_required"
 	ConditionMinSessionAge ConditionType = "min_session_age"
 	ConditionRequiresRole  ConditionType = "requires_role"
+	// ConditionDataQuality holds when the request declared its data's
+	// quality, with every check it names passing and, when max_age_seconds
+	// is set, data no older than that at the decision (round 58, B9).
+	ConditionDataQuality ConditionType = "data_quality"
 )
 
 // Matcher is the predicate used in subject, verb and object matching.

@@ -2,6 +2,49 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.30.0: a required sign-off, declared data quality, sign-offs matched with the history, and the oldest records read as sealed
+
+- A policy rule may set `"signoff": {"required": true}`, on an allow rule
+  only. `--policy` and `--account-policy` fail a record whose rule requires
+  a sign-off unless an approving sign-off is in force on it, shown by
+  `--signoff` with the run's sign-offs and `--signoff-history` with the
+  account's whole chain, and the report names the rule. A `signoff` that
+  requires nothing, or one on a deny rule, is refused as the server refuses
+  it.
+- A run's `policy_context` may carry `data_quality`, the customer's
+  declaration about the data the decision used (`source`, `as_of` and named
+  `checks`), and a rule may set a `data_quality` condition
+  (`max_age_seconds`, `checks`). The verifier runs the condition again on
+  the declaration the record seals, measuring age from the decision time
+  the record seals. It judges the declaration, not the data.
+- `--signals` reads a successful run's event that says `signoff_required`.
+- `--signoff` with `--signoff-history` now matches the two exactly: the
+  history must belong to the record's account, each sign-off is matched by
+  its own hash, and a sign-off in the history on this result that the
+  run's sign-offs leave out fails. Until now a later decision left out of
+  the run's sign-offs could make an earlier one read as the decision in
+  force.
+- A record sealed before 2026-05-11T02:02:16Z (orchestrator 6c4b50b, which
+  added the reproducibility section) has no `reproducibility_context` and a
+  bundle hash computed without it. The verifier now reads such a record
+  with that recipe and names it in the report (`bundle_hash_recipe`),
+  instead of failing it on a section it never had. It does so only when
+  the key is absent, the envelope timestamp (inside the envelope hash) is
+  before that time and, for a record on the public log, the log integrated
+  its entry before then, so a later record with its section removed still
+  fails. Genuine records this concerns: runs 132 to 135, 138 to 140 and 153
+  to 157, sealed from May 5 to May 10, 2026. Runs 132 to 140 still fail,
+  because they were logged under a development key that was never
+  published.
+
+Records sealed before this release hash exactly as before, except those
+sealed before 2026-05-11T02:02:16Z with no reproducibility section, which
+are now read with the recipe they were sealed with; and none can carry a
+sign-off requirement: earlier servers refused a policy with a
+`signoff` field, as they refuse every unknown key. What v0.29.1 accepted
+and this release fails is a run's sign-offs given beside a history they do
+not match exactly.
+
 ### v0.29.1: built with Go 1.27.4
 
 The same verification code as v0.29.0 (only the version string changes),

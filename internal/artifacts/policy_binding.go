@@ -29,6 +29,24 @@ type PolicyInputs struct {
 	SessionAgeSeconds int            `json:"session_age_seconds,omitempty"`
 	EvaluatedAt       string         `json:"evaluated_at"`
 	RateCounts        map[string]int `json:"rate_counts,omitempty"`
+	// DataQuality is the request's declaration about the data its decision
+	// used (round 58, B9): the customer's own statement, sealed as given.
+	DataQuality *DataQuality `json:"data_quality,omitempty"`
+}
+
+// DataQuality is a request's declaration about its data: where it came
+// from, the time it describes, and the checks the customer ran on it. It is
+// psleval.DataQuality's sealed form; a test holds the two in step.
+type DataQuality struct {
+	Source string      `json:"source,omitempty"`
+	AsOf   string      `json:"as_of,omitempty"`
+	Checks []DataCheck `json:"checks,omitempty"`
+}
+
+// DataCheck is one named check and its result: pass, fail or warn.
+type DataCheck struct {
+	Name   string `json:"name"`
+	Result string `json:"result"`
 }
 
 // PolicyBinding is the policy decision a refused or halted run seals in

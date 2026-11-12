@@ -290,7 +290,11 @@ matches its canonical preimage, so editing a field without also
 recomputing the hashes over it fails verification. An editor who
 rewrites the whole bundle can recompute every section hash and the
 bundle hash; only the values bound to the public-log anchor, described
-below, resist that.
+below, resist that. A record sealed before 2026-05-11T02:02:16Z has no
+reproducibility section and a bundle hash computed without it; since
+v0.30.0 the verifier reads it with that recipe, names the recipe in the
+report, and accepts it only for a record whose envelope timestamp and,
+when it is on the public log, whose log entry are from before then.
 
 **Also proves, since 2026-09-08:** that the Sigstore Rekor entry the
 bundle names is *this run's* entry and not someone else's. The verifier
@@ -828,7 +832,16 @@ it wrong. `--approver-key FILE` fails unless that
 decision was signed by the key in the file. `--signoff-history FILE` checks
 the account's whole chain from `GET /account/signoffs/history`, so a
 removed, reordered or rewritten sign-off fails; run alone, it checks the
-chain.
+chain. Given with `--signoff` and a record (since v0.30.0), the history must
+belong to the record's account and match the run's sign-offs exactly, by
+each sign-off's hash, so a later decision left out of the run's sign-offs
+fails.
+
+A policy rule may require a sign-off with `"signoff": {"required": true}`
+(since v0.30.0). `--policy` or `--account-policy` then fails the record
+unless an approving sign-off is in force on it, shown by `--signoff` and
+`--signoff-history` together, and the report names the rule. The history
+shows the sign-offs recorded up to the moment it was read.
 
 A sign-off shows that the holder of an approver key the account registered
 signed that decision on that result, and that Verdifax logged it. It does

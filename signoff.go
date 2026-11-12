@@ -32,6 +32,9 @@ type SignOffEntry struct {
 	RecordedAt  string `json:"recorded_at"`
 	LogEntry    string `json:"log_entry,omitempty"`
 	Superseded  bool   `json:"superseded,omitempty"`
+	// hash is the sign-off's own hash, which compares the sign-offs given
+	// for a record with the account's history exactly.
+	hash string
 }
 
 // SignOffCheck reports the sign-offs given for a record, or an account's whole
@@ -52,8 +55,10 @@ type SignOffCheck struct {
 	ApproverPinned bool   `json:"approver_pinned,omitempty"`
 	// Gaps lists the restore gaps the history holds, each sealed and on the
 	// public log (round 56, E4).
-	Gaps   []string `json:"restore_gaps,omitempty"`
-	Reason string   `json:"reason,omitempty"`
+	Gaps []string `json:"restore_gaps,omitempty"`
+	// Account is the account a history belongs to.
+	Account string `json:"account,omitempty"`
+	Reason  string `json:"reason,omitempty"`
 }
 
 // signOffSubject is the result a record's sign-offs must name.
@@ -104,7 +109,7 @@ func checkOneSignOff(s *artifacts.SignOff) error {
 
 func entryOf(s *artifacts.SignOff) SignOffEntry {
 	e := SignOffEntry{Sequence: s.Sequence, Target: s.Target.Kind, RunID: s.Target.RunID, Decision: s.Decision,
-		ApproverKey: s.ApproverKey, SignedAt: s.SignedAt, RecordedAt: s.RecordedAt}
+		ApproverKey: s.ApproverKey, SignedAt: s.SignedAt, RecordedAt: s.RecordedAt, hash: s.SignOffHash}
 	if s.Anchor != nil {
 		e.LogEntry = s.Anchor.LogEntryID
 	}
@@ -266,7 +271,7 @@ func checkSignOffHistory(data []byte) SignOffCheck {
 	for i := range c.Entries {
 		c.Entries[i].Superseded = last[fmt.Sprintf("%s/%d", c.Entries[i].Target, c.Entries[i].RunID)] != i
 	}
-	c.OK = true
+	c.OK, c.Account = true, list[0].ChainID
 	return c
 }
 
@@ -314,8 +319,8 @@ func signOffChecks(subject signOffSubject, signOffPath, approverPath, historyPat
 	if historyPath != "" {
 		c := checkSignOffHistory(readFlagFile("signoff-history", historyPath))
 		if c.OK && given != nil && given.OK {
-			if missing := missingFromHistory(*given, c); missing != "" {
-				c.OK, c.Reason = false, missing
+			if problem := historyDisagrees(*given, c, subject); problem != "" {
+				c.OK, c.Reason = false, problem
 			}
 		}
 		history = &c
@@ -323,16 +328,28 @@ func signOffChecks(subject signOffSubject, signOffPath, approverPath, historyPat
 	return given, history
 }
 
-// missingFromHistory reports a sign-off given for the record that the
-// account's history does not hold.
-func missingFromHistory(given, history SignOffCheck) string {
-	held := map[int64]bool{}
+// historyDisagrees compares the sign-offs given for one result with the
+// account's history: the history must be the record's account's, hold every
+// sign-off given, and the sign-offs given must hold every sign-off the
+// history has on this result. Otherwise a later decision left out of the
+// sign-offs given would make an earlier one read as the decision in force.
+func historyDisagrees(given, history SignOffCheck, subject signOffSubject) string {
+	if history.Account != subject.account {
+		return fmt.Sprintf("the sign-off history given belongs to %s, not to the record's account %s", history.Account, subject.account)
+	}
+	held, gave := map[string]bool{}, map[string]bool{}
 	for _, e := range history.Entries {
-		held[e.Sequence] = true
+		held[e.hash] = true
 	}
 	for _, e := range given.Entries {
-		if !held[e.Sequence] {
+		gave[e.hash] = true
+		if !held[e.hash] {
 			return fmt.Sprintf("sign-off %d is not in the account's history given", e.Sequence)
+		}
+	}
+	for _, e := range history.Entries {
+		if e.Target == subject.kind && e.RunID == subject.runID && !gave[e.hash] {
+			return fmt.Sprintf("the account's history holds sign-off %d on this result, which the sign-offs given leave out, so they do not show the decision in force", e.Sequence)
 		}
 	}
 	return ""
@@ -348,8 +365,67 @@ func signOffFailed(checks ...*SignOffCheck) (bool, string) {
 	return false, ""
 }
 
-// applySignOffFlags records the sign-off checks on an allowed run's report.
+// SignOffRequirementCheck is the check of a sign-off the policy rule that
+// allowed a run requires (round 58, B7).
+type SignOffRequirementCheck struct {
+	Rule   string `json:"rule"`
+	OK     bool   `json:"ok"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// signOffRequirement checks a run whose allowing rule requires a person's
+// sign-off: it holds only when --signoff shows an approval in force on this
+// record. A sign-off releases or blocks nothing on its own (R159); this
+// checks that the control the policy names took place.
+func signOffRequirement(r *Report) *SignOffRequirementCheck {
+	rule := ""
+	switch {
+	case r.PolicyGate.SignOffRequired:
+		rule = r.PolicyGate.FiredRuleID
+	case r.AccountPolicyGate != nil && r.AccountPolicyGate.SignOffRequired:
+		rule = r.AccountPolicyGate.FiredRuleID
+	default:
+		return nil
+	}
+	c := &SignOffRequirementCheck{Rule: rule}
+	switch {
+	case r.SignOffs == nil || r.SignOffHistory == nil:
+		c.Reason = fmt.Sprintf("rule %q requires a person's sign-off on this result; pass --signoff (GET /runs/{id}/signoffs) and --signoff-history (the account's whole chain, GET /account/signoffs/history) so that a later decision cannot be left out", rule)
+	case !r.SignOffs.OK:
+		c.Reason = fmt.Sprintf("rule %q requires a person's sign-off, and the sign-offs given do not verify", rule)
+	case !r.SignOffHistory.OK:
+		c.Reason = fmt.Sprintf("rule %q requires a person's sign-off, and the account's sign-off history given does not verify or does not match the sign-offs given: %s", rule, r.SignOffHistory.Reason)
+	case r.SignOffs.Latest != artifacts.SignOffApprove:
+		latest := r.SignOffs.Latest
+		if latest == "" {
+			latest = "none"
+		}
+		c.Reason = fmt.Sprintf("rule %q requires an approving sign-off on this result, and the decision in force is %s", rule, latest)
+	default:
+		c.OK = true
+	}
+	return c
+}
+
+func printSignOffRequirement(c *SignOffRequirementCheck) {
+	if c == nil {
+		return
+	}
+	if c.OK {
+		fmt.Printf("  %-18s✓ rule %q requires a person's sign-off; an approval is in force, matched with the account's history\n", "Sign-off rule:", c.Rule)
+		return
+	}
+	fmt.Printf("  %-18s✗ FAILED · %s\n", "Sign-off rule:", c.Reason)
+}
+
+// applySignOffFlags records the sign-off checks on an allowed run's report,
+// and the sign-off its allowing rule requires, if any (round 58, B7).
 func applySignOffFlags(r *Report, b *artifacts.AuditBundle, signOffPath, approverPath, historyPath string) {
+	defer func() {
+		if r.SignOffRequirement = signOffRequirement(r); r.SignOffRequirement != nil && !r.SignOffRequirement.OK {
+			r.AllPassed, r.VerdictTier, r.RecordCoverage = false, "FAILED", "failed"
+		}
+	}()
 	if signOffPath == "" && approverPath == "" && historyPath == "" {
 		return
 	}

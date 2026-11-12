@@ -23,7 +23,32 @@ type EvaluationContext struct {
 	// RateCounts maps a rule_id with a rate_limit condition to the runs that
 	// rule has admitted for this key inside its window.
 	RateCounts map[string]int
+
+	// DataQuality is the request's own declaration about the data its
+	// decision used (round 58, B9), nil when it made none.
+	DataQuality *DataQuality
 }
+
+// DataQuality is a request's declaration about the data its decision used:
+// where it came from, the time it describes, and the checks the customer ran
+// on it, each with its result. Verdifax judges none of it; it seals what was
+// declared, and a policy's data_quality condition can require and test it.
+type DataQuality struct {
+	Source string      `json:"source,omitempty"`
+	AsOf   string      `json:"as_of,omitempty"`
+	Checks []DataCheck `json:"checks,omitempty"`
+}
+
+// DataCheck is one named check the customer ran on the data, and its result:
+// pass, fail or warn.
+type DataCheck struct {
+	Name   string `json:"name"`
+	Result string `json:"result"`
+}
+
+// DataCheckPass is the result a data_quality condition requires of a check
+// it names.
+const DataCheckPass = "pass"
 
 // Inputs is every value a decision read, in the form sealed into a record or
 // receipt. Given the policy and these values, a reader can reach the same
@@ -40,6 +65,7 @@ type Inputs struct {
 	SessionAgeSeconds int                 `json:"session_age_seconds,omitempty"`
 	EvaluatedAt       string              `json:"evaluated_at"`
 	RateCounts        map[string]int      `json:"rate_counts,omitempty"`
+	DataQuality       *DataQuality        `json:"data_quality,omitempty"`
 }
 
 // InputsOf reads the sealed form of a context.
@@ -49,7 +75,7 @@ func InputsOf(ctx *EvaluationContext) Inputs {
 		Verb: ctx.Verb, ObjectType: ctx.ObjectType, ObjectID: ctx.ObjectID,
 		Classification: ctx.Classification, MFASatisfied: ctx.MFASatisfied,
 		SessionAgeSeconds: ctx.SessionAgeSeconds, EvaluatedAt: ctx.ClockEpoch,
-		RateCounts: ctx.RateCounts,
+		RateCounts: ctx.RateCounts, DataQuality: ctx.DataQuality,
 	}
 }
 
@@ -61,6 +87,6 @@ func (in Inputs) Context() *EvaluationContext {
 		Verb: in.Verb, ObjectType: in.ObjectType, ObjectID: in.ObjectID,
 		Classification: in.Classification, MFASatisfied: in.MFASatisfied,
 		SessionAgeSeconds: in.SessionAgeSeconds, ClockEpoch: in.EvaluatedAt,
-		RateCounts: in.RateCounts,
+		RateCounts: in.RateCounts, DataQuality: in.DataQuality,
 	}
 }

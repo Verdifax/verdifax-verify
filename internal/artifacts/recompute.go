@@ -29,6 +29,7 @@ package artifacts
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // ── Pipeline artifact recomputation (14) ─────────────────────────────────────
@@ -270,17 +271,64 @@ func RecomputeSystemProvenanceHash(sp SystemProvenance) string {
 
 // ── Bundle recomputation ─────────────────────────────────────────────────────
 
+// ReproducibilityContextAdded is when the builder began sealing category 6,
+// orchestrator commit 6c4b50b. The last record sealed without it is run 157
+// (2026-05-10T21:27:18Z) and the first with it run 158 (2026-05-11T02:12:09Z).
+var ReproducibilityContextAdded = time.Date(2026, 5, 11, 2, 2, 16, 0, time.UTC)
+
+// RecomputeBundleHashWithoutReproducibilityContext reproduces the bundle
+// hash of a record sealed before ReproducibilityContextAdded: the preimage
+// of RecomputeBundleHash without reproducibility_context_hash, as the
+// builder computed it from orchestrator 648ef13 until 6c4b50b. Only a
+// record with no reproducibility_context section, sealed before then, may
+// be read this way.
+func RecomputeBundleHashWithoutReproducibilityContext(b *AuditBundle) string {
+	return MustCanonicalHash(struct {
+		Kind                      string `json:"kind"`
+		SchemaVersion             string `json:"schema_version"`
+		ManifestHash              string `json:"manifest_hash"`
+		PayloadHash               string `json:"payload_hash"`
+		EnvelopeHash              string `json:"envelope_hash"`
+		TransportHash             string `json:"transport_hash"`
+		EpaHash                   string `json:"epa_hash"`
+		EfaHash                   string `json:"efa_hash"`
+		AerHash                   string `json:"aer_hash"`
+		TranscriptHash            string `json:"transcript_hash"`
+		HwaHash                   string `json:"hwa_hash"`
+		LeakageHash               string `json:"leakage_hash"`
+		ZkspHash                  string `json:"zksp_hash"`
+		MigrationHash             string `json:"migration_hash"`
+		ReplayHash                string `json:"replay_hash"`
+		PoteHash                  string `json:"pote_hash"`
+		VfaHash                   string `json:"vfa_hash"`
+		RequestSubstanceHash      string `json:"request_substance_hash"`
+		AuthorizationChainHash    string `json:"authorization_chain_hash"`
+		RegulatoryScaffoldingHash string `json:"regulatory_scaffolding_hash"`
+		CausalGraphHash           string `json:"causal_graph_hash"`
+		SystemProvenanceHash      string `json:"system_provenance_hash"`
+	}{
+		b.Kind, b.SchemaVersion, b.ManifestHash,
+		b.Payload.Hash, b.Envelope.Hash, b.Transport.Hash,
+		b.EPA.Hash, b.EFA.Hash, b.AER.Hash,
+		b.Transcript.Hash, b.HardwareAttestation.Hash, b.LeakageBundle.Hash,
+		b.ZkspBinding.Hash, b.MigrationToken.Hash, b.ReplayFingerprint.Hash,
+		b.PoteProof.Hash, b.FinalVFA.Hash,
+		b.RequestSubstance.Hash, b.AuthorizationChain.Hash,
+		b.RegulatoryScaffolding.Hash, b.CausalGraph.Hash,
+		b.SystemProvenance.Hash,
+	})
+}
+
 // RecomputeBundleHash reproduces the canonical bundle hash. The preimage
 // is the bundle's identity fields plus the 14 pipeline-artifact hashes
 // plus the 6 category hashes, explicitly NOT the bundle's own Hash field
 // or its run_id (which is metadata) or generated_at (which varies between
 // bundle constructions on the same content).
 //
-// Category 6 (ReproducibilityContext) was added 2026-05-10. Bundles
-// produced before that date will have a zero ReproducibilityContext
-// with Hash = the canonical hash of the empty struct, verifiers
-// running against pre-Phase-6 bundles still recompute deterministic
-// hashes because the empty-struct hash is itself stable.
+// Category 6 (ReproducibilityContext) was added at ReproducibilityContextAdded.
+// A record sealed before then has no reproducibility_context section at
+// all, and its bundle hash was computed without that hash: see
+// RecomputeBundleHashWithoutReproducibilityContext.
 func RecomputeBundleHash(b *AuditBundle) string {
 	return MustCanonicalHash(struct {
 		Kind                       string `json:"kind"`

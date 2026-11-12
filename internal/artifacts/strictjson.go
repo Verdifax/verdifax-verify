@@ -71,6 +71,14 @@ func DecodeBundleStrict(data []byte) (*AuditBundle, error) {
 	if unmarshalErr := json.Unmarshal(data, &b); unmarshalErr != nil {
 		return nil, unmarshalErr
 	}
+	// The strict walk above refused a repeated key, so the top level
+	// names each key at most once and its absence is unambiguous.
+	var top map[string]json.RawMessage
+	if topErr := json.Unmarshal(data, &top); topErr != nil {
+		return nil, topErr
+	}
+	_, present := top["reproducibility_context"]
+	b.ReproducibilityContextAbsent = !present
 	return &b, nil
 }
 

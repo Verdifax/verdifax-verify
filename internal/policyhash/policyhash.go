@@ -148,6 +148,14 @@ type rule struct {
 	Priority           int         `json:"priority,omitempty"` // excluded from policy_hash
 	ReasonCodeOverride string      `json:"reason_code,omitempty"`
 	AIReview           *aiReview   `json:"ai_review,omitempty"`
+	// SignOff is the rule's requirement of a person's sign-off on the
+	// results it allows (round 58, B7), as the server reads it.
+	SignOff *signOff `json:"signoff,omitempty"`
+}
+
+// signOff is a rule's sign-off requirement.
+type signOff struct {
+	Required bool `json:"required,omitempty"`
 }
 
 type subject struct {
@@ -176,6 +184,10 @@ type condition struct {
 	Required      bool   `json:"required,omitempty"`
 	Seconds       int    `json:"seconds,omitempty"`
 	Role          string `json:"role,omitempty"`
+	// A data_quality condition's settings (round 58, B9), as the server
+	// reads them.
+	MaxAgeSeconds int      `json:"max_age_seconds,omitempty"`
+	Checks        []string `json:"checks,omitempty"`
 }
 
 type matcher struct {
@@ -204,6 +216,14 @@ func validate(p *policy) error {
 		}
 		if aiErr := checkAIReview("rule "+strconv.Quote(r.RuleID), r.Effect, r.AIReview); aiErr != nil {
 			return aiErr
+		}
+		// The server's: a signoff that requires nothing is refused, and a
+		// deny rule allows no result to sign off.
+		if r.SignOff != nil && !r.SignOff.Required {
+			return fmt.Errorf("policyhash: invalid signoff: rule %q sets signoff without required: true", r.RuleID)
+		}
+		if r.SignOff != nil && r.Effect != "allow" {
+			return fmt.Errorf("policyhash: invalid signoff: rule %q denies, so it allows no result to sign off", r.RuleID)
 		}
 	}
 	return checkAIReview("the policy", "allow", p.AIReview)
@@ -320,6 +340,11 @@ func ruleHashPreimage(r rule) map[string]any {
 	if r.AIReview != nil {
 		out["ai_review"] = aiReviewHashFields(r.AIReview)
 	}
+	// The server's: present only when required, so every policy written
+	// before it hashes as it did.
+	if r.SignOff != nil && r.SignOff.Required {
+		out["signoff"] = map[string]any{"required": true}
+	}
 	return out
 }
 
@@ -376,6 +401,18 @@ func conditionPreimage(c condition) map[string]any {
 		out["seconds"] = c.Seconds
 	case "requires_role":
 		out["role"] = c.Role
+	case "data_quality":
+		// The server's: each setting only when given.
+		if c.MaxAgeSeconds > 0 {
+			out["max_age_seconds"] = c.MaxAgeSeconds
+		}
+		if len(c.Checks) > 0 {
+			checks := make([]any, len(c.Checks))
+			for i, name := range c.Checks {
+				checks[i] = name
+			}
+			out["checks"] = checks
+		}
 	}
 	return out
 }

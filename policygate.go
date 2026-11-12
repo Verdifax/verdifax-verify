@@ -46,7 +46,11 @@ type PolicyGateCheck struct {
 	// names Verdifax as the author, and by its policy hash on an earlier
 	// record that names no author.
 	BuiltInFile string `json:"builtin_file,omitempty"`
-	Reason      string `json:"reason,omitempty"`
+	// SignOffRequired is whether the rule that allowed the run requires a
+	// person's sign-off on its result (round 58, B7), read from the policy
+	// document when the rules are run again.
+	SignOffRequired bool   `json:"signoff_required,omitempty"`
+	Reason          string `json:"reason,omitempty"`
 
 	inputs *artifacts.PolicyInputs
 	// aiOutputDeclared is whether the record or receipt seals an AI
@@ -175,39 +179,42 @@ func checkPolicyDocument(c PolicyGateCheck, doc []byte) PolicyGateCheck {
 		return c
 	}
 	c.RulesChecked = true
-	if ruleErr := rerunRules(c, doc); ruleErr != nil {
+	signOffRequired, ruleErr := rerunRules(c, doc)
+	if ruleErr != nil {
 		c.Reason = ruleErr.Error()
 		return c
 	}
+	c.SignOffRequired = signOffRequired
 	c.DocumentMatch = true
 	return c
 }
 
-// rerunRules decides again from the document and the sealed inputs.
-func rerunRules(c PolicyGateCheck, doc []byte) error {
+// rerunRules decides again from the document and the sealed inputs, and
+// reports whether the rule that allowed the run requires a sign-off.
+func rerunRules(c PolicyGateCheck, doc []byte) (bool, error) {
 	rules, readErr := psleval.ReadDocument(doc)
 	if readErr != nil {
-		return fmt.Errorf("the rules could not be read: %w", readErr)
+		return false, fmt.Errorf("the rules could not be read: %w", readErr)
 	}
 	inputs, convertErr := sealedInputs(c.inputs)
 	if convertErr != nil {
-		return fmt.Errorf("the sealed inputs could not be read: %w", convertErr)
+		return false, fmt.Errorf("the sealed inputs could not be read: %w", convertErr)
 	}
 	ctx := inputs.Context()
 	ctx.AIOutputDeclared = c.aiOutputDeclared
 	result, decideErr := psleval.DecideDocument(rules, ctx)
 	if errors.Is(decideErr, psleval.ErrUnreadable) {
-		return fmt.Errorf("the rules cannot be decided on the sealed inputs: %w", decideErr)
+		return false, fmt.Errorf("the rules cannot be decided on the sealed inputs: %w", decideErr)
 	}
 	if decideErr != nil {
-		return fmt.Errorf("the rules could not be run: %w", decideErr)
+		return false, fmt.Errorf("the rules could not be run: %w", decideErr)
 	}
 	if result.FiredRuleID != c.FiredRuleID || string(result.Outcome) != c.Outcome {
-		return fmt.Errorf("running the rules on the sealed inputs gives %s by rule %q, the record says %s by rule %q",
+		return false, fmt.Errorf("running the rules on the sealed inputs gives %s by rule %q, the record says %s by rule %q",
 			result.Outcome, result.FiredRuleID, c.Outcome, c.FiredRuleID)
 	}
 	if result.Outcome != psleval.EffectAllow {
-		return nil
+		return false, nil
 	}
 	var fired *psleval.Rule
 	for i := range rules.Rules {
@@ -219,11 +226,11 @@ func rerunRules(c PolicyGateCheck, doc []byte) error {
 	required := psleval.ReviewRequired(fired, rules.AIReview)
 	switch {
 	case c.reviewCheck == "record" && required && !c.reviewSealed:
-		return fmt.Errorf("the policy requires an AI review on the steps rule %q allows, and the record seals none", result.FiredRuleID)
+		return false, fmt.Errorf("the policy requires an AI review on the steps rule %q allows, and the record seals none", result.FiredRuleID)
 	case c.reviewCheck == "review-required-halt" && !required:
-		return fmt.Errorf("the receipt says the step stopped because its policy requires an AI review, and rule %q requires none", result.FiredRuleID)
+		return false, fmt.Errorf("the receipt says the step stopped because its policy requires an AI review, and rule %q requires none", result.FiredRuleID)
 	}
-	return nil
+	return psleval.SignOffRequired(fired), nil
 }
 
 // sealedInputs turns the record's form of the inputs into the decision's. The

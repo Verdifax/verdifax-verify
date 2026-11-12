@@ -26,22 +26,30 @@ const (
 // RunSealed is one successful run of an account: the run, the hash of the
 // record it sealed, its place in a job when it has one, and when it sealed.
 type RunSealed struct {
-	Format        string         `json:"format"`
-	RunID         int64          `json:"run_id"`
-	RecordHash    string         `json:"record_hash"`
-	JobID         string         `json:"job_id,omitempty"`
-	StepID        string         `json:"step_id,omitempty"`
-	SealedAt      string         `json:"sealed_at"`
-	Signal        SignalLink     `json:"signal"`
-	RunSealedHash string         `json:"run_sealed_hash"`
-	Anchor        *ReceiptAnchor `json:"anchor,omitempty"`
+	Format     string     `json:"format"`
+	RunID      int64      `json:"run_id"`
+	RecordHash string     `json:"record_hash"`
+	JobID      string     `json:"job_id,omitempty"`
+	StepID     string     `json:"step_id,omitempty"`
+	SealedAt   string     `json:"sealed_at"`
+	Signal     SignalLink `json:"signal"`
+	// SignOffRequired says the policy rule that allowed the run requires a
+	// person's sign-off on its result (round 58, B7), so the account's feed
+	// shows each such result waiting for one. Present only when true.
+	SignOffRequired bool           `json:"signoff_required,omitempty"`
+	RunSealedHash   string         `json:"run_sealed_hash"`
+	Anchor          *ReceiptAnchor `json:"anchor,omitempty"`
 }
 
 // ComputeHash returns the record's hash: every field but the hash and the
-// anchor, each length-prefixed.
+// anchor, each length-prefixed. The sign-off requirement joins the fields
+// only when true, labelled, so every record sealed before it hashes as it did.
 func (r *RunSealed) ComputeHash() string {
 	fields := append([]string{r.Format, strconv.FormatInt(r.RunID, 10), r.RecordHash, r.JobID, r.StepID, r.SealedAt},
 		r.Signal.fields()...)
+	if r.SignOffRequired {
+		fields = append(fields, "signoff_required=true")
+	}
 	return lengthPrefixedHash(fields)
 }
 

@@ -438,6 +438,12 @@ type AuditBundle struct {
 	SystemProvenance       SystemProvenance       `json:"system_provenance"`
 	ReproducibilityContext ReproducibilityContext `json:"reproducibility_context"`
 
+	// ReproducibilityContextAbsent is true when the record carries no
+	// reproducibility_context key at all, as records sealed before
+	// ReproducibilityContextAdded do. DecodeBundleStrict sets it; it is
+	// never part of the record.
+	ReproducibilityContextAbsent bool `json:"-"`
+
 	// RekorAnchor carries the Sigstore Rekor inclusion-proof evidence
 	// for runs sealed under LedgerBackend == "rekor". When the
 	// orchestrator is running in mock-ledger mode the field is the
