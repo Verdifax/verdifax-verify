@@ -109,12 +109,17 @@ misplaced `--policy` can never pass as "checked".
 | 0 | Every check passed, and the public log covers the complete record (or the input is a receipt, which its entry covers whole). |
 | 1 | One or more verification checks failed (or `--strict` + scaffold), including JSON that strict reading refuses as malformed or ambiguous. |
 | 2 | The input could not be read (a missing file or a failed download), it was read but could not be decoded as a bundle or receipt, or a flag was given that does not apply to the input's kind (since v0.17.11, instead of being ignored). |
-| 3 | Every check passed, but the public log covers only part of the record (a record sealed before leaf v5, or one without a verified complete-record anchor), and `--allow-partial` was not given. Since v0.16.0. |
+| 3 | Every check passed, but the public log covers only part of the record (a record sealed before leaf v5, or a leaf v5 record without a verified complete-record anchor; a leaf v6 or later record without one fails with exit 1), and `--allow-partial` was not given. Since v0.16.0. |
 | 4 | Every check passed and the complete record is anchored, but its rule requires a person's sign-off and no sign-offs were given: the verdict is `ANCHORED, SIGN-OFF NOT SHOWN`, and `--strict-signoff` was not given. Since v0.32.0. |
 
-A script that treats exit 0 as a pass accepts only complete-record
-anchored records, and among them only those whose required sign-off is
-shown in force. Until v0.15.3 a partial record exited 0, although its
+A script that treats exit 0 as a pass, with the default flags, accepts
+only receipts and complete-record anchored records, and among the records
+whose sign-off requirement is sealed or shown by a policy document given,
+only those whose required sign-off is shown in force. A record whose
+rule requires a sign-off but which was sealed before the server sealed
+`signoff_required` (the server release with
+verifier v0.31.0), checked without its policy document, exits 0 without
+any sign-off shown. Until v0.15.3 a partial record exited 0, although its
 descriptive sections, the decision among them, could have been rewritten
 together with their hashes.
 
@@ -843,7 +848,8 @@ record as one on the step, and the job's latest decision is the one in
 force, with the record's own latest shown under it.
 
 Since v0.31.0 the history the server serves ends with a head statement,
-`verdifax.signoff-head.v1`: Verdifax states the chain's highest place and
+`verdifax.signoff-head.v1`, when the chain holds a place and Verdifax
+could store and anchor the head: Verdifax states the chain's highest place and
 the hash of its newest sign-off, and anchors the statement on the public
 log. The verifier checks the statement against the chain and reports the
 history complete as of the entry's integration time, which the account
@@ -864,7 +870,8 @@ or no approval in force, a sign-off left out, and a history cut short or
 without its head fail with exit 1 whatever the flags. Since v0.31.0 the record seals
 the requirement itself (`signoff_required` in its policy gate), so no
 policy document is needed; one given with `--policy` or `--account-policy`
-must agree with the seal, and shows the requirement of an older record.
+fails the record if it says the rule requires no sign-off where the record
+seals that it does, and shows the requirement of an older record.
 Since v0.31.0 the history must end with its head statement, and the report
 says the approval is in force as of the head's time on the public log.
 
@@ -888,11 +895,15 @@ The event's number in the account and the previous event's hash are sealed
 inside that entry before it is anchored on the public log, so the one entry
 fixes both what happened and its place.
 
-`--signals FILE` checks a saved response: each entry must verify on the
-public log as its own kind (a receipt, a policy change, a sign-off, a key
-change, a run publication, a successful run or a restore gap), seal the
-event's place, belong to one account, and link to the event before it
-without a gap, except through a restore gap (below). A feed that starts at event 1 is checked from
+`--signals FILE` checks a saved response: each event's entry must be a
+valid entry of its own kind (a receipt, a policy change, a sign-off, an
+approver or key change, an account change, a run deletion, a run
+publication, a successful run, a restore gap or an interrupted record),
+verified on the public log or committed by a later logged event (below),
+seal the event's place, belong to one account, and link to the event
+before it without a gap, except through a restore gap (below); an event
+whose record was deleted carries that record's tombstone in place of its
+entry (below). A feed that starts at event 1 is checked from
 the start. For a later page, `--signals-after N:hash` (the last sequence a
 system read and its event hash, which the report prints as the next point)
 checks that the page continues from it; without it, the report says
@@ -910,10 +921,12 @@ it recorded them. It cannot show a signal Verdifax never recorded: a company
 that signs its requests holds its own list of what it sent. The verifier
 reads the feed since v0.23.0.
 
-A run that fails with a server error seals a failure receipt naming the
-request, the stage that failed and an error class, anchored on the public log
-like every receipt; `GET /runs/{id}/failure-receipt` serves it and the
-verifier checks it as it checks any receipt.
+A run sent to `/execute` or `/execute/batch` that fails with a server error
+seals a failure receipt naming the request, the stage that failed and an
+error class, anchored on the public log when the log accepts it, as every
+receipt is; `GET /runs/{id}/failure-receipt` serves it and the verifier checks
+it as it checks any receipt. Failed determinism replays, and a failure whose
+receipt could not be built or stored, have none.
 
 Since v0.28.0 a successful run is an event too (`run.sealed`): a run-sealed
 record names the run and the hash of the exact record it sealed, with its
@@ -942,6 +955,45 @@ anchored as its own entry. Since v0.29.0, `--signals`, `--signoff-history`,
 `--policy-history` and `--account-policy-history` accept a skipped place
 through such a record, which must name this chain and that place, and the
 report lists each one.
+
+Since v0.33.0 the feed also holds everything the owner or Verdifax changes
+in the account, each with who decided (`decided_by`: `owner` or
+`verdifax_admin`), anchored as its own entry:
+
+- Key changes in format `verdifax.key-change.v2` seal who decided. A
+  `verdifax.key-change.v1` record reads as the owner's, as it always was.
+  Only Verdifax creates or revokes an owner key (`key_scope: account`): when
+  it makes the account, and when it replaces a lost owner key.
+- An account change (`account.changed`, `verdifax.account-change.v1`) records
+  a setting the owner made or a change Verdifax made to the account or to
+  a key's terms: the account made, a tier, a submitter class, a billing link (never the billing
+  id), a request key cleared, a replacement of the owner key requested, and
+  the owner's two blocks.
+- A run deletion (`run.deleted`, `verdifax.run-deletion.v1`) is the tombstone
+  of a deleted record: the run, the hash of its record, its job and step, and
+  who decided. It stays in the feed when the record is gone, and it names
+  the deleted record's public-log entries, so the log still accounts for
+  each. An earlier event whose record was deleted (a refused, halted or
+  failed run) is served with that tombstone in place of its entry; the
+  verifier checks the tombstone in full and checks the event's hash against
+  the record hash it seals, so the feed still verifies, and the report names
+  who deleted the record (`record_deleted_by`).
+
+A setting or a deletion the owner decides carries the owner's request-key
+signature over the account, the change and its subject
+(`verdifax.owner-change-signature.v1`), which the verifier checks. The record
+names the key that signed, so the check alone proves that key signed; the
+report gives it as `owner_signed_by` and lists every such key in
+`owner_signing_keys`. `--owner-request-key FILE` (several files separated by
+commas, for keys the owner has had) fails the feed unless one of the owner's
+own keys signed every owner change. Verdifax never holds that key, so it
+cannot make a change that passes the pin. The owner can block Verdifax from replacing or revoking the owner key
+(`setting.owner_replacement`) and from deleting records
+(`setting.verdifax_deletion`). Reading the feed in order, the verifier fails
+it when a Verdifax change to the owner key, a replacement request or a
+Verdifax deletion comes after the owner's block and before the owner allows
+it again. A page read with `--signals-after` sees only the settings made from
+that point.
 
 ### `--job`: checking a job's records together
 

@@ -22,6 +22,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Verdifax/verdifax-verify/internal/artifacts"
@@ -53,6 +54,10 @@ type signalEvent struct {
 	APIKeyID           int64           `json:"api_key_id,omitempty"`
 	Reason             string          `json:"reason,omitempty"`
 	Entry              json.RawMessage `json:"entry"`
+	// Deleted (round 60, v0.33.0) is the tombstone served in place of a
+	// deleted record's entry: the event then carries no entry, and its hash
+	// is checked against the record hash the tombstone seals.
+	Deleted *artifacts.RunDeletion `json:"deleted,omitempty"`
 }
 
 // signalFeedPage is the body of GET /signals.
@@ -67,11 +72,23 @@ type SignalFeedEntry struct {
 	Sequence int64  `json:"sequence"`
 	Kind     string `json:"kind"`
 	RunID    int64  `json:"run_id,omitempty"`
-	// DecidedBy, on a publication event, is who decided: owner, or
-	// verdifax_admin when a Verdifax admin key withdrew the record (R160).
+	// DecidedBy, on a publication, key change, account change or deletion,
+	// is who decided: owner, or verdifax_admin for a Verdifax admin key
+	// (R160; round 60 for key and account changes and deletions).
 	DecidedBy string `json:"decided_by,omitempty"`
-	At        string `json:"at"`
-	LogEntry  string `json:"log_entry_id"`
+	// Change and Value, on an account.changed event, are the change and its
+	// new value; KeyScope, on a key change, is the key's scope.
+	Change   string `json:"change,omitempty"`
+	Value    string `json:"value,omitempty"`
+	KeyScope string `json:"key_scope,omitempty"`
+	// OwnerSignedBy, on a change the owner decided, is the request key that
+	// signed it: compare it with the owner's own request key.
+	OwnerSignedBy string `json:"owner_signed_by,omitempty"`
+	// RecordDeletedBy, on an event whose record was deleted, is who deleted
+	// it, from the tombstone served in its place.
+	RecordDeletedBy string `json:"record_deleted_by,omitempty"`
+	At              string `json:"at"`
+	LogEntry        string `json:"log_entry_id"`
 	// CommittedBy, when set, is the later event whose public-log entry
 	// commits this one: this event carries no entry of its own, so its time
 	// is proven only by that later entry, not by its own clock.
@@ -102,8 +119,13 @@ type SignalFeedCheck struct {
 	CommittedLater int `json:"committed_by_a_later_event,omitempty"`
 	// DeclaredGaps counts the chain.gap events: places a restore made one of
 	// the account's chains skip, each sealed and named by its own entry.
-	DeclaredGaps int    `json:"declared_gaps,omitempty"`
-	Reason       string `json:"reason,omitempty"`
+	DeclaredGaps int `json:"declared_gaps,omitempty"`
+	// OwnerSigningKeys are the request keys that signed the owner's changes
+	// in the feed, in the order first seen; OwnerKeysPinned says every one
+	// was a key given with --owner-request-key (round 60).
+	OwnerSigningKeys []string `json:"owner_signing_keys,omitempty"`
+	OwnerKeysPinned  bool     `json:"owner_keys_pinned,omitempty"`
+	Reason           string   `json:"reason,omitempty"`
 }
 
 var signalAfterPattern = regexp.MustCompile(`^(0|[1-9][0-9]{0,18}):([0-9a-f]{64})$`)
@@ -184,6 +206,12 @@ type checkedEntry struct {
 	unlogged bool
 	// gap is the restore gap a chain.gap event's entry records.
 	gap *artifacts.RestoreGap
+	// change is an account.changed event's record; keyScope a key change's
+	// scope.
+	change    *artifacts.AccountChange
+	keyScope  string
+	ownerKey  string
+	deletedBy string
 }
 
 // unloggedOr passes a check that failed only for want of a public-log entry,
@@ -209,6 +237,9 @@ func logEntryOf(a *artifacts.ReceiptAnchor) string {
 // checkSignalEntry checks one event's entry as its own kind and returns its
 // hash and the feed place it seals.
 func checkSignalEntry(e *signalEvent) (checkedEntry, error) {
+	if e.Deleted != nil {
+		return checkDeletedRecordEvent(e)
+	}
 	switch e.Kind {
 	case artifacts.SignalRunRefused, artifacts.SignalRunHalted, artifacts.SignalRunFailed:
 		var doc artifacts.ReceiptDocument
@@ -276,7 +307,37 @@ func checkSignalEntry(e *signalEvent) (checkedEntry, error) {
 			return checkedEntry{}, fmt.Errorf("it is a %s event, and its key change is a %s", e.Kind, k.Action)
 		}
 		link := k.Signal
-		return checkedEntry{hash: k.KeyChangeHash, at: k.ChangedAt, logEntry: logEntryOf(k.Anchor), link: &link, unlogged: unlogged}, nil
+		return checkedEntry{hash: k.KeyChangeHash, at: k.ChangedAt, logEntry: logEntryOf(k.Anchor), link: &link,
+			decidedBy: k.Decider(), keyScope: k.KeyScope, unlogged: unlogged}, nil
+	case artifacts.SignalAccountChanged:
+		var c artifacts.AccountChange
+		if decodeErr := strictDecode(e.Entry, &c); decodeErr != nil {
+			return checkedEntry{}, fmt.Errorf("its entry is not an account change: %w", decodeErr)
+		}
+		unlogged, checkErr := unloggedOr(checkSealedEntry(c.Validate(), c.ComputeHash(), c.AccountChangeHash, c.ChangedAt, "changed_at",
+			c.Anchor, artifacts.AccountChangeKind, c.LeafHash()))
+		if checkErr != nil {
+			return checkedEntry{}, fmt.Errorf("its account change: %w", checkErr)
+		}
+		link := c.Signal
+		return checkedEntry{hash: c.AccountChangeHash, at: c.ChangedAt, logEntry: logEntryOf(c.Anchor), link: &link,
+			decidedBy: c.DecidedBy, change: &c, ownerKey: ownerKeyOf(c.OwnerSignature), unlogged: unlogged}, nil
+	case artifacts.SignalRunDeleted:
+		var d artifacts.RunDeletion
+		if decodeErr := strictDecode(e.Entry, &d); decodeErr != nil {
+			return checkedEntry{}, fmt.Errorf("its entry is not a run deletion: %w", decodeErr)
+		}
+		unlogged, checkErr := unloggedOr(checkSealedEntry(d.Validate(), d.ComputeHash(), d.DeletionHash, d.ChangedAt, "changed_at",
+			d.Anchor, artifacts.RunDeletionKind, d.LeafHash()))
+		if checkErr != nil {
+			return checkedEntry{}, fmt.Errorf("its run deletion: %w", checkErr)
+		}
+		if e.RunID != d.RunID {
+			return checkedEntry{}, fmt.Errorf("it names run %d, and its deletion is run %d's", e.RunID, d.RunID)
+		}
+		link := d.Signal
+		return checkedEntry{hash: d.DeletionHash, at: d.ChangedAt, logEntry: logEntryOf(d.Anchor), link: &link, runID: d.RunID,
+			decidedBy: d.DecidedBy, ownerKey: ownerKeyOf(d.OwnerSignature), unlogged: unlogged}, nil
 	case artifacts.SignalRunPublished, artifacts.SignalRunUnpublished:
 		var p artifacts.RunPublication
 		if decodeErr := strictDecode(e.Entry, &p); decodeErr != nil {
@@ -438,7 +499,21 @@ func checkSignalEnvelope(ce *signalCloudEvent) error {
 
 // checkSignalFeed checks a feed file.
 func checkSignalFeed(data []byte, after *signalPoint) SignalFeedCheck {
+	return checkSignalFeedPinned(data, after, nil)
+}
+
+// checkSignalFeedPinned is checkSignalFeed with the owner's request keys
+// pinned: a change the owner decided that one of them did not sign fails the
+// feed. The record names the key that signed it, so without a pin the check
+// proves only that the key it names signed; the pin proves it was the
+// owner's.
+func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) SignalFeedCheck {
 	c := SignalFeedCheck{Checked: true}
+	pinned := map[string]bool{}
+	for _, k := range ownerKeys {
+		pinned[k] = true
+	}
+	seenOwnerKey := map[string]bool{}
 	events, readErr := decodeSignalEvents(data)
 	if readErr != nil {
 		c.Reason = readErr.Error()
@@ -450,6 +525,9 @@ func checkSignalFeed(data []byte, after *signalPoint) SignalFeedCheck {
 	}
 	var previousHash string
 	var previousSeq int64
+	// The owner's blocks, as the feed has set them so far (round 60): while
+	// one stands, Verdifax may not replace the owner key or delete a record.
+	blocked := map[string]bool{}
 	switch {
 	case after != nil:
 		previousSeq, previousHash, c.ContinuityFrom = after.sequence, after.hash, "given point"
@@ -511,7 +589,23 @@ func checkSignalFeed(data []byte, after *signalPoint) SignalFeedCheck {
 		if d.RunID != got.runID {
 			return fail("it names run %d, and its entry names run %d", d.RunID, got.runID)
 		}
-		entry := SignalFeedEntry{Sequence: d.Sequence, Kind: d.Kind, RunID: d.RunID, DecidedBy: got.decidedBy, At: got.at, LogEntry: got.logEntry}
+		if blockErr := checkOwnerBlocks(blocked, d.Kind, &got); blockErr != "" {
+			return fail("%s", blockErr)
+		}
+		if got.ownerKey != "" {
+			if len(pinned) > 0 && !pinned[got.ownerKey] {
+				return fail("a change the owner decided is signed by request key %s, which is not one given with --owner-request-key", truncate(got.ownerKey, 12))
+			}
+			if !seenOwnerKey[got.ownerKey] {
+				seenOwnerKey[got.ownerKey] = true
+				c.OwnerSigningKeys = append(c.OwnerSigningKeys, got.ownerKey)
+			}
+		}
+		entry := SignalFeedEntry{Sequence: d.Sequence, Kind: d.Kind, RunID: d.RunID, DecidedBy: got.decidedBy, At: got.at, LogEntry: got.logEntry,
+			KeyScope: got.keyScope, OwnerSignedBy: got.ownerKey, RecordDeletedBy: got.deletedBy}
+		if got.change != nil {
+			entry.Change, entry.Value = got.change.Action, got.change.Value
+		}
 		if got.unlogged {
 			entry.CommittedBy = -1 // resolved below, once the later events are checked
 		}
@@ -544,23 +638,103 @@ func checkSignalFeed(data []byte, after *signalPoint) SignalFeedCheck {
 		c.CommittedLater++
 	}
 	c.First, c.Last, c.LastEventHash = events[0].Data.Sequence, previousSeq, previousHash
+	c.OwnerKeysPinned = len(pinned) > 0 && len(c.OwnerSigningKeys) > 0
 	c.OK = true
 	return c
 }
 
+// checkDeletedRecordEvent checks an event whose record was deleted (round
+// 60): only a stopped run's event can stand for a record, its entry must be
+// empty, and the tombstone served in its place must verify on its own (its
+// shape, hash, owner signature and public-log entry), belong to this account
+// and name this run. The event's hash is then checked against the record hash
+// the tombstone seals, so the chain holds without the record.
+func checkDeletedRecordEvent(e *signalEvent) (checkedEntry, error) {
+	switch e.Kind {
+	case artifacts.SignalRunRefused, artifacts.SignalRunHalted, artifacts.SignalRunFailed:
+	default:
+		return checkedEntry{}, fmt.Errorf("it is a %s event and carries a deletion tombstone; only a stopped run's event stands for a record", e.Kind)
+	}
+	if trimmed := bytes.TrimSpace(e.Entry); len(trimmed) != 0 && string(trimmed) != "null" {
+		return checkedEntry{}, errors.New("it carries both an entry and a deletion tombstone")
+	}
+	d := e.Deleted
+	if _, checkErr := unloggedOr(checkSealedEntry(d.Validate(), d.ComputeHash(), d.DeletionHash, d.ChangedAt, "changed_at",
+		d.Anchor, artifacts.RunDeletionKind, d.LeafHash())); checkErr != nil {
+		return checkedEntry{}, fmt.Errorf("the tombstone served for its deleted record: %w", checkErr)
+	}
+	switch {
+	case d.Signal.Account != e.Account:
+		return checkedEntry{}, fmt.Errorf("the tombstone served for its deleted record belongs to %s, not %s", d.Signal.Account, e.Account)
+	case d.RunID != e.RunID:
+		return checkedEntry{}, fmt.Errorf("it names run %d, and the tombstone served for its record is run %d's", e.RunID, d.RunID)
+	case d.Signal.Sequence <= e.Sequence:
+		return checkedEntry{}, errors.New("the tombstone served for its deleted record is not later in the feed than the event")
+	}
+	link := artifacts.SignalLink{Account: e.Account, Sequence: e.Sequence, PreviousSignalHash: e.PreviousSignalHash}
+	logEntry := ""
+	if len(d.LogEntries) > 0 {
+		logEntry = d.LogEntries[0]
+	}
+	return checkedEntry{hash: d.RecordHash, at: d.ChangedAt, logEntry: logEntry, link: &link, runID: d.RunID, deletedBy: d.DecidedBy}, nil
+}
+
+func ownerKeyOf(o *artifacts.OwnerSignature) string {
+	if o == nil {
+		return ""
+	}
+	return o.PublicKey
+}
+
+// checkOwnerBlocks applies the account owner's own settings to one event
+// (round 60): after the owner blocks owner-key replacement, a Verdifax change
+// to an owner key, or a request to replace it, fails the feed until the owner
+// allows it again; after the owner blocks Verdifax deletion, a deletion
+// Verdifax decided fails likewise. The account's first owner key, made when
+// Verdifax created the account, comes before any setting the owner can make,
+// so it never meets a block. A feed read from a later point sees only the
+// settings made from that point on.
+func checkOwnerBlocks(blocked map[string]bool, kind string, got *checkedEntry) string {
+	if c := got.change; c != nil && (c.Action == artifacts.AccountSettingOwnerReplace || c.Action == artifacts.AccountSettingVerdifaxDelete) {
+		blocked[c.Action] = c.Value == artifacts.SettingBlocked
+		return ""
+	}
+	verdifax := got.decidedBy == artifacts.DecidedByVerdifax
+	switch {
+	case verdifax && blocked[artifacts.AccountSettingOwnerReplace] &&
+		((kind == artifacts.SignalKeyCreated || kind == artifacts.SignalKeyRevoked) && got.keyScope == artifacts.KeyScopeOwner ||
+			got.change != nil && got.change.Action == artifacts.AccountOwnerKeyReplacement):
+		return "Verdifax changed the account's owner key after the owner blocked owner-key replacement"
+	case verdifax && blocked[artifacts.AccountSettingVerdifaxDelete] && kind == artifacts.SignalRunDeleted:
+		return "Verdifax deleted a record after the owner blocked Verdifax deletion"
+	}
+	return ""
+}
+
 // runSignalsMode is --signals run alone.
-func runSignalsMode(path, after string, asJSON, allowPartial bool) int {
+func runSignalsMode(path, after, ownerKeyFiles string, asJSON, allowPartial bool) int {
 	point, pointErr := parseSignalPoint(after)
 	if pointErr != nil {
 		fmt.Fprintln(os.Stderr, "verdifax-verify:", pointErr)
 		return 2
+	}
+	var ownerKeys []string
+	if ownerKeyFiles != "" {
+		for _, file := range strings.Split(ownerKeyFiles, ",") {
+			key := strings.TrimSpace(string(readFlagFile("owner-request-key", strings.TrimSpace(file))))
+			if raw, decodeErr := base64.StdEncoding.DecodeString(key); decodeErr != nil || len(raw) != 32 {
+				fmt.Fprintf(os.Stderr, "verdifax-verify: --owner-request-key: %s does not hold a base64 Ed25519 public key\n", strings.TrimSpace(file))
+				return 2
+			}
+			ownerKeys = append(ownerKeys, key)
+		}
 	}
 	data, readErr := os.ReadFile(path)
 	if readErr != nil {
 		fmt.Fprintln(os.Stderr, "verdifax-verify: read --signals:", readErr)
 		return 2
 	}
-	c := checkSignalFeed(data, point)
+	c := checkSignalFeedPinned(data, point, ownerKeys)
 	if asJSON {
 		encoded, _ := json.MarshalIndent(c, "", "  ")
 		fmt.Println(string(encoded))

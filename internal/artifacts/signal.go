@@ -41,6 +41,12 @@ const (
 	// one of the account's records public, or withdrew it.
 	SignalRunPublished   = "run.published"
 	SignalRunUnpublished = "run.unpublished"
+	// SignalAccountChanged: a change to the account's settings or to one of
+	// its keys' terms, by the owner or by Verdifax (round 60).
+	SignalAccountChanged = "account.changed"
+	// SignalRunDeleted: one of the account's records was deleted, by the
+	// owner or by Verdifax; the tombstone stays in the feed (round 60).
+	SignalRunDeleted = "run.deleted"
 
 	// SignalTypePrefix opens every CloudEvents type the feed emits.
 	SignalTypePrefix = "com.verdifax."
@@ -49,7 +55,8 @@ const (
 // SignalKinds lists every event kind, in a fixed order.
 var SignalKinds = []string{SignalRunRefused, SignalRunHalted, SignalRunFailed, SignalPolicyChanged,
 	SignalSignOffRecorded, SignalApproverRegistered, SignalApproverRevoked, SignalKeyCreated, SignalKeyRevoked,
-	SignalRunPublished, SignalRunUnpublished, SignalChainGap, SignalRunSealed, SignalChainInterrupted}
+	SignalRunPublished, SignalRunUnpublished, SignalChainGap, SignalRunSealed, SignalChainInterrupted,
+	SignalAccountChanged, SignalRunDeleted}
 
 // IsSignalKind reports a kind the feed emits.
 func IsSignalKind(kind string) bool {
@@ -101,25 +108,42 @@ func SignalEventHash(kind, entryHash string, link SignalLink) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Key changes. An approver key registered or revoked, or a member or feed key
-// created or revoked, is one record, anchored on the public log as its own
-// entry and carrying its place in the account's feed.
+// Key changes. An approver key registered or revoked, or a member, feed or
+// owner key created or revoked, is one record, anchored on the public log as
+// its own entry and carrying its place in the account's feed. v2 (round 60)
+// seals who decided: the account's owner, or a Verdifax admin key, so every
+// change Verdifax makes to an account's keys is in the account's feed.
 const (
-	// KeyChangeFormat is the format field of a key-change record.
-	KeyChangeFormat = "verdifax.key-change.v1"
+	// KeyChangeFormat is the format field of a key-change record: v2 seals
+	// decided_by.
+	KeyChangeFormat = "verdifax.key-change.v2"
+	// KeyChangeFormatV1 is the first format: every v1 change was the
+	// owner's, and v1 seals no decided_by.
+	KeyChangeFormatV1 = "verdifax.key-change.v1"
 	// KeyChangeKind is the leaf kind of its public-log entry.
 	KeyChangeKind = "key_change"
 
-	// KeyScopeRun, KeyScopeSignals and KeyScopeApprover name what the key is.
+	// KeyScopeRun, KeyScopeSignals, KeyScopeApprover and KeyScopeOwner name
+	// what the key is. Only Verdifax creates or revokes an owner key: at the
+	// account's creation and when it replaces a lost one.
 	KeyScopeRun      = "run"
 	KeyScopeSignals  = "signals"
 	KeyScopeApprover = "approver"
+	KeyScopeOwner    = "account"
+
+	// DecidedByOwner and DecidedByVerdifax name who decided an account
+	// record: the account's owner key, or a Verdifax admin key.
+	DecidedByOwner    = "owner"
+	DecidedByVerdifax = "verdifax_admin"
 )
 
 // KeyChange is one key added to or removed from an account.
 type KeyChange struct {
-	Format        string         `json:"format"`
-	Action        string         `json:"action"`
+	Format string `json:"format"`
+	Action string `json:"action"`
+	// DecidedBy is owner or verdifax_admin; sealed in v2 and absent from v1,
+	// whose every change was the owner's.
+	DecidedBy     string         `json:"decided_by,omitempty"`
 	KeyID         int64          `json:"key_id"`
 	KeyScope      string         `json:"key_scope"`
 	PublicKey     string         `json:"public_key,omitempty"`
@@ -133,17 +157,38 @@ type KeyChange struct {
 // ComputeHash returns the record's hash: every field but the hash and the
 // anchor, each length-prefixed.
 func (k *KeyChange) ComputeHash() string {
-	fields := append([]string{k.Format, k.Action, strconv.FormatInt(k.KeyID, 10), k.KeyScope, k.PublicKey,
-		k.Name, k.ChangedAt}, k.Signal.fields()...)
+	head := []string{k.Format, k.Action}
+	if k.Format != KeyChangeFormatV1 {
+		head = append(head, k.DecidedBy)
+	}
+	fields := append(append(head, strconv.FormatInt(k.KeyID, 10), k.KeyScope, k.PublicKey,
+		k.Name, k.ChangedAt), k.Signal.fields()...)
 	return lengthPrefixedHash(fields)
+}
+
+// Decider is who made the change: the sealed decided_by, or the owner for a
+// v1 record, which could only be the owner's.
+func (k *KeyChange) Decider() string {
+	if k.Format == KeyChangeFormatV1 {
+		return DecidedByOwner
+	}
+	return k.DecidedBy
 }
 
 // Validate checks the record's shape: every value its hash and leaf are built
 // from.
 func (k *KeyChange) Validate() error {
 	switch {
-	case k.Format != KeyChangeFormat:
+	case k.Format != KeyChangeFormat && k.Format != KeyChangeFormatV1:
 		return errors.New("key change: unknown format")
+	case k.Format == KeyChangeFormatV1 && k.DecidedBy != "":
+		return errors.New("key change: a v1 key change seals no decided_by")
+	case k.Format == KeyChangeFormat && k.DecidedBy != DecidedByOwner && k.DecidedBy != DecidedByVerdifax:
+		return errors.New("key change: decided_by must be owner or verdifax_admin")
+	case k.KeyScope == KeyScopeOwner && k.Decider() != DecidedByVerdifax:
+		return errors.New("key change: only Verdifax creates or revokes an owner key")
+	case k.KeyScope == KeyScopeOwner && k.Action != SignalKeyCreated && k.Action != SignalKeyRevoked:
+		return errors.New("key change: an owner key is created or revoked, never registered as an approver")
 	case k.Action != SignalApproverRegistered && k.Action != SignalApproverRevoked &&
 		k.Action != SignalKeyCreated && k.Action != SignalKeyRevoked:
 		return errors.New("key change: action must be approver.registered, approver.revoked, key.created or key.revoked")
@@ -151,8 +196,8 @@ func (k *KeyChange) Validate() error {
 		return errors.New("key change: key_id must be positive")
 	case (k.KeyScope == KeyScopeApprover) != (k.Action == SignalApproverRegistered || k.Action == SignalApproverRevoked):
 		return errors.New("key change: an approver action names an approver key, and only an approver action does")
-	case k.KeyScope != KeyScopeRun && k.KeyScope != KeyScopeSignals && k.KeyScope != KeyScopeApprover:
-		return errors.New("key change: key_scope must be run, signals or approver")
+	case k.KeyScope != KeyScopeRun && k.KeyScope != KeyScopeSignals && k.KeyScope != KeyScopeApprover && k.KeyScope != KeyScopeOwner:
+		return errors.New("key change: key_scope must be run, signals, approver or account")
 	case (k.KeyScope == KeyScopeApprover) != (k.PublicKey != ""):
 		return errors.New("key change: an approver key names its public key, and only an approver key does")
 	case k.PublicKey != "" && !validBase64Len(k.PublicKey, 32):
@@ -187,8 +232,8 @@ const (
 	// PublicationByOwner and PublicationByVerdifax name who decided: the
 	// account's owner key, or a Verdifax admin key, which withdraws any
 	// public record and publishes only records it made itself (R160).
-	PublicationByOwner    = "owner"
-	PublicationByVerdifax = "verdifax_admin"
+	PublicationByOwner    = DecidedByOwner
+	PublicationByVerdifax = DecidedByVerdifax
 	// RunPublicationKind is the leaf kind of its public-log entry.
 	RunPublicationKind = "run_publication"
 )

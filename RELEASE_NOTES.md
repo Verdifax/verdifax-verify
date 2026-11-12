@@ -2,6 +2,34 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.33.0: everything changed in an account is in its feed, with who decided
+
+- `--signals` reads two new kinds of event, each anchored as its own entry:
+  `account.changed` (`verdifax.account-change.v1`), a setting the owner made
+  or a change Verdifax made (the account's creation, a key's terms, a
+  cleared request key or a request to replace the owner key), and `run.deleted`
+  (`verdifax.run-deletion.v1`), the tombstone of a deleted record, naming the
+  run and its record hash.
+- Key changes in `verdifax.key-change.v2` seal `decided_by`, `owner` or
+  `verdifax_admin`; v1 records read as the owner's. Only Verdifax creates or
+  revokes an owner key, so an owner-key change decided by the owner fails.
+- A change the owner decides carries the owner's request-key signature,
+  which the verifier checks; the report names the signing key as
+  `owner_signed_by` and lists every such key in `owner_signing_keys`.
+  `--owner-request-key FILE` pins the owner's own keys: a feed with an owner
+  change signed by any other key fails. A Verdifax change carrying an owner
+  signature fails.
+- The owner's blocks hold in the feed: a Verdifax change to the owner key, a
+  replacement request or a Verdifax deletion after the owner's block, with no
+  later allow, fails the feed.
+- A tombstone names the deleted record's public-log entries. An event whose
+  record was deleted is served with the tombstone in place of its entry; the
+  verifier checks the tombstone and the event's hash against the record hash
+  it seals, and reports `record_deleted_by`. A tombstone on any other kind of
+  event, for another run, or beside an entry fails.
+- Each feed entry in the JSON report names `decided_by` on these kinds,
+  `change` and `value` on an account change, and `key_scope` on a key change.
+
 ### v0.32.0: a required sign-off not shown has its own verdict
 
 - A record whose rule requires a person's sign-off, checked with no
@@ -37,7 +65,9 @@ Newest first. The [README](./README.md) describes the current release.
   sign-offs name a result, for the verifier and the server alike.
 - `GET /account/signoffs/history` ends with a head statement,
   `verdifax.signoff-head.v1`, which Verdifax anchors on the public log: the
-  chain's highest place and its newest sign-off's hash. `--signoff-history`
+  chain's highest place and its newest sign-off's hash. The head is there
+  when the chain holds a place and Verdifax could store and anchor the
+  head; otherwise the history is served without one. `--signoff-history`
   checks it against the chain and reports the history complete as of the
   entry's integration time; a history that ends below the head's place
   fails. Without a head the report says a later sign-off may exist.
@@ -46,8 +76,10 @@ Newest first. The [README](./README.md) describes the current release.
   that time.
 - A record sealed from this release on carries `signoff_required` in its
   policy gate when its rule requires a sign-off, so the requirement is
-  checked without the policy document. A policy document given must agree
-  with the seal. Earlier releases refuse the new field, as format stability
+  checked without the policy document. A policy document given that says
+  the rule requires no sign-off, where the record seals that it does,
+  fails; a document that requires a sign-off the record does not seal adds
+  its requirement. Earlier releases refuse the new field, as format stability
   describes.
 
 ### v0.30.0: a required sign-off, declared data quality, sign-offs matched with the history, and the oldest records read as sealed
@@ -82,8 +114,8 @@ Newest first. The [README](./README.md) describes the current release.
   its entry before then, so a later record with its section removed still
   fails. Genuine records this concerns: runs 132 to 135, 138 to 140 and 153
   to 157, sealed from May 5 to May 10, 2026. Runs 132 to 140 still fail,
-  because they were logged under a development key that was never
-  published.
+  because their public-log anchor carries no log identifier (the verifier
+  reports `LogID is empty`).
 
 Records sealed before this release hash exactly as before, except those
 sealed before 2026-05-11T02:02:16Z with no reproducibility section, which
@@ -394,8 +426,10 @@ minutes 11 seconds.
 v0.17.13 switched each of three copy groups off for every record
 anchored before one boundary, but the server's stored records show it
 wrote some of those copies equal before the boundary too: runs 202 to
-212 wrote the proof section's checkpoint equal to the anchor's, and
-runs 132 to 139 wrote the PIA hash as the fifth execution id. On run 208
+212 wrote the proof section's checkpoint equal to the anchor's. Runs 132
+to 139 sealed no AI review, so the PIA hash group, which is compared
+only where the review ran, never applies to them, and its window starts
+at run 140. On run 208
 (June 2, 2026) in internal/artifacts/testdata the checkpoint copy,
 written equal, was left uncompared, so a rewrite of it alone verified;
 v0.17.12 had compared it. Each group is now switched off only inside the
@@ -437,7 +471,8 @@ hardware run and run 249 are unchanged.
 ### v0.17.12: the same verification code; allocation sizes no longer computed
 
 The four digest helpers in internal/artifacts/sealing.go sized their
-part lists from a length times two plus one, which CodeQL reports as an
+part lists in advance, three from a length times two plus one and one
+from a length plus one, which CodeQL reports as an
 allocation size that may overflow (four open alerts on the repository
 since October 26, 2026). The tables are a few dozen rows, so no
 overflow was reachable, but the lists now grow by appending instead of
@@ -724,10 +759,11 @@ identifier and the caller's digest where a record carries its execution
 record hash. v0.15.1 and earlier would accept a record built around such
 an entry and report it as VERIFIED AND ANCHORED with partial coverage
 (the pre-v5 tier; never complete-record coverage, which needs a second
-entry of a form `/attest` never produces). v0.15.2 fails any anchored
-record whose envelope identifier is not a run envelope identifier
-(`env-` followed by the first sixteen hex characters of the payload's
-admission hash), and any record in a pre-table leaf form (v1, v2 or v3) whose
+entry of a form `/attest` never produces). v0.15.2 fails any record
+anchored on the public log whose envelope identifier is not in the run
+envelope form (`env-` followed by sixteen lowercase hex characters, which
+the server takes from the payload's admission hash; the check reads the
+form and does not recompute that hash), and any record in a pre-table leaf form (v1, v2 or v3) whose
 entry the log integrated at or after run 236's first entry
 (2026-10-15T19:51:06Z). Every genuine record keeps its verdict; a test
 builds the forgery and checks it fails.

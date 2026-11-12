@@ -28,6 +28,58 @@ type feedBuilder struct {
 	events   []signalCloudEvent
 	previous string
 	runID    int64
+	// byVerdifax makes the next key changes, account changes and deletions
+	// Verdifax's; v1KeyChanges writes key changes in the first format.
+	byVerdifax, v1KeyChanges bool
+}
+
+func (f *feedBuilder) decidedBy() string {
+	if f.byVerdifax {
+		return artifacts.DecidedByVerdifax
+	}
+	return artifacts.DecidedByOwner
+}
+
+// ownerKey signs the owner's changes in the test feeds.
+var ownerKey = ed25519.NewKeyFromSeed([]byte(strings.Repeat("o", 32)))
+
+func ownerSignature(change, subject string) *artifacts.OwnerSignature {
+	o := &artifacts.OwnerSignature{PublicKey: base64.StdEncoding.EncodeToString(ownerKey.Public().(ed25519.PublicKey)),
+		SignedAt: feedStart.Format(time.RFC3339), Nonce: strings.Repeat("0b", 16)}
+	o.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(ownerKey, artifacts.OwnerChangePreimage(feedAccount, change, subject, o.SignedAt, o.Nonce)))
+	return o
+}
+
+// accountChange adds one account change.
+func (f *feedBuilder) accountChange(action string, keyID int64, value string) {
+	link, at := f.next()
+	c := artifacts.AccountChange{Format: artifacts.AccountChangeFormat, Action: action, DecidedBy: f.decidedBy(), KeyID: keyID,
+		Value: value, ChangedAt: at.Format(time.RFC3339Nano), Signal: link}
+	if !f.byVerdifax {
+		c.OwnerSignature = ownerSignature(action, value)
+	}
+	c.AccountChangeHash = c.ComputeHash()
+	c.Anchor = f.anchor(artifacts.AccountChangeKind, c.AccountChangeHash, c.LeafHash(), at)
+	f.add(artifacts.SignalAccountChanged, link, c.AccountChangeHash, 0, c)
+}
+
+// runDeletion adds one record's tombstone.
+func (f *feedBuilder) runDeletion(runID int64) *artifacts.RunDeletion {
+	return f.runDeletionOf(runID, strings.Repeat("e", 64))
+}
+
+// runDeletionOf adds the tombstone of a record with the given hash.
+func (f *feedBuilder) runDeletionOf(runID int64, recordHash string) *artifacts.RunDeletion {
+	link, at := f.next()
+	d := artifacts.RunDeletion{Format: artifacts.RunDeletionFormat, DecidedBy: f.decidedBy(), RunID: runID,
+		RecordHash: recordHash, LogEntries: []string{"123456789001"}, ChangedAt: at.Format(time.RFC3339Nano), Signal: link}
+	if !f.byVerdifax {
+		d.OwnerSignature = ownerSignature(artifacts.SignalRunDeleted, d.DeletionSubject())
+	}
+	d.DeletionHash = d.ComputeHash()
+	d.Anchor = f.anchor(artifacts.RunDeletionKind, d.DeletionHash, d.LeafHash(), at)
+	f.add(artifacts.SignalRunDeleted, link, d.DeletionHash, runID, d)
+	return &d
 }
 
 func newFeedBuilder(t *testing.T) *feedBuilder {
@@ -113,8 +165,11 @@ func (f *feedBuilder) signOff() {
 // keyChange adds a key created or revoked.
 func (f *feedBuilder) keyChange(action, scope string) {
 	link, at := f.next()
-	k := artifacts.KeyChange{Format: artifacts.KeyChangeFormat, Action: action, KeyID: 40 + link.Sequence, KeyScope: scope,
+	k := artifacts.KeyChange{Format: artifacts.KeyChangeFormat, Action: action, DecidedBy: f.decidedBy(), KeyID: 40 + link.Sequence, KeyScope: scope,
 		Name: "feed reader", ChangedAt: at.Format(time.RFC3339Nano), Signal: link}
+	if f.v1KeyChanges {
+		k.Format, k.DecidedBy = artifacts.KeyChangeFormatV1, ""
+	}
 	if scope == artifacts.KeyScopeApprover {
 		pub, _, _ := ed25519.GenerateKey(rand.Reader)
 		k.PublicKey = base64.StdEncoding.EncodeToString(pub)
@@ -364,7 +419,7 @@ func TestRunPublicationsValidate(t *testing.T) {
 
 func TestKeyChangesAndFailureReceiptsValidate(t *testing.T) {
 	link := artifacts.SignalLink{Account: feedAccount, Sequence: 1, PreviousSignalHash: artifacts.NoPreviousSignal}
-	good := artifacts.KeyChange{Format: artifacts.KeyChangeFormat, Action: artifacts.SignalKeyCreated, KeyID: 4, KeyScope: artifacts.KeyScopeSignals,
+	good := artifacts.KeyChange{Format: artifacts.KeyChangeFormat, DecidedBy: artifacts.DecidedByOwner, Action: artifacts.SignalKeyCreated, KeyID: 4, KeyScope: artifacts.KeyScopeSignals,
 		Name: "n", ChangedAt: feedStart.Format(time.RFC3339), Signal: link}
 	good.KeyChangeHash = good.ComputeHash()
 	if err := good.Validate(); err != nil {
@@ -466,17 +521,17 @@ func TestAnEventWithoutItsOwnLogEntryIsCommittedByALaterOne(t *testing.T) {
 	if err := os.WriteFile(path, feedBody(t, gaps), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if code := runSignalsMode(path, "", true, false); code != 3 {
+	if code := runSignalsMode(path, "", "", true, false); code != 3 {
 		t.Fatalf("a feed committed in part by later entries exits %d, want 3", code)
 	}
-	if code := runSignalsMode(path, "", true, true); code != 0 {
+	if code := runSignalsMode(path, "", "", true, true); code != 0 {
 		t.Fatalf("with --allow-partial it exits %d, want 0", code)
 	}
 	whole := filepath.Join(t.TempDir(), "whole.json")
 	if err := os.WriteFile(whole, feedBody(t, events), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if code := runSignalsMode(whole, "", true, false); code != 0 {
+	if code := runSignalsMode(whole, "", "", true, false); code != 0 {
 		t.Fatalf("a fully logged feed exits %d", code)
 	}
 

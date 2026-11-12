@@ -104,7 +104,7 @@ func TestAFeedSkipsPlacesOnlyThroughADeclaredRestoreGap(t *testing.T) {
 	g.keyChange(artifacts.SignalKeyCreated, artifacts.KeyScopeSignals)
 	g.runSealed()
 	link := artifacts.SignalLink{Account: feedAccount, Sequence: 103, PreviousSignalHash: g.previous}
-	k := artifacts.KeyChange{Format: artifacts.KeyChangeFormat, Action: artifacts.SignalKeyRevoked, KeyID: 77, KeyScope: artifacts.KeyScopeRun,
+	k := artifacts.KeyChange{Format: artifacts.KeyChangeFormat, DecidedBy: artifacts.DecidedByOwner, Action: artifacts.SignalKeyRevoked, KeyID: 77, KeyScope: artifacts.KeyScopeRun,
 		Name: "member", ChangedAt: feedStart.Add(103 * time.Minute).Format(time.RFC3339Nano), Signal: link}
 	k.KeyChangeHash = k.ComputeHash()
 	k.Anchor = g.anchor(artifacts.KeyChangeKind, k.KeyChangeHash, k.LeafHash(), feedStart.Add(103*time.Minute))

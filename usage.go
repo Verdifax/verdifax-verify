@@ -83,9 +83,17 @@ FLAGS
                           the public log as its kind, seal its place in the
                           feed and link to the event before it without a
                           gap. It shows the signals Verdifax recorded, not
-                          ones it never recorded. Runs alone with no record
+                          ones it never recorded. Every account change and
+                          deletion names who decided; an owner's carries
+                          the owner's request-key signature, and a Verdifax
+                          change after the owner's block fails. Runs alone
+                          with no record
   -signals-after N:hash   with -signals, the last event already read: the
                           feed must continue from it
+  -owner-request-key FILE with -signals, the owner key's request key (base64
+                          Ed25519 public key), or several files separated
+                          by commas: fails unless one of them signed every
+                          change the owner decided
   -signer-key FILE       pass only if the run was requested by the holder
                           of this base64 Ed25519 public key
   -request FILE           pass only if the record's version 2 signature

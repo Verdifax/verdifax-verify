@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.32.0"
+const Version = "0.33.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -218,6 +218,7 @@ type options struct {
 	strictSignOff   *bool
 	signals         *string
 	signalsAfter    *string
+	ownerRequestKey *string
 	tamperTest      *bool
 	recomputeHashes *bool
 	showEvidence    *bool
@@ -243,6 +244,7 @@ func defineFlags(fs *flag.FlagSet) options {
 		approverKey:     fs.String("approver-key", "", "with --signoff, a file holding the base64 Ed25519 public key you expect signed the decision in force; fails unless it did"),
 		signals:         fs.String("signals", "", "an account's signal feed, the body of GET /signals: every event's entry must verify as its kind on the public log, seal its place in the feed, belong to one account, and link to the event before it without a gap; runs alone with no record"),
 		signalsAfter:    fs.String("signals-after", "", "with --signals, N:hash, the last event a system already read: the feed must continue from it"),
+		ownerRequestKey: fs.String("owner-request-key", "", "with --signals, a file holding the base64 Ed25519 public key of the owner key's request key, or several such files separated by commas (the keys it has had): fails unless every change the owner decided in the feed is signed by one of them"),
 		signOffHistory:  fs.String("signoff-history", "", "a JSON list of an account's sign-offs, oldest first: every sign-off and link must verify, in one account; runs alone with no record"),
 		strictSignOff:   fs.Bool("strict-signoff", false, "fail (exit 1) a record whose rule requires a person's sign-off when no sign-offs are given; without this flag such a record, if every other check passes, reads ANCHORED, SIGN-OFF NOT SHOWN and exits 4"),
 		jobFolder:       fs.String("job", "", "a folder of one job's records: check each record, then the map of links between them"),
@@ -281,8 +283,8 @@ func main() {
 	if *o.accountHistory != "" && flag.NArg() == 0 {
 		os.Exit(runAccountHistoryMode(*o.accountHistory, *jsonOutput))
 	}
-	if *o.signalsAfter != "" && *o.signals == "" {
-		fmt.Fprintln(os.Stderr, "verdifax-verify: --signals-after applies only with --signals")
+	if (*o.signalsAfter != "" || *o.ownerRequestKey != "") && *o.signals == "" {
+		fmt.Fprintln(os.Stderr, "verdifax-verify: --signals-after and --owner-request-key apply only with --signals")
 		os.Exit(2)
 	}
 	if *o.signals != "" && flag.NArg() > 0 {
@@ -290,7 +292,7 @@ func main() {
 		os.Exit(2)
 	}
 	if *o.signals != "" {
-		os.Exit(runSignalsMode(*o.signals, *o.signalsAfter, *jsonOutput, *allowPartial))
+		os.Exit(runSignalsMode(*o.signals, *o.signalsAfter, *o.ownerRequestKey, *jsonOutput, *allowPartial))
 	}
 	if *o.signOffHistory != "" && flag.NArg() == 0 && *o.signOff == "" {
 		os.Exit(runSignOffHistoryMode(*o.signOffHistory, *jsonOutput))
@@ -849,7 +851,7 @@ const (
 var flagInputKinds = map[string]string{
 	"json": inputBoth, "version": inputBoth, "allow-unanchored": inputBoth,
 	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
-	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "strict-signoff": inputBundle, "signals": inputBoth, "signals-after": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
+	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "strict-signoff": inputBundle, "signals": inputBoth, "signals-after": inputBoth, "owner-request-key": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
 	"self-hosted-receipt": inputReceipt,
 }
 
