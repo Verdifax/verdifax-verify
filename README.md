@@ -110,9 +110,11 @@ misplaced `--policy` can never pass as "checked".
 | 1 | One or more verification checks failed (or `--strict` + scaffold), including JSON that strict reading refuses as malformed or ambiguous. |
 | 2 | The input could not be read (a missing file or a failed download), it was read but could not be decoded as a bundle or receipt, or a flag was given that does not apply to the input's kind (since v0.17.11, instead of being ignored). |
 | 3 | Every check passed, but the public log covers only part of the record (a record sealed before leaf v5, or one without a verified complete-record anchor), and `--allow-partial` was not given. Since v0.16.0. |
+| 4 | Every check passed and the complete record is anchored, but its rule requires a person's sign-off and no sign-offs were given: the verdict is `ANCHORED, SIGN-OFF NOT SHOWN`, and `--strict-signoff` was not given. Since v0.32.0. |
 
 A script that treats exit 0 as a pass accepts only complete-record
-anchored records. Until v0.15.3 a partial record exited 0, although its
+anchored records, and among them only those whose required sign-off is
+shown in force. Until v0.15.3 a partial record exited 0, although its
 descriptive sections, the decision among them, could have been rewritten
 together with their hashes.
 
@@ -156,7 +158,7 @@ anchored identity values are covered.
 Since v0.17.9 the verifier checks that copies of a value the record
 stores more than once agree, and a record whose copies disagree fails,
 so a reader of any checked copy reads the value the public-log entry or
-AMD's report binds. The copies it checks are the 37 copy groups and one list group listed in
+AMD's report binds. The copies it checks are the 48 copy groups and one list group listed in
 `boundcopies.go`: the envelope identifier in the envelope, transport and
 AER sections; each section's sealed hash and its copy in the final VFA
 (and, for the envelope, in the transport section); the AER hash in the
@@ -850,9 +852,16 @@ history without a head still verifies as a chain, and the report says a
 later sign-off may exist.
 
 A policy rule may require a sign-off with `"signoff": {"required": true}`
-(since v0.30.0). The verifier then fails the record unless an approving
-sign-off is in force on it, shown by `--signoff` and `--signoff-history`
-together, and the report names the rule. Since v0.31.0 the record seals
+(since v0.30.0). The record then passes only when an approving sign-off is
+in force on it, shown by `--signoff` and `--signoff-history` together, and
+the report names the rule. Since v0.32.0, a record given with no sign-offs
+at all, whose every other check passes and whose complete record is
+anchored, reads `ANCHORED, SIGN-OFF NOT SHOWN` and exits 4: every check of
+the record passed, and it does not show whether an approval is in force. It never
+reads VERIFIED or exits 0. `--strict-signoff` fails it instead, exit 1, as
+v0.30.0 and v0.31.0 did. Sign-offs given without the history, a rejection
+or no approval in force, a sign-off left out, and a history cut short or
+without its head fail with exit 1 whatever the flags. Since v0.31.0 the record seals
 the requirement itself (`signoff_required` in its policy gate), so no
 policy document is needed; one given with `--policy` or `--account-policy`
 must agree with the seal, and shows the requirement of an older record.

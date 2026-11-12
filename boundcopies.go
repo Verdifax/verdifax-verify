@@ -225,6 +225,14 @@ var (
 		why: "the time the log signed the first entry; its signed entry timestamp covers it"}
 	executionRecordGate = copyGate{path: "execution_record", deleted: true, active: hasExecutionRecord,
 		why: "the execution record's rows are bound by the public-log entry from leaf v5 on and by the report-data recipe on the hardware run"}
+	// Round 59: the verb's source is the attested decision kind when the
+	// caller attested one, else the route; writing a kind in, or deleting
+	// one, moves the comparison to the other group, which then compares the
+	// gates' verb with the new source.
+	decisionKindGate = copyGate{path: "epa.attested_context.decision_kind", off: "approve", active: func(b *artifacts.AuditBundle) bool { return b.EPA.AttestedContext.DecisionKind == "" },
+		why: "the attested context is part of the EPA section, whose hash the anchored pre-anchor table binds; a decision kind written in moves the verb's source to it, and the second verb group then compares the gates' verb with that kind"}
+	routeVerbGate = copyGate{path: "epa.attested_context.decision_kind", deleted: true, active: func(b *artifacts.AuditBundle) bool { return b.EPA.AttestedContext.DecisionKind != "" },
+		why: "the attested context is part of the EPA section, whose hash the anchored pre-anchor table binds; a decision kind deleted moves the verb's source to the route, and the first verb group then compares the gates' verb with the route"}
 	clockGate = copyGate{path: "envelope.timestamp", off: "2026-10-17T00:00:00Z", active: transcriptFromProof,
 		why: "the clock is read from the anchored table's clock_epoch row when the record has one (bound by the entry's leaf); the envelope timestamp is one copy of the record clock, whose copies the EPA hash in the table binds"}
 )
@@ -457,6 +465,105 @@ var boundCopyGroups = []boundCopyGroup{
 		value: func(b *artifacts.AuditBundle) []*string {
 			return []*string{&b.SystemProvenance.Hash, &b.SystemProvenance.Seal.SealedHash}
 		}},
+	// Round 59: the key's policy gate and the account's evaluate the same
+	// request, so they seal the same inputs, the rate counts aside, which each
+	// gate keeps for its own chain (measured on 216 stored records with both
+	// gates, November 12, 2026). A gate carrying no inputs compares nothing.
+	{paths: []string{"epa.policy_gate.inputs.subject_id", "epa.account_policy_gate.inputs.subject_id"},
+		value: func(b *artifacts.AuditBundle) []*string {
+			k, a := gateInputs(b)
+			return []*string{inputField(k, func(in *artifacts.PolicyInputs) string { return in.SubjectID }), inputField(a, func(in *artifacts.PolicyInputs) string { return in.SubjectID })}
+		}},
+	{paths: []string{"epa.policy_gate.inputs.subject_type", "epa.account_policy_gate.inputs.subject_type"},
+		value: func(b *artifacts.AuditBundle) []*string {
+			k, a := gateInputs(b)
+			return []*string{inputField(k, func(in *artifacts.PolicyInputs) string { return in.SubjectType }), inputField(a, func(in *artifacts.PolicyInputs) string { return in.SubjectType })}
+		}},
+	{paths: []string{"epa.policy_gate.inputs.subject_role", "epa.account_policy_gate.inputs.subject_role"},
+		value: func(b *artifacts.AuditBundle) []*string {
+			k, a := gateInputs(b)
+			return []*string{inputField(k, func(in *artifacts.PolicyInputs) string { return in.SubjectRole }), inputField(a, func(in *artifacts.PolicyInputs) string { return in.SubjectRole })}
+		}},
+	{paths: []string{"epa.policy_gate.inputs.object_type", "epa.account_policy_gate.inputs.object_type"},
+		value: func(b *artifacts.AuditBundle) []*string {
+			k, a := gateInputs(b)
+			return []*string{inputField(k, func(in *artifacts.PolicyInputs) string { return in.ObjectType }), inputField(a, func(in *artifacts.PolicyInputs) string { return in.ObjectType })}
+		}},
+	{paths: []string{"epa.policy_gate.inputs.object_id", "epa.account_policy_gate.inputs.object_id"},
+		value: func(b *artifacts.AuditBundle) []*string {
+			k, a := gateInputs(b)
+			return []*string{inputField(k, func(in *artifacts.PolicyInputs) string { return in.ObjectID }), inputField(a, func(in *artifacts.PolicyInputs) string { return in.ObjectID })}
+		}},
+	{paths: []string{"epa.policy_gate.inputs.classification", "epa.account_policy_gate.inputs.classification"},
+		value: func(b *artifacts.AuditBundle) []*string {
+			k, a := gateInputs(b)
+			return []*string{inputField(k, func(in *artifacts.PolicyInputs) string { return in.Classification }), inputField(a, func(in *artifacts.PolicyInputs) string { return in.Classification })}
+		}},
+	{paths: []string{"epa.policy_gate.inputs.data_quality.source", "epa.account_policy_gate.inputs.data_quality.source"},
+		value: func(b *artifacts.AuditBundle) []*string {
+			k, a := gateInputs(b)
+			return []*string{dataQualityField(k, func(d *artifacts.DataQuality) string { return d.Source }), dataQualityField(a, func(d *artifacts.DataQuality) string { return d.Source })}
+		}},
+	{paths: []string{"epa.policy_gate.inputs.data_quality.as_of", "epa.account_policy_gate.inputs.data_quality.as_of"},
+		value: func(b *artifacts.AuditBundle) []*string {
+			k, a := gateInputs(b)
+			return []*string{dataQualityField(k, func(d *artifacts.DataQuality) string { return d.AsOf }), dataQualityField(a, func(d *artifacts.DataQuality) string { return d.AsOf })}
+		}},
+	// The verb the rules read is the attested decision kind, or the route when
+	// the caller attested none (psl mapping, section 8.5), and the gates
+	// evaluate at the run clock that the request signature records (both
+	// measured on every stored record with inputs, November 12, 2026).
+	{paths: []string{"envelope.route_id", "epa.policy_gate.inputs.verb", "epa.account_policy_gate.inputs.verb"}, gates: []copyGate{decisionKindGate},
+		value: func(b *artifacts.AuditBundle) []*string {
+			k, a := gateInputs(b)
+			verb := func(in *artifacts.PolicyInputs) string { return in.Verb }
+			return []*string{whenCarried(b.EPA.AttestedContext.DecisionKind == "", b.Envelope.RouteID), inputField(k, verb), inputField(a, verb)}
+		}},
+	{paths: []string{"epa.attested_context.decision_kind", "epa.policy_gate.inputs.verb", "epa.account_policy_gate.inputs.verb"}, gates: []copyGate{routeVerbGate},
+		value: func(b *artifacts.AuditBundle) []*string {
+			if b.EPA.AttestedContext.DecisionKind == "" {
+				return []*string{nil, nil, nil}
+			}
+			k, a := gateInputs(b)
+			verb := func(in *artifacts.PolicyInputs) string { return in.Verb }
+			return []*string{&b.EPA.AttestedContext.DecisionKind, inputField(k, verb), inputField(a, verb)}
+		}},
+	{paths: []string{"nrep.signed_at", "epa.policy_gate.inputs.evaluated_at", "epa.account_policy_gate.inputs.evaluated_at"},
+		value: func(b *artifacts.AuditBundle) []*string {
+			k, a := gateInputs(b)
+			at := func(in *artifacts.PolicyInputs) string { return in.EvaluatedAt }
+			return []*string{nonEmpty(b.Nrep.SignedAt), inputField(k, at), inputField(a, at)}
+		}},
+}
+
+// gateInputs returns the inputs the key's policy gate and the account's seal,
+// each nil when the record carries none.
+func gateInputs(b *artifacts.AuditBundle) (key, account *artifacts.PolicyInputs) {
+	if g := b.EPA.PolicyGate; g != nil {
+		key = g.Inputs
+	}
+	if g := b.EPA.AccountPolicyGate; g != nil {
+		account = g.Inputs
+	}
+	return key, account
+}
+
+// inputField is one sealed input as a copy, or nil when the gate carries no
+// inputs or the field is empty (omitted from the record).
+func inputField(in *artifacts.PolicyInputs, field func(*artifacts.PolicyInputs) string) *string {
+	if in == nil {
+		return nil
+	}
+	return nonEmpty(field(in))
+}
+
+// dataQualityField is one sealed data-quality value as a copy, or nil when
+// the gate declares none.
+func dataQualityField(in *artifacts.PolicyInputs, field func(*artifacts.DataQuality) string) *string {
+	if in == nil || in.DataQuality == nil {
+		return nil
+	}
+	return nonEmpty(field(in.DataQuality))
 }
 
 // execRecordField returns a pointer to one hash of the execution record,

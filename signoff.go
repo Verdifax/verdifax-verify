@@ -429,9 +429,14 @@ type SignOffRequirementCheck struct {
 	// otherwise only the policy document given shows it.
 	Sealed bool `json:"sealed,omitempty"`
 	// AsOf is when the history given was complete, by its head statement.
-	AsOf   string `json:"as_of,omitempty"`
-	OK     bool   `json:"ok"`
-	Reason string `json:"reason,omitempty"`
+	AsOf string `json:"as_of,omitempty"`
+	// NotShown says no sign-offs were given at all, so the record does not
+	// show whether an approval is in force; a sign-off given that does not
+	// show one, a left-out sign-off and a history that cannot show it is
+	// complete fail instead.
+	NotShown bool   `json:"not_shown,omitempty"`
+	OK       bool   `json:"ok"`
+	Reason   string `json:"reason,omitempty"`
 }
 
 // signOffRequirement checks a run whose allowing rule requires a person's
@@ -468,6 +473,9 @@ func signOffRequirement(r *Report, b *artifacts.AuditBundle) *SignOffRequirement
 		}
 	}
 	switch {
+	case r.SignOffs == nil && r.SignOffHistory == nil:
+		c.NotShown = true
+		c.Reason = fmt.Sprintf("rule %q requires a person's sign-off on this result, and no sign-offs were given; pass --signoff (GET /runs/{id}/signoffs) and --signoff-history (the account's whole chain, GET /account/signoffs/history) to show whether an approval is in force", rule)
 	case r.SignOffs == nil || r.SignOffHistory == nil:
 		c.Reason = fmt.Sprintf("rule %q requires a person's sign-off on this result; pass --signoff (GET /runs/{id}/signoffs) and --signoff-history (the account's whole chain, GET /account/signoffs/history) so that a later decision cannot be left out", rule)
 	case !r.SignOffs.OK:
@@ -496,6 +504,10 @@ func printSignOffRequirement(c *SignOffRequirementCheck) {
 		fmt.Printf("  %-18s✓ rule %q requires a person's sign-off; an approval is in force as of %s, matched with the account's history\n", "Sign-off rule:", c.Rule, c.AsOf)
 		return
 	}
+	if c.NotShown {
+		fmt.Printf("  %-18s⚠ NOT SHOWN · %s\n", "Sign-off rule:", c.Reason)
+		return
+	}
 	fmt.Printf("  %-18s✗ FAILED · %s\n", "Sign-off rule:", c.Reason)
 }
 
@@ -504,6 +516,11 @@ func printSignOffRequirement(c *SignOffRequirementCheck) {
 func applySignOffFlags(r *Report, b *artifacts.AuditBundle, signOffPath, approverPath, historyPath string) {
 	defer func() {
 		if r.SignOffRequirement = signOffRequirement(r, b); r.SignOffRequirement != nil && !r.SignOffRequirement.OK {
+			if r.SignOffRequirement.NotShown {
+				// Settled once every other check has run (finishSignOffNotShown).
+				r.SignOffNotShown = true
+				return
+			}
 			r.AllPassed, r.VerdictTier, r.RecordCoverage = false, "FAILED", "failed"
 		}
 	}()

@@ -34,6 +34,14 @@ var fixtureVerdicts = []fixtureVerdict{
 	{"internal/artifacts/testdata/golden-bundle-run-208.json", "genuine", "ANCHORED_PARTIAL_COVERAGE", 3},
 	{"internal/artifacts/testdata/run-235-v3-bundle.json", "synthetic", "FAILED", 1},
 	{"testdata/policy-gate/orchestrator-mock-allowed-run.json", "synthetic", "SELF_CONSISTENT_NOT_ANCHORED", 1},
+	// Round 59: a production record whose rule requires a person's sign-off,
+	// checked alone, with no sign-offs given (owner decision, November 12).
+	{"testdata/round59/run-3235-signoff-required.json", "genuine", "ANCHORED_SIGNOFF_NOT_SHOWN", 4},
+	// Round 59: a customer key policy's allowed run, which seals the policy's
+	// activation, and an account policy's refusal, whose receipt context
+	// names the account and both policies; production records of November 12.
+	{"testdata/round59/run-3223-key-policy.json", "genuine", "VERIFIED_ANCHORED", 0},
+	{"testdata/round59/run-3236-account-refusal-receipt.json", "genuine", "VERIFIED_ANCHORED", 0},
 	{"testdata/policy-gate/builtin-allowed.json", "synthetic", "SELF_CONSISTENT_NOT_ANCHORED", 1},
 	// A test server's refusal, issued after receipts began sealing
 	// anchor_required, carries no anchor, so the verifier fails it.
@@ -240,6 +248,8 @@ var genuineForgerRewritable = map[string]forgerPin{
 	"testdata/round7/run-238-intact.json":                    {2, "182fec3ff095b6c2e27f7aa941adccd1ca7882f7437cf3d8a585d93578d37cd6"},
 	"testdata/round8/hardware-run-2026-10.json":              {291, "dce55fc168ad92eea3886fd0d161b5a3f5efdb7851085d30d33c57939487f54b"},
 	"testdata/round8/run-239-intact.json":                    {0, noPaths},
+	"testdata/round59/run-3235-signoff-required.json":        {0, noPaths},
+	"testdata/round59/run-3223-key-policy.json":              {0, noPaths},
 }
 
 func TestEveryGenuineFixtureKeepsItsForgerResult(t *testing.T) {

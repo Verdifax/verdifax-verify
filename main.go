@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.31.0"
+const Version = "0.32.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -166,6 +166,12 @@ type Report struct {
 	// allowed the run requires (round 58, B7): present only when the rules,
 	// run again from --policy or --account-policy, show such a rule fired.
 	SignOffRequirement *SignOffRequirementCheck `json:"signoff_requirement,omitempty"`
+	// SignOffNotShown says the rule that allowed the run requires a person's
+	// sign-off and no sign-offs were given (round 59, owner decision of
+	// November 12, 2026): every other check passed, so the record is intact,
+	// and the verdict is ANCHORED, SIGN-OFF NOT SHOWN with exit code 4, never
+	// VERIFIED and never 0. --strict-signoff makes it FAILED, exit code 1.
+	SignOffNotShown bool `json:"signoff_not_shown,omitempty"`
 	// RecordValues are the decision-bearing values as checked (v0.12.1).
 	RecordValues RecordValues `json:"record_values"`
 	CrossChecks  []string     `json:"cross_check_failures,omitempty"`
@@ -209,6 +215,7 @@ type options struct {
 	signOff         *string
 	approverKey     *string
 	signOffHistory  *string
+	strictSignOff   *bool
 	signals         *string
 	signalsAfter    *string
 	tamperTest      *bool
@@ -237,6 +244,7 @@ func defineFlags(fs *flag.FlagSet) options {
 		signals:         fs.String("signals", "", "an account's signal feed, the body of GET /signals: every event's entry must verify as its kind on the public log, seal its place in the feed, belong to one account, and link to the event before it without a gap; runs alone with no record"),
 		signalsAfter:    fs.String("signals-after", "", "with --signals, N:hash, the last event a system already read: the feed must continue from it"),
 		signOffHistory:  fs.String("signoff-history", "", "a JSON list of an account's sign-offs, oldest first: every sign-off and link must verify, in one account; runs alone with no record"),
+		strictSignOff:   fs.Bool("strict-signoff", false, "fail (exit 1) a record whose rule requires a person's sign-off when no sign-offs are given; without this flag such a record, if every other check passes, reads ANCHORED, SIGN-OFF NOT SHOWN and exits 4"),
 		jobFolder:       fs.String("job", "", "a folder of one job's records: check each record, then the map of links between them"),
 		tamperTest:      fs.Bool("tamper-test", false, "change every value one at a time, delete every key holding a value, remove and append list items and add unknown keys, and report any change the verifier accepts and which checks caught the rest; exit 0 only if every change fails"),
 		recomputeHashes: fs.Bool("recompute-hashes", false, "with --tamper-test, play a forger who rewrites the whole record: after each change, recompute every hash the record itself determines, and count a change as stopped only when a check no rewrite can satisfy catches it (the public-log entries, their signer and timestamps, the actor signature or AMD's report signature)"),
@@ -443,6 +451,8 @@ func main() {
 		}
 	}
 
+	notShown := finishSignOffNotShown(report, *o.strictSignOff)
+
 	// --show-evidence-summary short-circuits the normal output paths so
 	// CPTOs / reviewers / CI scripts can get a one-glance read on the
 	// bundle's maturity posture without parsing the full hash-by-hash
@@ -456,6 +466,7 @@ func main() {
 		} else {
 			printEvidenceSummary(summary)
 		}
+		exitSignOffNotShownIf(notShown, report, *strictMode)
 		if exitShouldFail(report, *strictMode, *allowUnanchored) {
 			os.Exit(1)
 		}
@@ -471,6 +482,7 @@ func main() {
 		printHumanReport(bundle, report)
 	}
 
+	exitSignOffNotShownIf(notShown, report, *strictMode)
 	if exitShouldFail(report, *strictMode, *allowUnanchored) {
 		os.Exit(1)
 	}
@@ -486,6 +498,40 @@ func main() {
 // been rewritten together with their hashes. It is distinct from 1
 // (a check failed) and 2 (unreadable input).
 const exitPartialCoverage = 3
+
+// exitSignOffNotShown is the exit code of a completely anchored record that
+// passes every check, whose rule requires a person's sign-off when none was
+// given.
+const exitSignOffNotShown = 4
+
+// finishSignOffNotShown settles the verdict of a record whose required
+// sign-off was not shown, once every other check has run. It reports whether
+// the run exits exitSignOffNotShown: only when every other check passed and
+// the complete record is anchored, and --strict-signoff was not given; in
+// every other case the record is FAILED.
+func finishSignOffNotShown(r *Report, strict bool) bool {
+	if !r.SignOffNotShown {
+		return false
+	}
+	if strict || !r.AllPassed || !completeRecordAnchored(r) {
+		r.AllPassed, r.VerdictTier, r.RecordCoverage = false, "FAILED", "failed"
+		return false
+	}
+	r.AllPassed, r.VerdictTier = false, "ANCHORED_SIGNOFF_NOT_SHOWN"
+	return true
+}
+
+// exitSignOffNotShownIf ends the run with exitSignOffNotShown for such a
+// record, unless --strict asks scaffold flags to fail it.
+func exitSignOffNotShownIf(notShown bool, r *Report, strict bool) {
+	if !notShown {
+		return
+	}
+	if strict && r.HasScaffold {
+		os.Exit(1)
+	}
+	os.Exit(exitSignOffNotShown)
+}
 
 // partialCoverageExit reports whether a record that did not fail must
 // still exit exitPartialCoverage: it passed and is anchored, but the
@@ -803,7 +849,7 @@ const (
 var flagInputKinds = map[string]string{
 	"json": inputBoth, "version": inputBoth, "allow-unanchored": inputBoth,
 	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
-	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "signals": inputBoth, "signals-after": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
+	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "strict-signoff": inputBundle, "signals": inputBoth, "signals-after": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
 	"self-hosted-receipt": inputReceipt,
 }
 
@@ -1443,6 +1489,14 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	fmt.Println()
 
 	switch {
+	case r.VerdictTier == "ANCHORED_SIGNOFF_NOT_SHOWN":
+		fmt.Printf("VERDICT: ⚠ ANCHORED, SIGN-OFF NOT SHOWN%s\n", scaffoldSuffix(r))
+		fmt.Println("  Every check of the record passed and the complete record is anchored, but")
+		fmt.Printf("  its rule %q requires a person's sign-off, and no sign-offs were given.\n", r.SignOffRequirement.Rule)
+		fmt.Println("  Pass --signoff with the run's sign-offs and --signoff-history with the")
+		fmt.Println("  account's whole history to show whether an approval is in force.")
+		fmt.Println("  Exit code 4; --strict-signoff fails it instead.")
+		printScaffoldList(r)
 	case r.AllPassed && !r.Anchored && r.RekorAnchor.Unverifiable:
 		fmt.Println("VERDICT: ⚠ SELF-CONSISTENT ONLY, NOT ANCHORED.")
 		fmt.Println("  Every hash recomputes, and the bundle claims a Rekor anchor, but it")

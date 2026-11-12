@@ -2,6 +2,31 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.32.0: a required sign-off not shown has its own verdict
+
+- A record whose rule requires a person's sign-off, checked with no
+  sign-offs given, no longer reads FAILED when every other check passes and
+  the complete record is anchored. It reads `ANCHORED, SIGN-OFF NOT SHOWN`,
+  JSON tier `ANCHORED_SIGNOFF_NOT_SHOWN`, and exits 4, so a reader can tell
+  a record that passes every check but whose approval evidence was not
+  supplied from one that fails a check. It never reads VERIFIED and never exits 0; the requirement
+  line reads "NOT SHOWN" and `signoff_requirement.not_shown` is true.
+- `--strict-signoff` keeps the earlier verdict: FAILED, exit 1.
+- Sign-offs given without the history, a rejection or no approval in
+  force, a sign-off left out and a history cut short or without its head
+  fail with exit 1, as before.
+- Eleven more copy groups: the key's policy gate and the account's seal the
+  same inputs for one request, so each input they both carry (subject,
+  object, classification, the data-quality source and time) must agree; the
+  verb the rules read must equal the attested decision kind, or the route
+  when none is attested; and the time the gates evaluated at must equal the
+  run clock the request signature records. A record whose copies disagree
+  fails. All 921 distinct records in our review files agreed when measured
+  on November 12, 2026; the verdict map checks every stored record with
+  this release.
+- `--help` lists the new flag and exit code, and says a job's latest
+  sign-off governs its final step.
+
 ### v0.31.0: every kind of sign-off on a result, a history complete as of a time, and the sign-off requirement sealed in the record
 
 - A sign-off on a whole job names its final step's record, as a sign-off on

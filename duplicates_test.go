@@ -88,6 +88,8 @@ var coincidences = map[string]string{
 	"transcript.scaffold.activated_by|zksp_binding.scaffold.activated_by":                                                "two scaffold notes with the same wording",
 	"system_provenance.environment.hostname|system_provenance.environment.instance_id":                                   "Fly names the machine by its instance id; both are the server's own observation",
 	"reproducibility_context.git_commit_sha|system_provenance.orchestrator_git_sha":                                      "the caller declared the server's commit as its own; the server's two copies are a group, the caller's is independent",
+	"epa.account_policy_gate.decision_reason_code|epa.policy_gate.decision_reason_code":                                  "two policy gates each allowed the run and each sealed its own reason code; equal when both allowed by a rule, independent decisions of two policies",
+	"envelope.timestamp|nrep.request_signature.signed_at":                                                                "the caller's own signing time, which the server accepts only within a window of its clock (orchestrator request_signature.go); equal at one-second resolution when the request is signed and sent within the second, two independent clocks",
 }
 
 var listIndex = regexp.MustCompile(`\[\d+\]`)

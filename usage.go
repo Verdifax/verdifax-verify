@@ -61,13 +61,23 @@ FLAGS
   -signoff FILE           check the sign-offs given for the record or receipt:
                           each must verify, belong to the record's account
                           and name this exact result; the latest is the
-                          decision in force. A sign-off shows a registered
-                          approver key signed it, not that the review was
-                          careful or the result right
+                          decision in force, except on a job's final step,
+                          where the latest sign-off on the whole job governs.
+                          A sign-off shows a registered approver key signed
+                          it, not that the review was careful or the result
+                          right
   -approver-key FILE      with -signoff, pass only if the decision in force
                           was signed by this base64 Ed25519 public key
   -signoff-history FILE   check an account's whole chain of sign-offs,
-                          oldest first. Runs alone with no record
+                          oldest first, and, when it ends with Verdifax's
+                          head statement, report it complete as of the
+                          statement's time on the public log. Runs alone
+                          with no record
+  -strict-signoff         fail (exit 1) a record whose rule requires a
+                          person's sign-off when no sign-offs are given;
+                          without it such a record, if every other check
+                          passes, reads ANCHORED, SIGN-OFF NOT SHOWN and
+                          exits 4
   -signals FILE           check an account's signal feed, the body of
                           GET /signals: every event's entry must verify on
                           the public log as its kind, seal its place in the
@@ -110,5 +120,8 @@ EXIT
   2  could not parse the input
   3  every check passed, but the public-log anchor covers only part
      of the record, or with -job the job has no final step, and
-     -allow-partial was not passed`)
+     -allow-partial was not passed
+  4  every check passed and the complete record is anchored, but its
+     rule requires a person's sign-off and no sign-offs were given
+     (ANCHORED, SIGN-OFF NOT SHOWN), and -strict-signoff was not passed`)
 }

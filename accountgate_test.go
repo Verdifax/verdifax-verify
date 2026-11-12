@@ -17,14 +17,26 @@ import (
 // the customer's, under a change in the account's history.
 func accountGate(t *testing.T, activation string) *artifacts.PolicyGate {
 	t.Helper()
-	r, hashErr := policyhash.FromDocument([]byte(rerunPolicy))
+	r, hashErr := policyhash.FromDocument([]byte(accountPolicy))
 	if hashErr != nil {
 		t.Fatal(hashErr)
 	}
-	sum := sha256.Sum256([]byte(rerunPolicy))
+	sum := sha256.Sum256([]byte(accountPolicy))
 	return &artifacts.PolicyGate{PolicyID: r.PolicyID, PolicyName: r.PolicyName, PolicyVersion: r.PolicyVersion, PolicyHash: r.PolicyHash,
 		Outcome: "allow", FiredRuleID: "emails", DecisionReasonCode: "RULE_ALLOWED", Source: artifacts.PolicySourceCustomer,
-		DocumentHash: hex.EncodeToString(sum[:]), ActivationHash: activation, Inputs: rerunInputs()}
+		DocumentHash: hex.EncodeToString(sum[:]), ActivationHash: activation, Inputs: accountInputs()}
+}
+
+// accountPolicy is rerunPolicy for the fixture's route, and accountInputs
+// the inputs a server seals for it: with no decision kind attested, the verb
+// the rules read is the request's route (psl mapping, section 8.5), which the
+// verifier compares with the envelope since v0.32.0.
+var accountPolicy = strings.Replace(rerunPolicy, `"value":"tool.send_email"`, `"value":"policy-gate-fixture"`, 1)
+
+func accountInputs() *artifacts.PolicyInputs {
+	in := rerunInputs()
+	in.Verb = "policy-gate-fixture"
+	return in
 }
 
 // accountBundle seals an allowed run from a key in account-7, with the
@@ -152,7 +164,7 @@ func TestARecordWithoutAnAccountPolicyStillVerifies(t *testing.T) {
 // --account-policy runs the account's rules again. The right document
 // passes; a decision the rules do not reach, or another document, fails.
 func TestTheAccountPolicyDocumentIsChecked(t *testing.T) {
-	doc := writeTemp(t, "account-policy.json", []byte(rerunPolicy))
+	doc := writeTemp(t, "account-policy.json", []byte(accountPolicy))
 	r := verify(accountBundle(t, strings.Repeat("a", 64)))
 	applyAccountFlags(r, doc, "")
 	if !r.AllPassed || !r.AccountPolicyGate.DocumentMatch || !r.AccountPolicyGate.RulesChecked {
@@ -173,7 +185,7 @@ func TestTheAccountPolicyDocumentIsChecked(t *testing.T) {
 		t.Fatal("a run the account policy refuses passed as allowed")
 	}
 
-	other := writeTemp(t, "other.json", []byte(strings.Replace(rerunPolicy, `"policy_version":"3"`, `"policy_version":"4"`, 1)))
+	other := writeTemp(t, "other.json", []byte(strings.Replace(accountPolicy, `"policy_version":"3"`, `"policy_version":"4"`, 1)))
 	wrong := verify(accountBundle(t, strings.Repeat("a", 64)))
 	applyAccountFlags(wrong, other, "")
 	if wrong.AllPassed {
