@@ -58,7 +58,15 @@ type SignOffCheck struct {
 	Gaps []string `json:"restore_gaps,omitempty"`
 	// Account is the account a history belongs to.
 	Account string `json:"account,omitempty"`
-	Reason  string `json:"reason,omitempty"`
+	// OwnDecision is, when a job's sign-off governs a job's final step, the
+	// latest sign-off on the record itself, shown under it (round 59, N19).
+	OwnDecision string `json:"own_decision,omitempty"`
+	// CompleteAsOf is the public log's time for the head statement that ends
+	// a history: the history is complete as of then (round 59, N16).
+	CompleteAsOf string `json:"complete_as_of,omitempty"`
+	Reason       string `json:"reason,omitempty"`
+	// list is the sign-offs read, in chain order.
+	list []artifacts.SignOff
 }
 
 // signOffSubject is the result a record's sign-offs must name.
@@ -67,6 +75,11 @@ type signOffSubject struct {
 	kind    string // record or receipt
 	runID   int64
 	digest  string
+}
+
+// result is the subject in the shared definition's terms.
+func (s signOffSubject) result() artifacts.SignOffResult {
+	return artifacts.SignOffResult{Kind: s.kind, RunID: s.runID, Digest: s.digest}
 }
 
 var reflectSignOffList = reflect.TypeOf([]artifacts.SignOff{})
@@ -153,13 +166,20 @@ func checkSignOffs(data []byte, subject signOffSubject) SignOffCheck {
 			c.Reason = fmt.Sprintf("sign-off %d %v", s.Sequence, nameErr)
 			return c
 		}
-		e := entryOf(s)
-		e.Superseded = i < len(list)-1
+	}
+	// The decision in force, by the one definition the server, the reports
+	// and the SDKs use: on a job's final step the job's decision governs.
+	inForce, own := artifacts.DecisionInForce(list, subject.result())
+	for i := range list {
+		e := entryOf(&list[i])
+		e.Superseded = list[i].SignOffHash != inForce.SignOffHash
 		c.Entries = append(c.Entries, e)
 	}
-	last := list[len(list)-1]
-	c.OK, c.Latest, c.LatestApprover = true, last.Decision, last.ApproverKey
-	c.LatestMeaning = signOffMeaning(last.Decision, last.Target.Kind)
+	c.OK, c.Latest, c.LatestApprover, c.list = true, inForce.Decision, inForce.ApproverKey, list
+	c.LatestMeaning = signOffMeaning(inForce.Decision, inForce.Target.Kind)
+	if own != nil {
+		c.OwnDecision = own.Decision
+	}
 	return c
 }
 
@@ -195,6 +215,8 @@ func namesSubject(t artifacts.SignOffTarget, subject signOffSubject) error {
 		return fmt.Errorf("names run %d, not this run %d", t.RunID, subject.runID)
 	case t.Digest != subject.digest:
 		return fmt.Errorf("names digest %s, not this result's %s", truncate(t.Digest, 16), truncate(subject.digest, 16))
+	case !t.NamesResult(subject.result()):
+		return fmt.Errorf("is a %s sign-off, which does not name this %s", t.Kind, subject.kind)
 	}
 	return nil
 }
@@ -214,7 +236,16 @@ func checkSignOffHistory(data []byte) SignOffCheck {
 	next := int64(1)
 	// The account each skip's event belongs to: one account throughout.
 	var skipAccounts []string
-	for _, item := range items {
+	var head *artifacts.SignOffHead
+	for i, item := range items {
+		if item.head != nil {
+			if i != len(items)-1 {
+				c.Reason = "the history's head statement is not its last entry"
+				return c
+			}
+			head = item.head
+			continue
+		}
 		if item.isSkip() {
 			after, line, gapErr := item.checkSkip(artifacts.GapChainSignOffs, 0, next)
 			if gapErr != nil {
@@ -271,8 +302,33 @@ func checkSignOffHistory(data []byte) SignOffCheck {
 	for i := range c.Entries {
 		c.Entries[i].Superseded = last[fmt.Sprintf("%s/%d", c.Entries[i].Target, c.Entries[i].RunID)] != i
 	}
-	c.OK, c.Account = true, list[0].ChainID
+	c.OK, c.Account, c.list = true, list[0].ChainID, list
+	if head != nil {
+		if headErr := checkSignOffHead(head, list[0].ChainID, next-1, previous); headErr != nil {
+			c.OK, c.Reason = false, headErr.Error()
+			return c
+		}
+		c.CompleteAsOf = time.Unix(head.Anchor.IntegratedTime, 0).UTC().Format(time.RFC3339)
+	}
 	return c
+}
+
+// checkSignOffHead checks the head statement that ends a history: Verdifax's
+// statement on the public log of the chain's highest place and newest
+// sign-off. A history shorter than its head, a head of another account, or a
+// head not on the public log fails.
+func checkSignOffHead(h *artifacts.SignOffHead, account string, highest int64, newest string) error {
+	if err := checkSealedEntry(h.Validate(), h.ComputeHash(), h.HeadStatementHash, h.StatedAt, "stated_at",
+		h.Anchor, artifacts.SignOffHeadKind, h.LeafHash()); err != nil {
+		return fmt.Errorf("the history's head statement: %w", err)
+	}
+	switch {
+	case h.ChainID != account:
+		return fmt.Errorf("the history's head statement is %s's, not %s's", h.ChainID, account)
+	case h.Sequence != highest || h.HeadHash != newest:
+		return fmt.Errorf("the history ends at place %d, and Verdifax's head statement of %s says the chain's highest place is %d, so sign-offs were left out of the end", highest, h.StatedAt, h.Sequence)
+	}
+	return nil
 }
 
 // pinApprover is --approver-key: the decision in force must be that key's.
@@ -347,9 +403,9 @@ func historyDisagrees(given, history SignOffCheck, subject signOffSubject) strin
 			return fmt.Sprintf("sign-off %d is not in the account's history given", e.Sequence)
 		}
 	}
-	for _, e := range history.Entries {
-		if e.Target == subject.kind && e.RunID == subject.runID && !gave[e.hash] {
-			return fmt.Sprintf("the account's history holds sign-off %d on this result, which the sign-offs given leave out, so they do not show the decision in force", e.Sequence)
+	for _, e := range history.list {
+		if e.Target.NamesResult(subject.result()) && !gave[e.SignOffHash] {
+			return fmt.Sprintf("the account's history holds sign-off %d on this result, a %s sign-off, which the sign-offs given leave out, so they do not show the decision in force", e.Sequence, e.Target.Kind)
 		}
 	}
 	return ""
@@ -368,7 +424,12 @@ func signOffFailed(checks ...*SignOffCheck) (bool, string) {
 // SignOffRequirementCheck is the check of a sign-off the policy rule that
 // allowed a run requires (round 58, B7).
 type SignOffRequirementCheck struct {
-	Rule   string `json:"rule"`
+	Rule string `json:"rule"`
+	// Sealed says the record itself seals the requirement (round 59, N17);
+	// otherwise only the policy document given shows it.
+	Sealed bool `json:"sealed,omitempty"`
+	// AsOf is when the history given was complete, by its head statement.
+	AsOf   string `json:"as_of,omitempty"`
 	OK     bool   `json:"ok"`
 	Reason string `json:"reason,omitempty"`
 }
@@ -377,9 +438,16 @@ type SignOffRequirementCheck struct {
 // sign-off: it holds only when --signoff shows an approval in force on this
 // record. A sign-off releases or blocks nothing on its own (R159); this
 // checks that the control the policy names took place.
-func signOffRequirement(r *Report) *SignOffRequirementCheck {
-	rule := ""
+func signOffRequirement(r *Report, b *artifacts.AuditBundle) *SignOffRequirementCheck {
+	rule, sealed := "", false
+	// The record's own seal (round 59, N17), then the documents given.
+	for _, g := range []*artifacts.PolicyGate{b.EPA.PolicyGate, b.EPA.AccountPolicyGate} {
+		if g != nil && g.SignOffRequired && rule == "" {
+			rule, sealed = g.FiredRuleID, true
+		}
+	}
 	switch {
+	case rule != "":
 	case r.PolicyGate.SignOffRequired:
 		rule = r.PolicyGate.FiredRuleID
 	case r.AccountPolicyGate != nil && r.AccountPolicyGate.SignOffRequired:
@@ -387,7 +455,18 @@ func signOffRequirement(r *Report) *SignOffRequirementCheck {
 	default:
 		return nil
 	}
-	c := &SignOffRequirementCheck{Rule: rule}
+	c := &SignOffRequirementCheck{Rule: rule, Sealed: sealed}
+	// A document given that reads the rules again must agree with the seal.
+	for _, pair := range []struct {
+		sealed *artifacts.PolicyGate
+		check  *PolicyGateCheck
+	}{{b.EPA.PolicyGate, &r.PolicyGate}, {b.EPA.AccountPolicyGate, r.AccountPolicyGate}} {
+		if pair.sealed != nil && pair.check != nil && pair.check.RulesChecked && pair.check.Reason == "" &&
+			pair.sealed.SignOffRequired && !pair.check.SignOffRequired {
+			c.Reason = fmt.Sprintf("the record seals that rule %q requires a person's sign-off, and the policy document given says it does not", rule)
+			return c
+		}
+	}
 	switch {
 	case r.SignOffs == nil || r.SignOffHistory == nil:
 		c.Reason = fmt.Sprintf("rule %q requires a person's sign-off on this result; pass --signoff (GET /runs/{id}/signoffs) and --signoff-history (the account's whole chain, GET /account/signoffs/history) so that a later decision cannot be left out", rule)
@@ -395,6 +474,8 @@ func signOffRequirement(r *Report) *SignOffRequirementCheck {
 		c.Reason = fmt.Sprintf("rule %q requires a person's sign-off, and the sign-offs given do not verify", rule)
 	case !r.SignOffHistory.OK:
 		c.Reason = fmt.Sprintf("rule %q requires a person's sign-off, and the account's sign-off history given does not verify or does not match the sign-offs given: %s", rule, r.SignOffHistory.Reason)
+	case r.SignOffHistory.CompleteAsOf == "":
+		c.Reason = fmt.Sprintf("rule %q requires a person's sign-off, and the history given ends with no head statement, so it cannot show that no later sign-off exists; fetch the history again from GET /account/signoffs/history, which ends with one from the server release that came with verifier v0.31.0", rule)
 	case r.SignOffs.Latest != artifacts.SignOffApprove:
 		latest := r.SignOffs.Latest
 		if latest == "" {
@@ -402,7 +483,7 @@ func signOffRequirement(r *Report) *SignOffRequirementCheck {
 		}
 		c.Reason = fmt.Sprintf("rule %q requires an approving sign-off on this result, and the decision in force is %s", rule, latest)
 	default:
-		c.OK = true
+		c.OK, c.AsOf = true, r.SignOffHistory.CompleteAsOf
 	}
 	return c
 }
@@ -412,7 +493,7 @@ func printSignOffRequirement(c *SignOffRequirementCheck) {
 		return
 	}
 	if c.OK {
-		fmt.Printf("  %-18s✓ rule %q requires a person's sign-off; an approval is in force, matched with the account's history\n", "Sign-off rule:", c.Rule)
+		fmt.Printf("  %-18s✓ rule %q requires a person's sign-off; an approval is in force as of %s, matched with the account's history\n", "Sign-off rule:", c.Rule, c.AsOf)
 		return
 	}
 	fmt.Printf("  %-18s✗ FAILED · %s\n", "Sign-off rule:", c.Reason)
@@ -422,7 +503,7 @@ func printSignOffRequirement(c *SignOffRequirementCheck) {
 // and the sign-off its allowing rule requires, if any (round 58, B7).
 func applySignOffFlags(r *Report, b *artifacts.AuditBundle, signOffPath, approverPath, historyPath string) {
 	defer func() {
-		if r.SignOffRequirement = signOffRequirement(r); r.SignOffRequirement != nil && !r.SignOffRequirement.OK {
+		if r.SignOffRequirement = signOffRequirement(r, b); r.SignOffRequirement != nil && !r.SignOffRequirement.OK {
 			r.AllPassed, r.VerdictTier, r.RecordCoverage = false, "FAILED", "failed"
 		}
 	}()
@@ -491,6 +572,9 @@ func printSignOffs(given, history *SignOffCheck) {
 			}
 			fmt.Printf("  %-18s%s by approver key %s%s, on the public log\n", "Sign-off:", given.Latest, truncate(given.LatestApprover, 12), pinned)
 			fmt.Printf("  %-18s%s; it releases or blocks nothing on its own\n", "Meaning:", given.LatestMeaning)
+			if given.OwnDecision != "" {
+				fmt.Printf("  %-18sthe job's sign-off governs this final step; the record's own latest sign-off is %s\n", "Job:", given.OwnDecision)
+			}
 			for _, e := range given.Entries {
 				state := ""
 				if e.Superseded {
@@ -507,6 +591,11 @@ func printSignOffs(given, history *SignOffCheck) {
 			return
 		}
 		fmt.Printf("  %-18s%d sign-off(s), each linked, on the public log\n", "Sign-off history:", len(history.Entries))
+		if history.CompleteAsOf != "" {
+			fmt.Printf("  %-18sthe account's sign-offs are complete as of %s, by Verdifax's head statement on the public log\n", "Complete:", history.CompleteAsOf)
+		} else {
+			fmt.Printf("  %-18sthis covers the sign-offs supplied, with no head statement; a later sign-off may exist\n", "Complete:")
+		}
 		for _, g := range history.Gaps {
 			fmt.Printf("  %-18s%s\n", "Restore gap:", g)
 		}

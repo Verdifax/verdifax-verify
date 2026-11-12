@@ -24,12 +24,16 @@ import (
 type chainItem struct {
 	gap         *artifacts.RestoreGap
 	interrupted *artifacts.ChainInterrupted
-	raw         json.RawMessage
+	// head is a sign-off history's head statement, its last entry.
+	head *artifacts.SignOffHead
+	raw  json.RawMessage
 }
 
 var (
 	reflectRestoreGap       = reflect.TypeOf(artifacts.RestoreGap{})
 	reflectChainInterrupted = reflect.TypeOf(artifacts.ChainInterrupted{})
+	reflectSignOffHead      = reflect.TypeOf(artifacts.SignOffHead{})
+	reflectSignOff          = reflect.TypeOf(artifacts.SignOff{})
 )
 
 // isSkip reports an item that moves the chain past places instead of
@@ -72,6 +76,20 @@ func readChainItems(data []byte, entryType reflect.Type) ([]chainItem, error) {
 			Format string `json:"format"`
 		}
 		_ = json.Unmarshal(raw, &head)
+		if head.Format == artifacts.SignOffHeadFormat {
+			if entryType != reflectSignOff {
+				return nil, fmt.Errorf("entry %d is a sign-off head statement, which only a sign-off history holds", i+1)
+			}
+			if strictErr := artifacts.CheckStrict(raw, reflectSignOffHead); strictErr != nil {
+				return nil, fmt.Errorf("entry %d, the head statement, is not plain JSON: %w", i+1, strictErr)
+			}
+			var h artifacts.SignOffHead
+			if err := json.Unmarshal(raw, &h); err != nil {
+				return nil, fmt.Errorf("entry %d, the head statement: %w", i+1, err)
+			}
+			items = append(items, chainItem{head: &h})
+			continue
+		}
 		if head.Format == artifacts.ChainInterruptedFormat {
 			if strictErr := artifacts.CheckStrict(raw, reflectChainInterrupted); strictErr != nil {
 				return nil, fmt.Errorf("entry %d, an interrupted record, is not plain JSON: %w", i+1, strictErr)

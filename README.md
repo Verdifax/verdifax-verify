@@ -835,13 +835,29 @@ removed, reordered or rewritten sign-off fails; run alone, it checks the
 chain. Given with `--signoff` and a record (since v0.30.0), the history must
 belong to the record's account and match the run's sign-offs exactly, by
 each sign-off's hash, so a later decision left out of the run's sign-offs
-fails.
+fails. Since v0.31.0 every kind of sign-off that names the result is
+matched: on a job's final step, a sign-off on the whole job names the same
+record as one on the step, and the job's latest decision is the one in
+force, with the record's own latest shown under it.
+
+Since v0.31.0 the history the server serves ends with a head statement,
+`verdifax.signoff-head.v1`: Verdifax states the chain's highest place and
+the hash of its newest sign-off, and anchors the statement on the public
+log. The verifier checks the statement against the chain and reports the
+history complete as of the entry's integration time, which the account
+cannot backdate, so a history cut short before a later sign-off fails. A
+history without a head still verifies as a chain, and the report says a
+later sign-off may exist.
 
 A policy rule may require a sign-off with `"signoff": {"required": true}`
-(since v0.30.0). `--policy` or `--account-policy` then fails the record
-unless an approving sign-off is in force on it, shown by `--signoff` and
-`--signoff-history` together, and the report names the rule. The history
-shows the sign-offs recorded up to the moment it was read.
+(since v0.30.0). The verifier then fails the record unless an approving
+sign-off is in force on it, shown by `--signoff` and `--signoff-history`
+together, and the report names the rule. Since v0.31.0 the record seals
+the requirement itself (`signoff_required` in its policy gate), so no
+policy document is needed; one given with `--policy` or `--account-policy`
+must agree with the seal, and shows the requirement of an older record.
+Since v0.31.0 the history must end with its head statement, and the report
+says the approval is in force as of the head's time on the public log.
 
 A sign-off shows that the holder of an approver key the account registered
 signed that decision on that result, and that Verdifax logged it. It does

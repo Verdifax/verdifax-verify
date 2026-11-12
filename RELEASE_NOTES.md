@@ -2,6 +2,29 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.31.0: every kind of sign-off on a result, a history complete as of a time, and the sign-off requirement sealed in the record
+
+- A sign-off on a whole job names its final step's record, as a sign-off on
+  the record does. `--signoff` with `--signoff-history` now matches both
+  kinds, so a job sign-off left out of the run's sign-offs fails, and on a
+  job's final step the job's latest decision is the one in force, with the
+  record's own latest shown under it. One shared definition decides which
+  sign-offs name a result, for the verifier and the server alike.
+- `GET /account/signoffs/history` ends with a head statement,
+  `verdifax.signoff-head.v1`, which Verdifax anchors on the public log: the
+  chain's highest place and its newest sign-off's hash. `--signoff-history`
+  checks it against the chain and reports the history complete as of the
+  entry's integration time; a history that ends below the head's place
+  fails. Without a head the report says a later sign-off may exist.
+- A rule's sign-off requirement is met only through a history that ends
+  with a head statement, and the line reads "an approval is in force as of"
+  that time.
+- A record sealed from this release on carries `signoff_required` in its
+  policy gate when its rule requires a sign-off, so the requirement is
+  checked without the policy document. A policy document given must agree
+  with the seal. Earlier releases refuse the new field, as format stability
+  describes.
+
 ### v0.30.0: a required sign-off, declared data quality, sign-offs matched with the history, and the oldest records read as sealed
 
 - A policy rule may set `"signoff": {"required": true}`, on an allow rule

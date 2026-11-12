@@ -175,3 +175,54 @@ func isLowerHex(v string) bool {
 	}
 	return true
 }
+
+// SignOffResult is a result a sign-off can be on: a completed run's record or
+// a refused or halted run's receipt, by its run and the digest its public-log
+// entry covers.
+type SignOffResult struct {
+	Kind   string // SignOffTargetRecord or SignOffTargetReceipt
+	RunID  int64
+	Digest string
+}
+
+// NamesResult reports whether a sign-off's target names the result. A
+// receipt is named only by a receipt sign-off. A record is named by a record
+// sign-off, and by a job sign-off, which is on the job's final step's record,
+// on the same run and digest. Every check and display of sign-offs on a result
+// uses this one definition (round 59, N15).
+func (t SignOffTarget) NamesResult(r SignOffResult) bool {
+	if t.RunID != r.RunID || t.Digest != r.Digest {
+		return false
+	}
+	switch r.Kind {
+	case SignOffTargetReceipt:
+		return t.Kind == SignOffTargetReceipt
+	case SignOffTargetRecord:
+		return t.Kind == SignOffTargetRecord || t.Kind == SignOffTargetJob
+	}
+	return false
+}
+
+// DecisionInForce returns, from sign-offs in chain order, the one whose
+// decision is in force on the result, and the result's own decision when a
+// job's decision governs instead. A later sign-off supersedes an earlier one
+// of the same kind. On a job's final step the job's decision governs when there
+// is one, and the latest record sign-off is returned as own, to be shown under
+// it (round 59, N19). Both are nil when no sign-off names the result.
+func DecisionInForce(list []SignOff, r SignOffResult) (inForce, own *SignOff) {
+	var job, other *SignOff
+	for i := range list {
+		if !list[i].Target.NamesResult(r) {
+			continue
+		}
+		if list[i].Target.Kind == SignOffTargetJob {
+			job = &list[i]
+		} else {
+			other = &list[i]
+		}
+	}
+	if job != nil {
+		return job, other
+	}
+	return other, nil
+}

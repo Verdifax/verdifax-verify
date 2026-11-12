@@ -147,6 +147,11 @@ type PolicyGate struct {
 	DocumentHash   string        `json:"document_hash,omitempty"`
 	ActivationHash string        `json:"activation_hash,omitempty"`
 	Inputs         *PolicyInputs `json:"inputs,omitempty"`
+	// SignOffRequired seals that the rule that allowed the run requires a
+	// person's sign-off on its result (round 59, N17), so the record alone
+	// shows it. Present only when true, so every record sealed before it
+	// hashes as it did.
+	SignOffRequired bool `json:"signoff_required,omitempty"`
 }
 
 type EnvSnapshot struct {
