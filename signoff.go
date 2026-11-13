@@ -64,7 +64,10 @@ type SignOffCheck struct {
 	// CompleteAsOf is the public log's time for the head statement that ends
 	// a history: the history is complete as of then (round 59, N16).
 	CompleteAsOf string `json:"complete_as_of,omitempty"`
-	Reason       string `json:"reason,omitempty"`
+	// CompleteAge is how long before this check that was (round 61, N24),
+	// such as "3 days before this check".
+	CompleteAge string `json:"complete_as_of_age,omitempty"`
+	Reason      string `json:"reason,omitempty"`
 	// list is the sign-offs read, in chain order.
 	list []artifacts.SignOff
 }
@@ -308,7 +311,14 @@ func checkSignOffHistory(data []byte) SignOffCheck {
 			c.OK, c.Reason = false, headErr.Error()
 			return c
 		}
-		c.CompleteAsOf = time.Unix(head.Anchor.IntegratedTime, 0).UTC().Format(time.RFC3339)
+		// Round 61, N24: the head's age is shown, and a head older than the
+		// limit fails: a later sign-off has had that long to exist unseen.
+		asOf, age, ageErr := headAsOf(head.Anchor.IntegratedTime, signOffHeadMaxAge, "--signoff-head-max-age", "history")
+		if ageErr != nil {
+			c.OK, c.Reason = false, "the history's head statement: "+ageErr.Error()
+			return c
+		}
+		c.CompleteAsOf, c.CompleteAge = asOf, age
 	}
 	return c
 }
@@ -609,7 +619,7 @@ func printSignOffs(given, history *SignOffCheck) {
 		}
 		fmt.Printf("  %-18s%d sign-off(s), each linked, on the public log\n", "Sign-off history:", len(history.Entries))
 		if history.CompleteAsOf != "" {
-			fmt.Printf("  %-18sthe account's sign-offs are complete as of %s, by Verdifax's head statement on the public log\n", "Complete:", history.CompleteAsOf)
+			fmt.Printf("  %-18sthe account's sign-offs are complete as of %s, %s, by Verdifax's head statement on the public log\n", "Complete:", history.CompleteAsOf, history.CompleteAge)
 		} else {
 			fmt.Printf("  %-18sthis covers the sign-offs supplied, with no head statement; a later sign-off may exist\n", "Complete:")
 		}

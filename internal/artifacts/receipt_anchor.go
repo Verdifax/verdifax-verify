@@ -51,7 +51,7 @@ var ReceiptKinds = []string{
 // sign-off, a key change, a run publication, a restore gap and a successful run's notice. Every feed event's entry is
 // a receipt or one of these, and TestEverySignalKindsEntryCanBeLogged holds
 // the list to the feed's kinds, so a new kind cannot go unlogged (R148).
-var ChainEntryKinds = []string{PolicyActivationKind, SignOffKind, KeyChangeKind, RunPublicationKind, RestoreGapKind, RunSealedKind, ChainInterruptedKind, SignOffHeadKind,
+var ChainEntryKinds = []string{PolicyActivationKind, SignOffKind, KeyChangeKind, RunPublicationKind, RestoreGapKind, RunSealedKind, ChainInterruptedKind, SignOffHeadKind, FeedHeadKind,
 	AccountChangeKind, RunDeletionKind}
 
 // ReceiptAnchor is a receipt's public-log entry. Field meanings match

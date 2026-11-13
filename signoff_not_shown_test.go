@@ -44,6 +44,17 @@ func TestARequiredSignOffNotShownHasItsOwnVerdict(t *testing.T) {
 		{"the job's approval left out", []string{"--signoff", atReject, "--signoff-history", history, record}, 1, "VERDICT: ✗ FAILED"},
 		{"the whole evidence", []string{"--signoff", signoffs, "--signoff-history", history, record}, 0, "VERDICT: ✓ VERIFIED AND ANCHORED"},
 		{"the whole evidence, strict", []string{"--strict-signoff", "--signoff", signoffs, "--signoff-history", history, record}, 0, "VERDICT: ✓ VERIFIED AND ANCHORED"},
+		// Round 61, N24: the history's head is past a limit it is checked
+		// against, so it fails and says to fetch the history again.
+		{"the whole evidence, head past its limit", []string{"--signoff-head-max-age", "1s", "--signoff", signoffs, "--signoff-history", history, record}, 1,
+			"the head statement is older than the limit; fetch the history again"},
+	}
+	// The stored history's head is of November 12, 2026: the cases that
+	// pass check it with a limit wide enough for any later day.
+	for i := range cases {
+		if cases[i].want == 0 || strings.Contains(cases[i].name, "left out") {
+			cases[i].args = append([]string{"--signoff-head-max-age", "876000h"}, cases[i].args...)
+		}
 	}
 	for _, c := range cases {
 		out, runErr := exec.Command(bin, c.args...).Output()

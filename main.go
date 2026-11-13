@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.33.0"
+const Version = "0.34.0"
 
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
@@ -219,38 +219,44 @@ type options struct {
 	signals         *string
 	signalsAfter    *string
 	ownerRequestKey *string
-	tamperTest      *bool
-	recomputeHashes *bool
-	showEvidence    *bool
+	// signOffHeadMaxAge and feedHeadMaxAge are the oldest a head statement
+	// may be (round 61, N24).
+	signOffHeadMaxAge *string
+	feedHeadMaxAge    *string
+	tamperTest        *bool
+	recomputeHashes   *bool
+	showEvidence      *bool
 }
 
 func defineFlags(fs *flag.FlagSet) options {
 	return options{
-		jsonOutput:      fs.Bool("json", false, "emit machine-readable JSON instead of human report"),
-		strictMode:      fs.Bool("strict", false, "fail (exit 1) on any scaffold-flagged value"),
-		allowPartial:    fs.Bool("allow-partial", false, "exit 0 for a record whose public-log anchor binds only part of it (a record sealed before leaf v5, or one without a verified complete-record anchor); without this flag such a record exits 3, because its unanchored sections could have been rewritten together with their hashes. With --signals, exit 0 for a feed in which some events carry no public-log entry of their own and a later event's entry commits them; without this flag such a feed exits 3, because their time is proven only by the later entry"),
-		allowUnanchored: fs.Bool("allow-unanchored", false, "exit 0 for a bundle with no public-log anchor; without this flag, unanchored bundles fail, because every sealing property this tool checks hangs off the anchor and an attacker can strip an anchor claim by editing one unprotected field (the documented downgrade attack)"),
-		showVersion:     fs.Bool("version", false, "print version and exit"),
-		selfHosted:      fs.Bool("self-hosted-receipt", false, "the receipt was issued by a test or self-hosted deployment that does not anchor receipts on the public log, not by the Verdifax API; exempts it from the rules that receipts dated from run 241 on must carry a public-log anchor and receipts dated from run 242 on must seal anchor_required"),
-		policyFile:      fs.String("policy", "", "a policy document (JSON) to check against the policy decision the record or receipt seals: its hashes and sealed identity must match, and where the run sealed the inputs the rules read, this tool runs the rules itself and must reach the same rule and outcome, or verification fails"),
-		signerKeyFile:   fs.String("signer-key", "", "a file holding the base64 Ed25519 public key you expect signed the request; fails unless the record carries a valid request signature from that key"),
-		requestFile:     fs.String("request", "", "a file holding the exact signed request; passes only if the record's version 2 signature covers those bytes"),
-		policyHistory:   fs.String("policy-history", "", "a JSON list of a key's policy changes, oldest first: every change and link must verify, and a record given with it must name a change in the list"),
-		accountPolicy:   fs.String("account-policy", "", "the account's policy document (JSON), for a record from a key in an account with a policy: checked as --policy checks the key's, and the account's rules run on the sealed inputs must reach the sealed decision, or verification fails"),
-		aivpTraces:      fs.String("aivp-traces", "", "with --job, a folder holding the trace of every step whose AI review ran, as <step>.txt for the step's <step>.json; each must re-check as --aivp-trace checks one"),
-		aivpTrace:       fs.String("aivp-trace", "", "the trace the record's AI review checked, as the run's response returned it (aivp_trace_text): its SHA-256 must be the sealed trace hash, and the contradiction check run again on it must reach the sealed finding, or verification fails"),
-		accountHistory:  fs.String("account-policy-history", "", "a JSON list of the account's policy changes, oldest first: every change and link must verify, every change must belong to the account the record names, and the record must name a change in the list"),
-		signOff:         fs.String("signoff", "", "a JSON list of sign-offs for the record or receipt, as GET /runs/{id}/signoffs returns: each must verify, belong to the record's account and name this exact result; the latest is the decision in force"),
-		approverKey:     fs.String("approver-key", "", "with --signoff, a file holding the base64 Ed25519 public key you expect signed the decision in force; fails unless it did"),
-		signals:         fs.String("signals", "", "an account's signal feed, the body of GET /signals: every event's entry must verify as its kind on the public log, seal its place in the feed, belong to one account, and link to the event before it without a gap; runs alone with no record"),
-		signalsAfter:    fs.String("signals-after", "", "with --signals, N:hash, the last event a system already read: the feed must continue from it"),
-		ownerRequestKey: fs.String("owner-request-key", "", "with --signals, a file holding the base64 Ed25519 public key of the owner key's request key, or several such files separated by commas (the keys it has had): fails unless every change the owner decided in the feed is signed by one of them"),
-		signOffHistory:  fs.String("signoff-history", "", "a JSON list of an account's sign-offs, oldest first: every sign-off and link must verify, in one account; runs alone with no record"),
-		strictSignOff:   fs.Bool("strict-signoff", false, "fail (exit 1) a record whose rule requires a person's sign-off when no sign-offs are given; without this flag such a record, if every other check passes, reads ANCHORED, SIGN-OFF NOT SHOWN and exits 4"),
-		jobFolder:       fs.String("job", "", "a folder of one job's records: check each record, then the map of links between them"),
-		tamperTest:      fs.Bool("tamper-test", false, "change every value one at a time, delete every key holding a value, remove and append list items and add unknown keys, and report any change the verifier accepts and which checks caught the rest; exit 0 only if every change fails"),
-		recomputeHashes: fs.Bool("recompute-hashes", false, "with --tamper-test, play a forger who rewrites the whole record: after each change, recompute every hash the record itself determines, and count a change as stopped only when a check no rewrite can satisfy catches it (the public-log entries, their signer and timestamps, the actor signature or AMD's report signature)"),
-		showEvidence:    fs.Bool("show-evidence-summary", false, "print a one-glance maturity summary (real vs scaffold counts, Rekor anchor status, PoTE preimage version, strict-mode gate disposition) and exit; combine with --json for machine-readable form"),
+		jsonOutput:        fs.Bool("json", false, "emit machine-readable JSON instead of human report"),
+		strictMode:        fs.Bool("strict", false, "fail (exit 1) on any scaffold-flagged value"),
+		allowPartial:      fs.Bool("allow-partial", false, "exit 0 for a record whose public-log anchor binds only part of it (a record sealed before leaf v5, or one without a verified complete-record anchor); without this flag such a record exits 3, because its unanchored sections could have been rewritten together with their hashes. With --signals, exit 0 for a feed in which some events carry no public-log entry of their own and a later event's entry commits them; without this flag such a feed exits 3, because their time is proven only by the later entry"),
+		allowUnanchored:   fs.Bool("allow-unanchored", false, "exit 0 for a bundle with no public-log anchor; without this flag, unanchored bundles fail, because every sealing property this tool checks hangs off the anchor and an attacker can strip an anchor claim by editing one unprotected field (the documented downgrade attack)"),
+		showVersion:       fs.Bool("version", false, "print version and exit"),
+		selfHosted:        fs.Bool("self-hosted-receipt", false, "the receipt was issued by a test or self-hosted deployment that does not anchor receipts on the public log, not by the Verdifax API; exempts it from the rules that receipts dated from run 241 on must carry a public-log anchor and receipts dated from run 242 on must seal anchor_required"),
+		policyFile:        fs.String("policy", "", "a policy document (JSON) to check against the policy decision the record or receipt seals: its hashes and sealed identity must match, and where the run sealed the inputs the rules read, this tool runs the rules itself and must reach the same rule and outcome, or verification fails"),
+		signerKeyFile:     fs.String("signer-key", "", "a file holding the base64 Ed25519 public key you expect signed the request; fails unless the record carries a valid request signature from that key"),
+		requestFile:       fs.String("request", "", "a file holding the exact signed request; passes only if the record's version 2 signature covers those bytes"),
+		policyHistory:     fs.String("policy-history", "", "a JSON list of a key's policy changes, oldest first: every change and link must verify, and a record given with it must name a change in the list"),
+		accountPolicy:     fs.String("account-policy", "", "the account's policy document (JSON), for a record from a key in an account with a policy: checked as --policy checks the key's, and the account's rules run on the sealed inputs must reach the sealed decision, or verification fails"),
+		aivpTraces:        fs.String("aivp-traces", "", "with --job, a folder holding the trace of every step whose AI review ran, as <step>.txt for the step's <step>.json; each must re-check as --aivp-trace checks one"),
+		aivpTrace:         fs.String("aivp-trace", "", "the trace the record's AI review checked, as the run's response returned it (aivp_trace_text): its SHA-256 must be the sealed trace hash, and the contradiction check run again on it must reach the sealed finding, or verification fails"),
+		accountHistory:    fs.String("account-policy-history", "", "a JSON list of the account's policy changes, oldest first: every change and link must verify, every change must belong to the account the record names, and the record must name a change in the list"),
+		signOff:           fs.String("signoff", "", "a JSON list of sign-offs for the record or receipt, as GET /runs/{id}/signoffs returns: each must verify, belong to the record's account and name this exact result; the latest is the decision in force"),
+		approverKey:       fs.String("approver-key", "", "with --signoff, a file holding the base64 Ed25519 public key you expect signed the decision in force; fails unless it did"),
+		signals:           fs.String("signals", "", "an account's signal feed, the body of GET /signals: every event's entry must verify as its kind on the public log, seal its place in the feed, belong to one account, and link to the event before it without a gap; each key's request keys are followed from their registration, and a page that ends with Verdifax's head statement must reach the head's event; runs alone with no record"),
+		signalsAfter:      fs.String("signals-after", "", "with --signals, N:hash, the last event a system already read: the feed must continue from it"),
+		ownerRequestKey:   fs.String("owner-request-key", "", "with --signals, a file holding the base64 Ed25519 public key of the owner key's request key, or several such files separated by commas (the keys it has had): fails unless every change the owner decided in the feed is signed by one of them and every request key registered or set for the owner key is one of them"),
+		signOffHeadMaxAge: fs.String("signoff-head-max-age", "24h", "with --signoff-history, the oldest the history's head statement may be, as a duration such as 24h or 72h: its time on the public log is shown with its age, and a head older than this fails, since a later sign-off has had that long to exist unseen; fetch the history again, or raise the limit"),
+		feedHeadMaxAge:    fs.String("feed-head-max-age", "24h", "with --signals, the oldest the feed's head statement may be, as a duration such as 24h or 72h: its time on the public log is shown with its age, and a head older than this fails, since a later event has had that long to exist unseen; fetch the feed again, or raise the limit"),
+		signOffHistory:    fs.String("signoff-history", "", "a JSON list of an account's sign-offs, oldest first: every sign-off and link must verify, in one account; runs alone with no record"),
+		strictSignOff:     fs.Bool("strict-signoff", false, "fail (exit 1) a record whose rule requires a person's sign-off when no sign-offs are given; without this flag such a record, if every other check passes, reads ANCHORED, SIGN-OFF NOT SHOWN and exits 4"),
+		jobFolder:         fs.String("job", "", "a folder of one job's records: check each record, then the map of links between them; a step whose record was deleted is given as its tombstone (the run.deleted event's entry), which stands for the record hash it seals and whose sealed job links are checked as a present step's, and the job then reads complete except the deleted steps"),
+		tamperTest:        fs.Bool("tamper-test", false, "change every value one at a time, delete every key holding a value, remove and append list items and add unknown keys, and report any change the verifier accepts and which checks caught the rest; exit 0 only if every change fails"),
+		recomputeHashes:   fs.Bool("recompute-hashes", false, "with --tamper-test, play a forger who rewrites the whole record: after each change, recompute every hash the record itself determines, and count a change as stopped only when a check no rewrite can satisfy catches it (the public-log entries, their signer and timestamps, the actor signature or AMD's report signature)"),
+		showEvidence:      fs.Bool("show-evidence-summary", false, "print a one-glance maturity summary (real vs scaffold counts, Rekor anchor status, PoTE preimage version, strict-mode gate disposition) and exit; combine with --json for machine-readable form"),
 	}
 }
 
@@ -283,9 +289,25 @@ func main() {
 	if *o.accountHistory != "" && flag.NArg() == 0 {
 		os.Exit(runAccountHistoryMode(*o.accountHistory, *jsonOutput))
 	}
-	if (*o.signalsAfter != "" || *o.ownerRequestKey != "") && *o.signals == "" {
-		fmt.Fprintln(os.Stderr, "verdifax-verify: --signals-after and --owner-request-key apply only with --signals")
+	if (*o.signalsAfter != "" || *o.ownerRequestKey != "" || flagSet("feed-head-max-age")) && *o.signals == "" {
+		fmt.Fprintln(os.Stderr, "verdifax-verify: --signals-after, --owner-request-key and --feed-head-max-age apply only with --signals")
 		os.Exit(2)
+	}
+	if flagSet("signoff-head-max-age") && *o.signOffHistory == "" {
+		fmt.Fprintln(os.Stderr, "verdifax-verify: --signoff-head-max-age applies only with --signoff-history")
+		os.Exit(2)
+	}
+	for _, limit := range []struct {
+		name  string
+		value string
+		into  *time.Duration
+	}{{"signoff-head-max-age", *o.signOffHeadMaxAge, &signOffHeadMaxAge}, {"feed-head-max-age", *o.feedHeadMaxAge, &feedHeadMaxAge}} {
+		d, limitErr := parseHeadMaxAge(limit.name, limit.value)
+		if limitErr != nil {
+			fmt.Fprintln(os.Stderr, "verdifax-verify:", limitErr)
+			os.Exit(2)
+		}
+		*limit.into = d
 	}
 	if *o.signals != "" && flag.NArg() > 0 {
 		fmt.Fprintln(os.Stderr, "verdifax-verify: --signals checks a feed file and runs alone, with no record")
@@ -851,7 +873,7 @@ const (
 var flagInputKinds = map[string]string{
 	"json": inputBoth, "version": inputBoth, "allow-unanchored": inputBoth,
 	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
-	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "strict-signoff": inputBundle, "signals": inputBoth, "signals-after": inputBoth, "owner-request-key": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
+	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "strict-signoff": inputBundle, "signals": inputBoth, "signals-after": inputBoth, "owner-request-key": inputBoth, "signoff-head-max-age": inputBoth, "feed-head-max-age": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
 	"self-hosted-receipt": inputReceipt,
 }
 
@@ -878,6 +900,13 @@ func runJobMode(o options, asJSON, allowPartial, allowUnanchored, selfHosted boo
 		opts.signerKey = strings.TrimSpace(string(key))
 	}
 	return runJobCheck(*o.jobFolder, opts, asJSON, allowPartial)
+}
+
+// flagSet reports a flag given on the command line.
+func flagSet(name string) bool {
+	set := false
+	flag.Visit(func(f *flag.Flag) { set = set || f.Name == name })
+	return set
 }
 
 func flagsRefusedFor(kind string) []string {

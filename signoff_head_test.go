@@ -27,6 +27,14 @@ func sealHead(t *testing.T, l *testLog, account string, chain []artifacts.SignOf
 	return h
 }
 
+// atClock runs the rest of the test as if checked at the given time.
+func atClock(t *testing.T, at time.Time) {
+	t.Helper()
+	before := checkClock
+	checkClock = func() time.Time { return at }
+	t.Cleanup(func() { checkClock = before })
+}
+
 // history encodes sign-offs followed by extra entries, as the server serves it.
 func history(t *testing.T, chain []artifacts.SignOff, extra ...any) []byte {
 	t.Helper()
@@ -48,6 +56,7 @@ func TestAHeadStatementShowsTheHistoryIsComplete(t *testing.T) {
 	target := artifacts.SignOffTarget{Kind: artifacts.SignOffTargetRecord, RunID: subject.runID, Digest: subject.digest}
 	chain := signOffChain(t, l, subject.account, a, []artifacts.SignOffTarget{target, target}, []string{artifacts.SignOffApprove, artifacts.SignOffReject})
 	head := sealHead(t, l, subject.account, chain)
+	atClock(t, time.Unix(head.Anchor.IntegratedTime, 0).Add(3*time.Hour))
 
 	whole := checkSignOffHistory(history(t, chain, head))
 	if !whole.OK || whole.CompleteAsOf == "" {
@@ -81,6 +90,41 @@ func TestAHeadStatementShowsTheHistoryIsComplete(t *testing.T) {
 	}
 	if _, err := readChainItems(encode(t, []any{head}), reflectPolicyActivationForTest()); err == nil || !strings.Contains(err.Error(), "only a sign-off history") {
 		t.Fatalf("a head in another chain's history must be refused: %v", err)
+	}
+}
+
+// Round 61, N24: a head's age is shown beside its time, and a head older
+// than the limit fails, by default 24 hours; the limit can be raised.
+func TestASignOffHeadsAgeIsShownAndLimited(t *testing.T) {
+	l := newTestLog(t)
+	l.install(t)
+	_, subject := signOffRecord(t)
+	a := newApprover(t)
+	target := artifacts.SignOffTarget{Kind: artifacts.SignOffTargetRecord, RunID: subject.runID, Digest: subject.digest}
+	chain := signOffChain(t, l, subject.account, a, []artifacts.SignOffTarget{target}, []string{artifacts.SignOffApprove})
+	head := sealHead(t, l, subject.account, chain)
+	logged := time.Unix(head.Anchor.IntegratedTime, 0)
+	atClock(t, logged.Add(3*24*time.Hour))
+	old := checkSignOffHistory(history(t, chain, head))
+	if old.OK || !strings.Contains(old.Reason, "the head statement is older than the limit; fetch the history again") ||
+		!strings.Contains(old.Reason, "3 days before this check") || !strings.Contains(old.Reason, "--signoff-head-max-age") {
+		t.Fatalf("a head 3 days old fails the 24 hour limit: %+v", old)
+	}
+	signOffHeadMaxAge = 96 * time.Hour
+	t.Cleanup(func() { signOffHeadMaxAge = defaultHeadMaxAge })
+	raised := checkSignOffHistory(history(t, chain, head))
+	if !raised.OK || raised.CompleteAge != "3 days before this check" || raised.CompleteAsOf != logged.UTC().Format(time.RFC3339) {
+		t.Fatalf("a raised limit admits it, and its age is shown: %+v", raised)
+	}
+	signOffHeadMaxAge = defaultHeadMaxAge
+	atClock(t, logged.Add(5*time.Hour))
+	if fresh := checkSignOffHistory(history(t, chain, head)); !fresh.OK || fresh.CompleteAge != "5 hours before this check" {
+		t.Fatalf("a head 5 hours old passes with its age: %+v", fresh)
+	}
+	for _, bad := range []string{"0s", "-1h", "a day", ""} {
+		if _, err := parseHeadMaxAge("signoff-head-max-age", bad); err == nil {
+			t.Errorf("limit %q must be refused", bad)
+		}
 	}
 }
 

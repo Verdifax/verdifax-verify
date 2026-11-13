@@ -23,6 +23,9 @@ FLAGS
                           v5, or without a complete-record anchor)
   -job FOLDER             check a folder of one job's records: each record
                           in full, then the map of links between them.
+                          A deleted step is given as its sealed tombstone,
+                          which stands for its record; the job then reads
+                          complete except the deleted steps.
                           A job map covers what was sent; it cannot show
                           a step that was never sent
   -policy FILE            check a policy document against the policy
@@ -71,8 +74,12 @@ FLAGS
   -signoff-history FILE   check an account's whole chain of sign-offs,
                           oldest first, and, when it ends with Verdifax's
                           head statement, report it complete as of the
-                          statement's time on the public log. Runs alone
-                          with no record
+                          statement's time on the public log and its age.
+                          Runs alone with no record
+  -signoff-head-max-age D with -signoff-history, the oldest the history's
+                          head statement may be (default 24h; for example
+                          72h): an older head fails, so fetch the history
+                          again or raise the limit
   -strict-signoff         fail (exit 1) a record whose rule requires a
                           person's sign-off when no sign-offs are given;
                           without it such a record, if every other check
@@ -86,14 +93,25 @@ FLAGS
                           ones it never recorded. Every account change and
                           deletion names who decided; an owner's carries
                           the owner's request-key signature, and a Verdifax
-                          change after the owner's block fails. Runs alone
-                          with no record
+                          change after the owner's block fails. Each key's
+                          request keys are followed from their registration,
+                          every replacement approved by the key before it,
+                          and an owner's change must be signed by the owner
+                          key's request key of its time. A page that ends
+                          with Verdifax's head statement is complete as of
+                          its time on the public log, and a feed shorter
+                          than its head fails. Runs alone with no record
   -signals-after N:hash   with -signals, the last event already read: the
                           feed must continue from it
   -owner-request-key FILE with -signals, the owner key's request key (base64
                           Ed25519 public key), or several files separated
                           by commas: fails unless one of them signed every
-                          change the owner decided
+                          change the owner decided and every request key
+                          registered or set for the owner key is one of them
+  -feed-head-max-age D    with -signals, the oldest the feed's head
+                          statement may be (default 24h; for example 72h):
+                          an older head fails, so fetch the feed again or
+                          raise the limit
   -signer-key FILE       pass only if the run was requested by the holder
                           of this base64 Ed25519 public key
   -request FILE           pass only if the record's version 2 signature
@@ -127,8 +145,8 @@ EXIT
      -allow-unanchored was not passed (or -strict + scaffold)
   2  could not parse the input
   3  every check passed, but the public-log anchor covers only part
-     of the record, or with -job the job has no final step, and
-     -allow-partial was not passed
+     of the record, or with -job the job has no final step or a
+     deleted step, and -allow-partial was not passed
   4  every check passed and the complete record is anchored, but its
      rule requires a person's sign-off and no sign-offs were given
      (ANCHORED, SIGN-OFF NOT SHOWN), and -strict-signoff was not passed`)

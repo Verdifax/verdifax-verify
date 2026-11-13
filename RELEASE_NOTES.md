@@ -2,6 +2,57 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.34.0: each key's request-key chain, a feed complete as of a time, a head's age, and a deleted job step through its tombstone
+
+- `--signals` follows each customer key's request-key chain through the
+  feed, from the server release that came with this version on: a key
+  registered (`request_key.registered`), replaced (`request_key.rotated`,
+  carrying `request_key_approval`, the replaced key's signature over the new
+  key) or cleared by its holder (`request_key.cleared`, decided by `owner`,
+  with the approval), and cleared by Verdifax (`decided_by:
+  verdifax_admin`). A replacement or clear not approved by the key before
+  it, a second registration over a held key, and an owner's change signed by
+  any key but the owner key's request key of its time fail the feed. After a
+  Verdifax clear the report says "the owner's key chain was cleared by
+  Verdifax at event N; pass --owner-request-key to confirm later owner
+  changes." With `--owner-request-key`, every key registered or set for the
+  owner key must also be one of the keys given. The JSON report lists each
+  chain in `request_key_chains` and anything left to confirm in `notes`. A
+  feed sealed before registrations were verifies as before, with a note
+  naming the flag.
+- A feed page that reaches the end carries the feed's head statement,
+  `verdifax.feed-head.v1`, anchored on the public log. The verifier checks it
+  against the feed: a feed that ends below the head's event, goes past it or
+  ends on another event fails. The report says the feed, and the owner's
+  blocks, held as of the head's time; without a head it says a later event
+  may exist. JSON: `head_sequence`, `complete_as_of`, `complete_as_of_age`,
+  `owner_blocks` and `owner_blocks_held_as_of`.
+- Each head's age is printed beside its time, for the sign-off history and
+  the feed, and a head older than the limit fails: "the head statement is
+  older than the limit; fetch the history again" (or the feed). The limit
+  is 24 hours by default; `--signoff-head-max-age` and `--feed-head-max-age`
+  set it (for example `72h`). A saved history or feed checked more than a day
+  after it was fetched now needs the flag. JSON: `complete_as_of_age`.
+- An event whose record was deleted reads at the time the feed served it and
+  says "record deleted by owner" or "by Verdifax", with the tombstone's
+  event; the JSON report adds `tombstone_sequence` and `key_id` on key and
+  account changes.
+- `--job` accepts a deleted step's tombstone beside the step records: it
+  must verify on the public log and name the job and step, later steps'
+  links land on the record hash it seals, and the job reads
+  `COMPLETE_EXCEPT_DELETED` (exit 3, or 0 with `--allow-partial`), never
+  COMPLETE, listing the deleted steps in `deleted_steps`. A deleted step may
+  be a completed run's record or a stopped run's receipt.
+- A tombstone (`verdifax.run-deletion.v1`) of a job step deleted since the
+  server release that came with this version seals the step's own links in
+  `job_links` (`previous_record_hashes`, `external_previous`, `final`), only
+  when present and behind their own label, so every earlier tombstone hashes
+  as before. `--job` checks them as a present step's links: each must land on
+  a record or tombstone in the folder or be external, a deleted final step
+  closes the job, and a dropped branch is still caught. A job that would need
+  the links of a tombstone written before fails, naming that it predates
+  sealed job links. `deleted_steps` gives `links_sealed`.
+
 ### v0.33.0: everything changed in an account is in its feed, with who decided
 
 - `--signals` reads two new kinds of event, each anchored as its own entry:

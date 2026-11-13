@@ -109,7 +109,7 @@ misplaced `--policy` can never pass as "checked".
 | 0 | Every check passed, and the public log covers the complete record (or the input is a receipt, which its entry covers whole). |
 | 1 | One or more verification checks failed (or `--strict` + scaffold), including JSON that strict reading refuses as malformed or ambiguous. |
 | 2 | The input could not be read (a missing file or a failed download), it was read but could not be decoded as a bundle or receipt, or a flag was given that does not apply to the input's kind (since v0.17.11, instead of being ignored). |
-| 3 | Every check passed, but the public log covers only part of the record (a record sealed before leaf v5, or a leaf v5 record without a verified complete-record anchor; a leaf v6 or later record without one fails with exit 1), and `--allow-partial` was not given. Since v0.16.0. |
+| 3 | Every check passed, but the public log covers only part of the record (a record sealed before leaf v5, or a leaf v5 record without a verified complete-record anchor; a leaf v6 or later record without one fails with exit 1), and `--allow-partial` was not given. Since v0.16.0. With `--job`, also a job with no final step, or since v0.34.0 one with a deleted step. |
 | 4 | Every check passed and the complete record is anchored, but its rule requires a person's sign-off and no sign-offs were given: the verdict is `ANCHORED, SIGN-OFF NOT SHOWN`, and `--strict-signoff` was not given. Since v0.32.0. |
 
 A script that treats exit 0 as a pass, with the default flags, accepts
@@ -875,6 +875,14 @@ seals that it does, and shows the requirement of an older record.
 Since v0.31.0 the history must end with its head statement, and the report
 says the approval is in force as of the head's time on the public log.
 
+Since v0.34.0 the report prints the head's age beside its time ("as of
+2026-11-12T21:58:20Z, 3 days before this check"), and a head older than
+`--signoff-head-max-age` (24 hours by default; for example `72h`) fails:
+"the head statement is older than the limit; fetch the history again". A
+later sign-off has had that long to exist without the head showing it. The
+flag raises the limit for a history you have reason to check as of an
+earlier time, such as one saved with a record.
+
 A sign-off shows that the holder of an approver key the account registered
 signed that decision on that result, and that Verdifax logged it. It does
 not show that the review was careful, that the result was right, or who the
@@ -995,6 +1003,44 @@ Verdifax deletion comes after the owner's block and before the owner allows
 it again. A page read with `--signals-after` sees only the settings made from
 that point.
 
+Since v0.34.0 the feed holds each customer key's request keys too, as
+account changes the key's holder makes (`decided_by: owner`): a key
+registered (`request_key.registered`, the value its public key), replaced
+(`request_key.rotated`, carrying `request_key_approval`, the replaced key's
+signature over the new one) and cleared (`request_key.cleared`, with the
+cleared key's approval), and Verdifax clearing a lost one
+(`request_key.cleared`, `decided_by: verdifax_admin`). The verifier follows
+each key's chain: the first registration pins a key, each replacement and
+clear must carry a valid approval by the key before it, and a Verdifax clear
+breaks the chain. A change the owner decides must be signed by the owner
+key's request key current at that event, so a server that held only its own
+copy of the feed cannot sign an owner's change with another key. After a
+Verdifax clear the report says: "the owner's key chain was cleared by
+Verdifax at event N; pass --owner-request-key to confirm later owner
+changes." `--owner-request-key` confirms the chain from outside the feed:
+with it, every key registered or set for the owner key must be one of the
+keys given. The JSON report lists each key's chain in `request_key_chains`.
+A feed whose owner key's request key was registered before the server sealed
+registrations (the release that came with v0.34.0) verifies as before, and
+the report says the key was not registered in the feed and names the flag.
+
+Since v0.34.0 a page of `GET /signals` that reaches the feed's end ends with
+a head statement, `verdifax.feed-head.v1`: Verdifax states the feed's highest
+event and that event's hash, and anchors the statement on the public log.
+The verifier checks it against the feed given: a feed that ends below the
+head's event fails ("the feed ends at event N, and Verdifax's head statement
+of T says the feed's highest event is M"), and one that goes past it, or ends
+on another event, fails too. The report says the feed is complete as of the
+head's time on the public log, with its age, and the owner's blocks held as
+of that time. A head older than `--feed-head-max-age` (24 hours by default)
+fails: fetch the feed again. Without a head the feed still verifies, and the
+report says a later event may exist.
+
+An event whose record was deleted reads at the time the feed served it, with
+"record deleted by owner" or "record deleted by Verdifax" and the
+tombstone's own event; the JSON report keeps `record_deleted_by` and adds
+`tombstone_sequence`.
+
 ### `--job`: checking a job's records together
 
 `--job FOLDER` checks every record in the folder in full, then the map of
@@ -1004,6 +1050,31 @@ no final step closes the job (exit 3, or 0 with `--allow-partial`), or FAILED
 (exit 1). A job map covers what was sent. It cannot show a step that was
 never sent. A closed job shows the customer said it was finished, not that
 nothing else happened.
+
+Since v0.34.0 a step whose record was deleted is given as its tombstone: the
+`verdifax.run-deletion.v1` record from the account feed's `run.deleted`
+event, saved as a `.json` file beside the step records. The tombstone must
+verify in full on the public log and name this job and step; it stands for
+the record hash it seals, so the later steps' links land on it, and the
+report names the step, who deleted it and the tombstone's event
+(`deleted_steps` in JSON). The job is never COMPLETE with a deleted step: it
+reads COMPLETE EXCEPT THE DELETED STEPS (`COMPLETE_EXCEPT_DELETED`, exit 3,
+or 0 with `--allow-partial`). A deleted step of any kind is read this way,
+a refused, halted or failed run's receipt as well as a completed run's
+record.
+
+A tombstone written since the server release that came with v0.34.0 also
+seals the deleted step's own job links (`job_links`: the records it followed,
+its links to other accounts' records, and whether it closed the job). The
+verifier checks them as it checks a present step's: each link must land on a
+record or a tombstone in the folder, or be an external link, a deleted final
+step counts as the step that closes the job, and a step followed only by a
+deleted step is followed through the tombstone's links, so a dropped branch
+is still caught in a job with a deletion. A tombstone written before carries
+no links and cannot vouch for them: a job that would need its links fails,
+saying the tombstone predates sealed job links, and one that does not reads
+complete except the deleted step. `deleted_steps` gives `links_sealed` for
+each.
 
 `--request FILE` passes only if a version 2 request signature covers the
 exact bytes of that file.

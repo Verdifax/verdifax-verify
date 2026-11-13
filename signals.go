@@ -11,6 +11,10 @@ package main
 //
 // A feed shows the signals Verdifax recorded for the account, in order. It
 // cannot show a signal Verdifax never recorded.
+//
+// Since v0.34.0 (round 61) a page that reaches the feed's end carries the
+// feed's head statement, so a feed cut short before a later event fails, and
+// each key's request-key chain is followed through the feed (keychains.go).
 
 import (
 	"bytes"
@@ -60,11 +64,13 @@ type signalEvent struct {
 	Deleted *artifacts.RunDeletion `json:"deleted,omitempty"`
 }
 
-// signalFeedPage is the body of GET /signals.
+// signalFeedPage is the body of GET /signals. Head (round 61, N23) is
+// Verdifax's head statement, served on a page that reaches the feed's end.
 type signalFeedPage struct {
-	Events    []signalCloudEvent `json:"events"`
-	NextAfter int64              `json:"next_after"`
-	Newest    int64              `json:"newest"`
+	Events    []signalCloudEvent  `json:"events"`
+	NextAfter int64               `json:"next_after"`
+	Newest    int64               `json:"newest"`
+	Head      *artifacts.FeedHead `json:"head,omitempty"`
 }
 
 // SignalFeedEntry is one checked event in the report.
@@ -85,10 +91,16 @@ type SignalFeedEntry struct {
 	// signed it: compare it with the owner's own request key.
 	OwnerSignedBy string `json:"owner_signed_by,omitempty"`
 	// RecordDeletedBy, on an event whose record was deleted, is who deleted
-	// it, from the tombstone served in its place.
-	RecordDeletedBy string `json:"record_deleted_by,omitempty"`
-	At              string `json:"at"`
-	LogEntry        string `json:"log_entry_id"`
+	// it, from the tombstone served in its place; TombstoneSequence (round
+	// 61, N25) is the tombstone's own event.
+	RecordDeletedBy   string `json:"record_deleted_by,omitempty"`
+	TombstoneSequence int64  `json:"tombstone_sequence,omitempty"`
+	// KeyID, on a key or account change that names a key, is that key.
+	KeyID int64 `json:"key_id,omitempty"`
+	// At is the time the entry seals; for an event whose record was deleted
+	// it is the event's served time, since the record is gone.
+	At       string `json:"at"`
+	LogEntry string `json:"log_entry_id"`
 	// CommittedBy, when set, is the later event whose public-log entry
 	// commits this one: this event carries no entry of its own, so its time
 	// is proven only by that later entry, not by its own clock.
@@ -125,7 +137,53 @@ type SignalFeedCheck struct {
 	// was a key given with --owner-request-key (round 60).
 	OwnerSigningKeys []string `json:"owner_signing_keys,omitempty"`
 	OwnerKeysPinned  bool     `json:"owner_keys_pinned,omitempty"`
-	Reason           string   `json:"reason,omitempty"`
+	// RequestKeyChains (round 61, N22) is each key's request-key chain as
+	// the feed shows it, by key.
+	RequestKeyChains []RequestKeyChain `json:"request_key_chains,omitempty"`
+	// Head (round 61, N23) is the head statement the feed ends with, when
+	// it carries one: CompleteAsOf is its time on the public log and
+	// CompleteAge how long before this check that was (N24).
+	HeadSequence int64  `json:"head_sequence,omitempty"`
+	CompleteAsOf string `json:"complete_as_of,omitempty"`
+	CompleteAge  string `json:"complete_as_of_age,omitempty"`
+	// OwnerBlocks are the owner's blocks as the feed leaves them, and
+	// BlocksHeldAsOf the time they are shown to hold until: the head's time,
+	// or empty when the feed has no head and a later event may exist.
+	OwnerBlocks    map[string]string `json:"owner_blocks,omitempty"`
+	BlocksHeldAsOf string            `json:"owner_blocks_held_as_of,omitempty"`
+	// Notes are what the check could not confirm without more evidence, and
+	// how to give it.
+	Notes  []string `json:"notes,omitempty"`
+	Reason string   `json:"reason,omitempty"`
+}
+
+// RequestKeyChain is one key's request keys as the feed shows them: each
+// registration, rotation and clear, in order.
+type RequestKeyChain struct {
+	KeyID int64 `json:"key_id"`
+	// OwnerKey says the key is the account's owner key, by its creation in
+	// the feed.
+	OwnerKey bool `json:"owner_key,omitempty"`
+	// Current is the key's request key after the feed's last event, empty
+	// when it holds none.
+	Current string              `json:"current,omitempty"`
+	Events  []RequestKeyEventAt `json:"events"`
+	// ClearedByVerdifax is the event at which Verdifax last cleared the
+	// key's request key: the chain is broken there, and a key registered
+	// after it is proven only by --owner-request-key.
+	ClearedByVerdifax int64 `json:"cleared_by_verdifax_at,omitempty"`
+	// Unrooted says the chain's first event in the feed is not a
+	// registration: the key was registered before the feed shows (before
+	// the server sealed registrations, or before the point checked).
+	Unrooted bool `json:"unrooted,omitempty"`
+}
+
+// RequestKeyEventAt is one change in a key's request-key chain.
+type RequestKeyEventAt struct {
+	Sequence  int64  `json:"sequence"`
+	Action    string `json:"action"`
+	Key       string `json:"key,omitempty"`
+	DecidedBy string `json:"decided_by"`
 }
 
 var signalAfterPattern = regexp.MustCompile(`^(0|[1-9][0-9]{0,18}):([0-9a-f]{64})$`)
@@ -156,25 +214,25 @@ func parseSignalPoint(v string) (*signalPoint, error) {
 }
 
 // decodeSignalEvents reads a feed page, or a bare list of events, refusing
-// unknown fields.
-func decodeSignalEvents(data []byte) ([]signalCloudEvent, error) {
+// unknown fields. A page that reaches the feed's end carries its head.
+func decodeSignalEvents(data []byte) ([]signalCloudEvent, *artifacts.FeedHead, error) {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) > 0 && trimmed[0] == '[' {
 		var events []signalCloudEvent
 		dec := json.NewDecoder(bytes.NewReader(trimmed))
 		dec.DisallowUnknownFields()
 		if decodeErr := dec.Decode(&events); decodeErr != nil {
-			return nil, fmt.Errorf("the feed is not a list of signal events: %w", decodeErr)
+			return nil, nil, fmt.Errorf("the feed is not a list of signal events: %w", decodeErr)
 		}
-		return events, nil
+		return events, nil, nil
 	}
 	var page signalFeedPage
 	dec := json.NewDecoder(bytes.NewReader(trimmed))
 	dec.DisallowUnknownFields()
 	if decodeErr := dec.Decode(&page); decodeErr != nil {
-		return nil, fmt.Errorf("the feed is not a GET /signals body: %w", decodeErr)
+		return nil, nil, fmt.Errorf("the feed is not a GET /signals body: %w", decodeErr)
 	}
-	return page.Events, nil
+	return page.Events, page.Head, nil
 }
 
 // strictDecode decodes an entry, refusing unknown fields.
@@ -210,8 +268,12 @@ type checkedEntry struct {
 	// scope.
 	change    *artifacts.AccountChange
 	keyScope  string
+	keyID     int64
 	ownerKey  string
 	deletedBy string
+	// tombstoneAt is, on an event whose record was deleted, the
+	// tombstone's own event (round 61, N25).
+	tombstoneAt int64
 }
 
 // unloggedOr passes a check that failed only for want of a public-log entry,
@@ -236,9 +298,10 @@ func logEntryOf(a *artifacts.ReceiptAnchor) string {
 
 // checkSignalEntry checks one event's entry as its own kind and returns its
 // hash and the feed place it seals.
-func checkSignalEntry(e *signalEvent) (checkedEntry, error) {
+func checkSignalEntry(ce *signalCloudEvent) (checkedEntry, error) {
+	e := &ce.Data
 	if e.Deleted != nil {
-		return checkDeletedRecordEvent(e)
+		return checkDeletedRecordEvent(ce)
 	}
 	switch e.Kind {
 	case artifacts.SignalRunRefused, artifacts.SignalRunHalted, artifacts.SignalRunFailed:
@@ -308,7 +371,7 @@ func checkSignalEntry(e *signalEvent) (checkedEntry, error) {
 		}
 		link := k.Signal
 		return checkedEntry{hash: k.KeyChangeHash, at: k.ChangedAt, logEntry: logEntryOf(k.Anchor), link: &link,
-			decidedBy: k.Decider(), keyScope: k.KeyScope, unlogged: unlogged}, nil
+			decidedBy: k.Decider(), keyScope: k.KeyScope, keyID: k.KeyID, unlogged: unlogged}, nil
 	case artifacts.SignalAccountChanged:
 		var c artifacts.AccountChange
 		if decodeErr := strictDecode(e.Entry, &c); decodeErr != nil {
@@ -321,7 +384,7 @@ func checkSignalEntry(e *signalEvent) (checkedEntry, error) {
 		}
 		link := c.Signal
 		return checkedEntry{hash: c.AccountChangeHash, at: c.ChangedAt, logEntry: logEntryOf(c.Anchor), link: &link,
-			decidedBy: c.DecidedBy, change: &c, ownerKey: ownerKeyOf(c.OwnerSignature), unlogged: unlogged}, nil
+			decidedBy: c.DecidedBy, change: &c, keyID: c.KeyID, ownerKey: ownerKeyOf(c.OwnerSignature), unlogged: unlogged}, nil
 	case artifacts.SignalRunDeleted:
 		var d artifacts.RunDeletion
 		if decodeErr := strictDecode(e.Entry, &d); decodeErr != nil {
@@ -504,9 +567,11 @@ func checkSignalFeed(data []byte, after *signalPoint) SignalFeedCheck {
 
 // checkSignalFeedPinned is checkSignalFeed with the owner's request keys
 // pinned: a change the owner decided that one of them did not sign fails the
-// feed. The record names the key that signed it, so without a pin the check
-// proves only that the key it names signed; the pin proves it was the
-// owner's.
+// feed, and so does a request key registered for the owner key that is not
+// one of them (round 61). The record names the key that signed it, so
+// without a pin the check proves that key signed, and the feed's request-key
+// chain proves it was the owner key's request key from its registration on;
+// the pin proves the registration itself was the owner's.
 func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) SignalFeedCheck {
 	c := SignalFeedCheck{Checked: true}
 	pinned := map[string]bool{}
@@ -514,7 +579,7 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 		pinned[k] = true
 	}
 	seenOwnerKey := map[string]bool{}
-	events, readErr := decodeSignalEvents(data)
+	events, head, readErr := decodeSignalEvents(data)
 	if readErr != nil {
 		c.Reason = readErr.Error()
 		return c
@@ -528,6 +593,7 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 	// The owner's blocks, as the feed has set them so far (round 60): while
 	// one stands, Verdifax may not replace the owner key or delete a record.
 	blocked := map[string]bool{}
+	chains := newRequestKeyChains()
 	switch {
 	case after != nil:
 		previousSeq, previousHash, c.ContinuityFrom = after.sequence, after.hash, "given point"
@@ -544,7 +610,7 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 		d := &ce.Data
 		fail := func(format string, args ...any) SignalFeedCheck {
 			c.Reason = fmt.Sprintf("event %d (sequence %d): %s", i+1, d.Sequence, fmt.Sprintf(format, args...))
-			c.Entries = nil
+			c.Entries, c.RequestKeyChains, c.OwnerBlocks, c.Notes = nil, nil, nil, nil
 			return c
 		}
 		if envErr := checkSignalEnvelope(ce); envErr != nil {
@@ -555,7 +621,7 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 		} else if d.Account != c.Account {
 			return fail("it belongs to %s, and the feed began with %s", d.Account, c.Account)
 		}
-		got, entryErr := checkSignalEntry(d)
+		got, entryErr := checkSignalEntry(ce)
 		if entryErr != nil {
 			return fail("%v", entryErr)
 		}
@@ -592,6 +658,9 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 		if blockErr := checkOwnerBlocks(blocked, d.Kind, &got); blockErr != "" {
 			return fail("%s", blockErr)
 		}
+		if chainErr := chains.apply(d.Sequence, d.Kind, &got, pinned); chainErr != "" {
+			return fail("%s", chainErr)
+		}
 		if got.ownerKey != "" {
 			if len(pinned) > 0 && !pinned[got.ownerKey] {
 				return fail("a change the owner decided is signed by request key %s, which is not one given with --owner-request-key", truncate(got.ownerKey, 12))
@@ -602,7 +671,7 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 			}
 		}
 		entry := SignalFeedEntry{Sequence: d.Sequence, Kind: d.Kind, RunID: d.RunID, DecidedBy: got.decidedBy, At: got.at, LogEntry: got.logEntry,
-			KeyScope: got.keyScope, OwnerSignedBy: got.ownerKey, RecordDeletedBy: got.deletedBy}
+			KeyScope: got.keyScope, KeyID: got.keyID, OwnerSignedBy: got.ownerKey, RecordDeletedBy: got.deletedBy, TombstoneSequence: got.tombstoneAt}
 		if got.change != nil {
 			entry.Change, entry.Value = got.change.Action, got.change.Value
 		}
@@ -638,9 +707,53 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 		c.CommittedLater++
 	}
 	c.First, c.Last, c.LastEventHash = events[0].Data.Sequence, previousSeq, previousHash
+	// Round 61, N23: the head statement says the feed's highest event as
+	// Verdifax served it; a feed that ends below it was cut short.
+	if head != nil {
+		if headErr := checkFeedHead(head, c.Account, previousSeq, previousHash); headErr != nil {
+			c.Reason, c.Entries = headErr.Error(), nil
+			return c
+		}
+		asOf, age, ageErr := headAsOf(head.Anchor.IntegratedTime, feedHeadMaxAge, "--feed-head-max-age", "feed")
+		if ageErr != nil {
+			c.Reason, c.Entries = "the feed's head statement: "+ageErr.Error(), nil
+			return c
+		}
+		c.HeadSequence, c.CompleteAsOf, c.CompleteAge = head.Sequence, asOf, age
+	}
+	if len(blocked) > 0 {
+		c.OwnerBlocks = map[string]string{}
+		for action, isBlocked := range blocked {
+			c.OwnerBlocks[action] = map[bool]string{true: artifacts.SettingBlocked, false: artifacts.SettingAllowed}[isBlocked]
+		}
+		c.BlocksHeldAsOf = c.CompleteAsOf
+	}
+	c.RequestKeyChains, c.Notes = chains.report()
 	c.OwnerKeysPinned = len(pinned) > 0 && len(c.OwnerSigningKeys) > 0
 	c.OK = true
 	return c
+}
+
+// checkFeedHead checks the head statement a feed page ends with: Verdifax's
+// statement on the public log of the feed's highest event and that event's
+// hash. A feed that ends below its head was cut short; one that goes past it,
+// or ends on another event, was given a head that is not its own.
+func checkFeedHead(h *artifacts.FeedHead, account string, last int64, lastHash string) error {
+	if err := checkSealedEntry(h.Validate(), h.ComputeHash(), h.HeadStatementHash, h.StatedAt, "stated_at",
+		h.Anchor, artifacts.FeedHeadKind, h.LeafHash()); err != nil {
+		return fmt.Errorf("the feed's head statement: %w", err)
+	}
+	switch {
+	case h.Account != account:
+		return fmt.Errorf("the feed's head statement is %s's, not %s's", h.Account, account)
+	case last < h.Sequence:
+		return fmt.Errorf("the feed ends at event %d, and Verdifax's head statement of %s says the feed's highest event is %d, so events were left out of the end", last, h.StatedAt, h.Sequence)
+	case last > h.Sequence:
+		return fmt.Errorf("the feed goes on to event %d, and the head statement given with it, of %s, says the feed's highest event is %d, so the head is not this feed's", last, h.StatedAt, h.Sequence)
+	case lastHash != h.HeadHash:
+		return fmt.Errorf("the feed's event %d is not the event Verdifax's head statement of %s names, so the feed's end was rewritten", last, h.StatedAt)
+	}
+	return nil
 }
 
 // checkDeletedRecordEvent checks an event whose record was deleted (round
@@ -649,7 +762,8 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 // shape, hash, owner signature and public-log entry), belong to this account
 // and name this run. The event's hash is then checked against the record hash
 // the tombstone seals, so the chain holds without the record.
-func checkDeletedRecordEvent(e *signalEvent) (checkedEntry, error) {
+func checkDeletedRecordEvent(ce *signalCloudEvent) (checkedEntry, error) {
+	e := &ce.Data
 	switch e.Kind {
 	case artifacts.SignalRunRefused, artifacts.SignalRunHalted, artifacts.SignalRunFailed:
 	default:
@@ -676,7 +790,18 @@ func checkDeletedRecordEvent(e *signalEvent) (checkedEntry, error) {
 	if len(d.LogEntries) > 0 {
 		logEntry = d.LogEntries[0]
 	}
-	return checkedEntry{hash: d.RecordHash, at: d.ChangedAt, logEntry: logEntry, link: &link, runID: d.RunID, deletedBy: d.DecidedBy}, nil
+	// Round 61, N25: the event reads at its own place in time, the time the
+	// feed served it with; the tombstone's time is its own event's.
+	return checkedEntry{hash: d.RecordHash, at: ce.Time, logEntry: logEntry, link: &link, runID: d.RunID, deletedBy: d.DecidedBy,
+		tombstoneAt: d.Signal.Sequence}, nil
+}
+
+// deciderName reads a decider for the report: the owner, or Verdifax.
+func deciderName(decidedBy string) string {
+	if decidedBy == artifacts.DecidedByVerdifax {
+		return "Verdifax"
+	}
+	return decidedBy
 }
 
 func ownerKeyOf(o *artifacts.OwnerSignature) string {
@@ -789,10 +914,57 @@ func printSignalFeed(c *SignalFeedCheck) {
 			by = fmt.Sprintf(": after a restore from backup, the %s chain skips places %d to %d, which may hold entries the restore lost",
 				e.GapChain, e.GapFrom, e.GapTo)
 		}
+		if e.Change != "" && artifacts.IsRequestKeyAction(e.Change) {
+			by += fmt.Sprintf(": %s for key %d", e.Change, e.KeyID)
+		}
+		if e.RecordDeletedBy != "" {
+			// Round 61, N25: the event reads at its own time, and names the
+			// tombstone that stands for its deleted record.
+			by += fmt.Sprintf(", record deleted by %s, tombstone at event %d", deciderName(e.RecordDeletedBy), e.TombstoneSequence)
+		}
 		fmt.Printf("    %d. %s  %s%s%s%s\n", e.Sequence, e.At, e.Kind, run, by, late)
 	}
 	if c.DeclaredGaps > 0 {
 		fmt.Printf("  %-18s%d declared restore gap(s): each is sealed and on the public log, and names the places it skips\n", "Restore gaps:", c.DeclaredGaps)
+	}
+	if c.CompleteAsOf != "" {
+		fmt.Printf("  %-18sthe feed is complete as of %s, %s, by Verdifax's head statement on the public log\n", "Complete:", c.CompleteAsOf, c.CompleteAge)
+	} else {
+		fmt.Printf("  %-18sthe feed given ends with no head statement, so a later event may exist\n", "Complete:")
+	}
+	if len(c.OwnerBlocks) > 0 {
+		var blocks []string
+		for _, action := range []string{artifacts.AccountSettingOwnerReplace, artifacts.AccountSettingVerdifaxDelete} {
+			if v, ok := c.OwnerBlocks[action]; ok {
+				blocks = append(blocks, action+" "+v)
+			}
+		}
+		if c.BlocksHeldAsOf != "" {
+			fmt.Printf("  %-18sthe owner's blocks held as of %s (%s)\n", "Owner's blocks:", c.BlocksHeldAsOf, strings.Join(blocks, ", "))
+		} else {
+			fmt.Printf("  %-18sthe owner's blocks held through event %d (%s); with no head statement a later event may exist\n", "Owner's blocks:", c.Last, strings.Join(blocks, ", "))
+		}
+	}
+	for _, ch := range c.RequestKeyChains {
+		who := "key"
+		if ch.OwnerKey {
+			who = "owner key"
+		}
+		state := "holds " + truncate(ch.Current, 12)
+		if ch.Current == "" {
+			state = "holds none"
+		}
+		from := "followed from its registration"
+		if ch.Unrooted {
+			from = "followed from a key registered before this feed"
+		}
+		if ch.ClearedByVerdifax > 0 {
+			from += fmt.Sprintf(", cleared by Verdifax at event %d", ch.ClearedByVerdifax)
+		}
+		fmt.Printf("  %-18s%s %d: %d change(s), %s, each replacement approved by the key before it; %s\n", "Request keys:", who, ch.KeyID, len(ch.Events), from, state)
+	}
+	for _, n := range c.Notes {
+		fmt.Printf("  %-18s%s\n", "Note:", n)
 	}
 	fmt.Printf("  %-18s%d:%s\n", "Next point:", c.Last, c.LastEventHash)
 	fmt.Println("                    The feed shows the signals Verdifax recorded for this account; it cannot show one it never recorded")
