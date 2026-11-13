@@ -2,6 +2,35 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.35.0: unconfirmed owner decisions after a fresh start, refusals checked against the account policy, and the webhooks in place
+
+- `--signals` reports an owner decision signed by a key registered after a
+  fresh start of the owner's chain (Verdifax clearing the owner key's request
+  key, the owner clearing its own, or Verdifax replacing the owner key) as
+  unconfirmed until `--owner-request-key` names that key, and never counts
+  it as the owner's: an unconfirmed allow lifts no block, a block counts
+  whoever signed it. A Verdifax deletion or owner-key change that only an
+  unconfirmed allow would permit fails the feed, and so does Verdifax
+  clearing the owner key's request key while the owner blocks owner-key
+  replacement. JSON: `unconfirmed_owner_changes`. Feeds with no fresh start
+  give the same report as v0.34.0: 363 saved feeds and 804 saved receipts
+  were checked with both releases and every report is identical.
+- `--account-policy` and `--policy` given with an attestation gap receipt
+  check it against the document: the policy it names, by hash, identifier
+  and name, exactly the fields it lists as required, and every missing field
+  one of them. Earlier releases failed such a receipt whenever a document was
+  given. From this release's server on, an account policy's
+  `required_attested_fields` binds every key in the account.
+- `--signals` reads `webhook.subscribed` and `webhook.deleted`, the owner's
+  signed account changes that add and remove a webhook, whose value is the
+  SHA-256 of the address and the kinds. The text report prints each, and for
+  a feed read from its start lists the subscriptions in place at its end.
+  JSON: `webhook_changes`, `webhooks`.
+- The flags that apply only to audit bundles, refused on a receipt, are
+  `--strict`, `--allow-partial`, `--strict-signoff` and
+  `--show-evidence-summary`; `--policy` has checked a receipt's policy
+  decision since v0.20.0, as the README now says.
+
 ### v0.34.0: each key's request-key chain, a feed complete as of a time, a head's age, and a deleted job step through its tombstone
 
 - `--signals` follows each customer key's request-key chain through the

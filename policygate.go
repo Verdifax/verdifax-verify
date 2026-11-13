@@ -330,7 +330,11 @@ func applyPolicyDocument(r *Report, doc []byte) {
 
 // applyReceiptPolicyDocument is the same check for a refused or halted run.
 func applyReceiptPolicyDocument(r *ReceiptReport, doc []byte) {
-	r.PolicyGate = checkPolicyDocument(r.PolicyGate, doc)
+	if r.gap != nil {
+		r.PolicyGate = checkGapPolicyDocument(r.gap, doc, "--policy")
+	} else {
+		r.PolicyGate = checkPolicyDocument(r.PolicyGate, doc)
+	}
 	if policyFailed(r.PolicyGate) {
 		r.VerdictTier, r.AllPassed, r.Reason = "FAILED", false, r.PolicyGate.Reason
 	}

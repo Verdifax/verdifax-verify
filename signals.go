@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -151,10 +152,37 @@ type SignalFeedCheck struct {
 	// or empty when the feed has no head and a later event may exist.
 	OwnerBlocks    map[string]string `json:"owner_blocks,omitempty"`
 	BlocksHeldAsOf string            `json:"owner_blocks_held_as_of,omitempty"`
+	// UnconfirmedOwnerChanges (round 62, N28) are the owner's changes signed
+	// by a request key registered after the owner's chain started afresh and
+	// not named by --owner-request-key. None is counted as the owner's: an
+	// unconfirmed allow lifts no block, while an unconfirmed block still
+	// holds, since a block only restricts Verdifax.
+	UnconfirmedOwnerChanges []UnconfirmedOwnerChange `json:"unconfirmed_owner_changes,omitempty"`
+	// WebhookChanges counts the webhook subscriptions added and removed in
+	// the feed (round 62: from verifier v0.35.0's server release on, each is
+	// an account.changed event signed by the owner's request key). Webhooks,
+	// for a feed read from its start, are the subscriptions in place at its
+	// end, each as its sealed value: the SHA-256 of the address and the kinds
+	// it takes, so a reader sees every place the account's events are sent.
+	WebhookChanges int      `json:"webhook_changes,omitempty"`
+	Webhooks       []string `json:"webhooks,omitempty"`
 	// Notes are what the check could not confirm without more evidence, and
 	// how to give it.
 	Notes  []string `json:"notes,omitempty"`
 	Reason string   `json:"reason,omitempty"`
+}
+
+// UnconfirmedOwnerChange is one owner change the feed cannot tie to the owner
+// (round 62, N28): the event, what it set, the request key that signed it,
+// and the fresh start of the owner's chain that left that key unconfirmed.
+type UnconfirmedOwnerChange struct {
+	Sequence     int64  `json:"sequence"`
+	Kind         string `json:"kind"`
+	Action       string `json:"action,omitempty"`
+	Value        string `json:"value,omitempty"`
+	SignedBy     string `json:"signed_by"`
+	FreshStart   string `json:"fresh_start"`
+	FreshStartAt int64  `json:"fresh_start_at"`
 }
 
 // RequestKeyChain is one key's request keys as the feed shows them: each
@@ -593,6 +621,10 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 	// The owner's blocks, as the feed has set them so far (round 60): while
 	// one stands, Verdifax may not replace the owner key or delete a record.
 	blocked := map[string]bool{}
+	// Round 62, N28: an unconfirmed allow waiting on a block it cannot lift,
+	// by setting, and every owner change the feed cannot tie to the owner.
+	pendingAllow := map[string]UnconfirmedOwnerChange{}
+	var unconfirmed []UnconfirmedOwnerChange
 	chains := newRequestKeyChains()
 	switch {
 	case after != nil:
@@ -655,7 +687,21 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 		if d.RunID != got.runID {
 			return fail("it names run %d, and its entry names run %d", d.RunID, got.runID)
 		}
-		if blockErr := checkOwnerBlocks(blocked, d.Kind, &got); blockErr != "" {
+		// Whether the owner's change is confirmed is read from the chain as
+		// it stood before this event, which a setting does not change.
+		var unconfirmedHere *UnconfirmedOwnerChange
+		if got.ownerKey != "" {
+			if isUnconfirmed, start := chains.unconfirmedOwnerSigner(got.ownerKey); isUnconfirmed {
+				u := UnconfirmedOwnerChange{Sequence: d.Sequence, Kind: d.Kind, SignedBy: got.ownerKey,
+					FreshStart: start.Route, FreshStartAt: start.Sequence}
+				if got.change != nil {
+					u.Action, u.Value = got.change.Action, got.change.Value
+				}
+				unconfirmedHere = &u
+				unconfirmed = append(unconfirmed, u)
+			}
+		}
+		if blockErr := checkOwnerBlocks(blocked, pendingAllow, d.Kind, &got, unconfirmedHere, chains.isOwnerKey); blockErr != "" {
 			return fail("%s", blockErr)
 		}
 		if chainErr := chains.apply(d.Sequence, d.Kind, &got, pinned); chainErr != "" {
@@ -729,9 +775,51 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 		c.BlocksHeldAsOf = c.CompleteAsOf
 	}
 	c.RequestKeyChains, c.Notes = chains.report()
+	c.UnconfirmedOwnerChanges = unconfirmed
+	for _, action := range []string{artifacts.AccountSettingOwnerReplace, artifacts.AccountSettingVerdifaxDelete} {
+		if p, waiting := pendingAllow[action]; waiting && blocked[action] {
+			c.Notes = append(c.Notes, fmt.Sprintf("%s is held: the allow at event %d is signed by a key registered after %s at event %d, so it counts only with --owner-request-key.",
+				settingName(action), p.Sequence, p.FreshStart, p.FreshStartAt))
+		}
+	}
 	c.OwnerKeysPinned = len(pinned) > 0 && len(c.OwnerSigningKeys) > 0
+	c.WebhookChanges, c.Webhooks, c.Notes = webhooksOf(c.Entries, c.ContinuityFrom == "start", c.Notes)
 	c.OK = true
 	return c
+}
+
+// webhooksOf counts the feed's webhook changes and, for a feed read from its
+// start, lists the subscriptions in place at its end by their sealed values.
+// A removal with no subscription before it in a feed read from its start is
+// noted: the feed names a destination it never shows being added.
+func webhooksOf(entries []SignalFeedEntry, fromStart bool, notes []string) (int, []string, []string) {
+	changes := 0
+	held := map[string]int{}
+	for _, e := range entries {
+		switch e.Change {
+		case artifacts.AccountWebhookSubscribed:
+			changes++
+			held[e.Value]++
+		case artifacts.AccountWebhookDeleted:
+			changes++
+			if held[e.Value] == 0 && fromStart {
+				notes = append(notes, fmt.Sprintf("event %d removes a webhook (%s) the feed never shows being added.", e.Sequence, e.Value))
+				continue
+			}
+			held[e.Value]--
+		}
+	}
+	if !fromStart || changes == 0 {
+		return changes, nil, notes
+	}
+	var active []string
+	for value, n := range held {
+		for i := 0; i < n; i++ {
+			active = append(active, value)
+		}
+	}
+	sort.Strings(active)
+	return changes, active, notes
 }
 
 // checkFeedHead checks the head statement a feed page ends with: Verdifax's
@@ -819,21 +907,64 @@ func ownerKeyOf(o *artifacts.OwnerSignature) string {
 // Verdifax created the account, comes before any setting the owner can make,
 // so it never meets a block. A feed read from a later point sees only the
 // settings made from that point on.
-func checkOwnerBlocks(blocked map[string]bool, kind string, got *checkedEntry) string {
+//
+// Round 62, N28: a block counts whoever signed it, since a block only
+// restricts Verdifax; an allow signed by an unconfirmed key lifts nothing and
+// waits in pending, so a Verdifax action it alone would have permitted fails
+// and says why. Verdifax clearing the owner key's request key after the owner
+// blocked owner-key replacement fails, as any other owner-key change does.
+func checkOwnerBlocks(blocked map[string]bool, pending map[string]UnconfirmedOwnerChange, kind string, got *checkedEntry,
+	unconfirmed *UnconfirmedOwnerChange, isOwnerKey func(int64) bool) string {
 	if c := got.change; c != nil && (c.Action == artifacts.AccountSettingOwnerReplace || c.Action == artifacts.AccountSettingVerdifaxDelete) {
-		blocked[c.Action] = c.Value == artifacts.SettingBlocked
+		switch {
+		case c.Value == artifacts.SettingBlocked || unconfirmed == nil:
+			blocked[c.Action] = c.Value == artifacts.SettingBlocked
+			delete(pending, c.Action)
+		case blocked[c.Action]:
+			pending[c.Action] = *unconfirmed
+		}
 		return ""
 	}
 	verdifax := got.decidedBy == artifacts.DecidedByVerdifax
+	held := func(action, what string) string {
+		if p, waiting := pending[action]; waiting {
+			return fmt.Sprintf("Verdifax %s while the owner's %s block held: the allow at event %d is signed by a key registered after %s at event %d, so it counts only with --owner-request-key",
+				what, settingName(action), p.Sequence, p.FreshStart, p.FreshStartAt)
+		}
+		return ""
+	}
 	switch {
+	case verdifax && blocked[artifacts.AccountSettingOwnerReplace] && got.change != nil &&
+		got.change.Action == artifacts.AccountRequestKeyCleared && isOwnerKey(got.change.KeyID):
+		if why := held(artifacts.AccountSettingOwnerReplace, "cleared the owner key's request key"); why != "" {
+			return why
+		}
+		return "Verdifax cleared the owner key's request key after the owner blocked owner-key replacement"
 	case verdifax && blocked[artifacts.AccountSettingOwnerReplace] &&
 		((kind == artifacts.SignalKeyCreated || kind == artifacts.SignalKeyRevoked) && got.keyScope == artifacts.KeyScopeOwner ||
 			got.change != nil && got.change.Action == artifacts.AccountOwnerKeyReplacement):
+		if why := held(artifacts.AccountSettingOwnerReplace, "changed the account's owner key"); why != "" {
+			return why
+		}
 		return "Verdifax changed the account's owner key after the owner blocked owner-key replacement"
 	case verdifax && blocked[artifacts.AccountSettingVerdifaxDelete] && kind == artifacts.SignalRunDeleted:
+		if why := held(artifacts.AccountSettingVerdifaxDelete, "deleted a record"); why != "" {
+			return why
+		}
 		return "Verdifax deleted a record after the owner blocked Verdifax deletion"
 	}
 	return ""
+}
+
+// settingName is an owner setting as the API names it.
+func settingName(action string) string {
+	switch action {
+	case artifacts.AccountSettingOwnerReplace:
+		return "owner-replacement"
+	case artifacts.AccountSettingVerdifaxDelete:
+		return "verdifax-deletion"
+	}
+	return action
 }
 
 // runSignalsMode is --signals run alone.
@@ -917,6 +1048,9 @@ func printSignalFeed(c *SignalFeedCheck) {
 		if e.Change != "" && artifacts.IsRequestKeyAction(e.Change) {
 			by += fmt.Sprintf(": %s for key %d", e.Change, e.KeyID)
 		}
+		if e.Change == artifacts.AccountWebhookSubscribed || e.Change == artifacts.AccountWebhookDeleted {
+			by += fmt.Sprintf(": %s, %s", e.Change, e.Value)
+		}
 		if e.RecordDeletedBy != "" {
 			// Round 61, N25: the event reads at its own time, and names the
 			// tombstone that stands for its deleted record.
@@ -944,6 +1078,24 @@ func printSignalFeed(c *SignalFeedCheck) {
 		} else {
 			fmt.Printf("  %-18sthe owner's blocks held through event %d (%s); with no head statement a later event may exist\n", "Owner's blocks:", c.Last, strings.Join(blocks, ", "))
 		}
+	}
+	if c.WebhookChanges > 0 {
+		switch {
+		case c.ContinuityFrom != "start":
+			fmt.Printf("  %-18s%d change(s) in this part of the feed; read it from its start to list the subscriptions in place\n", "Webhooks:", c.WebhookChanges)
+		case len(c.Webhooks) == 0:
+			fmt.Printf("  %-18snone in place at the end of the feed, after %d change(s)\n", "Webhooks:", c.WebhookChanges)
+		default:
+			fmt.Printf("  %-18s%d in place at the end of the feed: %s\n", "Webhooks:", len(c.Webhooks), strings.Join(c.Webhooks, "; "))
+		}
+	}
+	for _, u := range c.UnconfirmedOwnerChanges {
+		what := u.Kind
+		if u.Action != "" {
+			what = u.Action + " " + u.Value
+		}
+		fmt.Printf("  %-18sevent %d, %s, signed by %s, a key registered after %s at event %d; not counted as the owner's without --owner-request-key\n",
+			"Unconfirmed:", u.Sequence, what, truncate(u.SignedBy, 12), u.FreshStart, u.FreshStartAt)
 	}
 	for _, ch := range c.RequestKeyChains {
 		who := "key"

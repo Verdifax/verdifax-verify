@@ -2,7 +2,11 @@ package artifacts
 
 import (
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 )
@@ -51,6 +55,8 @@ func TestAccountChangeDeciders(t *testing.T) {
 		requestKeyChange(AccountRequestKeyRegistered, DecidedByOwner, publicOf(testHolderKey), nil),
 		requestKeyChange(AccountRequestKeyRotated, DecidedByOwner, publicOf(testNextKey), approve(testHolderKey, publicOf(testNextKey))),
 		requestKeyChange(AccountRequestKeyCleared, DecidedByOwner, "", approve(testHolderKey, "")),
+		sealedAccountChange(AccountWebhookSubscribed, DecidedByOwner, 0, WebhookValue("https://hooks.example.com/in", nil)),
+		sealedAccountChange(AccountWebhookDeleted, DecidedByOwner, 0, WebhookValue("https://hooks.example.com/in", []string{"run.refused", "account.changed"})),
 	}
 	seen := map[string]bool{}
 	for _, c := range good {
@@ -65,14 +71,18 @@ func TestAccountChangeDeciders(t *testing.T) {
 		}
 	}
 	bad := map[string]*AccountChange{
-		"the owner setting a tier":           sealedAccountChange(AccountKeyTierSet, DecidedByOwner, 12, "production"),
-		"Verdifax setting the owner's block": sealedAccountChange(AccountSettingOwnerReplace, DecidedByVerdifax, 0, SettingAllowed),
-		"a key action naming no key":         sealedAccountChange(AccountKeyTierSet, DecidedByVerdifax, 0, "trial"),
-		"a setting naming a key":             sealedAccountChange(AccountSettingVerdifaxDelete, DecidedByOwner, 3, SettingBlocked),
-		"a value outside the action's set":   sealedAccountChange(AccountSettingOwnerReplace, DecidedByOwner, 0, "maybe"),
-		"an empty free value":                sealedAccountChange(AccountOwnerKeyReplacement, DecidedByVerdifax, 0, ""),
-		"an unknown action":                  sealedAccountChange("account.renamed", DecidedByVerdifax, 0, "x"),
-		"an unknown decider":                 sealedAccountChange(AccountCreated, "someone", 0, "trial"),
+		"the owner setting a tier":             sealedAccountChange(AccountKeyTierSet, DecidedByOwner, 12, "production"),
+		"Verdifax setting the owner's block":   sealedAccountChange(AccountSettingOwnerReplace, DecidedByVerdifax, 0, SettingAllowed),
+		"Verdifax adding a webhook":            sealedAccountChange(AccountWebhookSubscribed, DecidedByVerdifax, 0, WebhookValue("https://x.example/", nil)),
+		"a webhook change naming the address":  sealedAccountChange(AccountWebhookSubscribed, DecidedByOwner, 0, "https://hooks.example.com/in"),
+		"a webhook change naming a key":        sealedAccountChange(AccountWebhookDeleted, DecidedByOwner, 12, WebhookValue("https://x.example/", nil)),
+		"a webhook change with unsorted kinds": sealedAccountChange(AccountWebhookSubscribed, DecidedByOwner, 0, "sha256="+strings.Repeat("a", 64)+" kinds=run.refused,account.changed,"),
+		"a key action naming no key":           sealedAccountChange(AccountKeyTierSet, DecidedByVerdifax, 0, "trial"),
+		"a setting naming a key":               sealedAccountChange(AccountSettingVerdifaxDelete, DecidedByOwner, 3, SettingBlocked),
+		"a value outside the action's set":     sealedAccountChange(AccountSettingOwnerReplace, DecidedByOwner, 0, "maybe"),
+		"an empty free value":                  sealedAccountChange(AccountOwnerKeyReplacement, DecidedByVerdifax, 0, ""),
+		"an unknown action":                    sealedAccountChange("account.renamed", DecidedByVerdifax, 0, "x"),
+		"an unknown decider":                   sealedAccountChange(AccountCreated, "someone", 0, "trial"),
 	}
 	for name, c := range bad {
 		if c.Validate() == nil {
@@ -380,5 +390,50 @@ func TestARunDeletionSealsItsJobLinks(t *testing.T) {
 		if bad.Validate() == nil {
 			t.Errorf("%s must be refused", name)
 		}
+	}
+}
+
+// Round 62 (R266): a webhook change seals the address's SHA-256 and the kinds
+// sorted, the value every SDK signs, fixed by the shared vector.
+func TestWebhookValueMatchesTheSharedVector(t *testing.T) {
+	text, readErr := os.ReadFile("testdata/sdk-webhook-change-vector.json")
+	if readErr != nil {
+		t.Fatalf("read the vector: %v", readErr)
+	}
+	var vector struct {
+		Changes struct {
+			Subscribe string `json:"subscribe"`
+			Delete    string `json:"delete"`
+		} `json:"changes"`
+		Cases []struct {
+			Name  string   `json:"name"`
+			URL   string   `json:"url"`
+			Types []string `json:"types"`
+			Value string   `json:"value"`
+		} `json:"cases"`
+	}
+	if decodeErr := json.Unmarshal(text, &vector); decodeErr != nil {
+		t.Fatalf("decode the vector: %v", decodeErr)
+	}
+	if vector.Changes.Subscribe != AccountWebhookSubscribed || vector.Changes.Delete != AccountWebhookDeleted || len(vector.Cases) == 0 {
+		t.Fatalf("the vector names the changes %+v", vector.Changes)
+	}
+	for _, c := range vector.Cases {
+		if got := WebhookValue(c.URL, c.Types); got != c.Value {
+			t.Errorf("%s: %q, want %q", c.Name, got, c.Value)
+		}
+	}
+}
+
+// Round 62: a webhook change seals the address's SHA-256 and the kinds sorted,
+// so the same subscription gives the same value in every SDK.
+func TestWebhookValue(t *testing.T) {
+	sum := sha256.Sum256([]byte("https://hooks.example.com/in"))
+	want := "sha256=" + hex.EncodeToString(sum[:]) + " kinds=account.changed,run.refused"
+	if got := WebhookValue("https://hooks.example.com/in", []string{"run.refused", "account.changed"}); got != want {
+		t.Fatalf("WebhookValue = %q, want %q", got, want)
+	}
+	if got := WebhookValue("https://hooks.example.com/in", nil); got != "sha256="+hex.EncodeToString(sum[:])+" kinds=all" {
+		t.Fatalf("every kind: %q", got)
 	}
 }

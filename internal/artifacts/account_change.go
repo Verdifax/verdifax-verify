@@ -2,9 +2,12 @@ package artifacts
 
 import (
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -39,6 +42,14 @@ const (
 	AccountOwnerKeyReplacement   = "owner_key.replacement_requested"
 	AccountSettingOwnerReplace   = "setting.owner_replacement"
 	AccountSettingVerdifaxDelete = "setting.verdifax_deletion"
+	// AccountWebhookSubscribed and AccountWebhookDeleted (round 62): the
+	// owner added or removed an address that receives a copy of the
+	// account's events. The value is WebhookValue: the SHA-256 of the
+	// address, never the address, which can carry a token, and the event
+	// kinds it takes. Signed by the owner's request key, so Verdifax cannot
+	// add a destination for the account's events.
+	AccountWebhookSubscribed = "webhook.subscribed"
+	AccountWebhookDeleted    = "webhook.deleted"
 
 	// SettingAllowed and SettingBlocked are a setting's two values.
 	SettingAllowed = "allowed"
@@ -49,6 +60,23 @@ const (
 	// never holds that key, so the signature shows the owner made the change.
 	OwnerChangeSignatureForm = "verdifax.owner-change-signature.v1"
 )
+
+// webhookValuePattern is the form of a webhook change's value.
+var webhookValuePattern = regexp.MustCompile(`^sha256=[0-9a-f]{64} kinds=(all|[a-z]+\.[a-z]+(,[a-z]+\.[a-z]+)*)$`)
+
+// WebhookValue is the value a webhook change seals and the owner signs: the
+// SHA-256 of the address exactly as stored, and its event kinds sorted and
+// joined with commas, or "all" for every kind.
+func WebhookValue(address string, kinds []string) string {
+	sum := sha256.Sum256([]byte(address))
+	sorted := append([]string(nil), kinds...)
+	sort.Strings(sorted)
+	joined := strings.Join(sorted, ",")
+	if joined == "" {
+		joined = "all"
+	}
+	return "sha256=" + hex.EncodeToString(sum[:]) + " kinds=" + joined
+}
 
 // OwnerSignature is the owner's request-key signature over a change the owner
 // decided.
@@ -145,6 +173,7 @@ type accountChangeRule struct {
 	ownerMay, verdifaxMay, namesKey bool
 	keyHolder, approval             bool
 	publicKeyValue                  bool
+	webhookValue                    bool
 	values                          []string
 }
 
@@ -159,12 +188,14 @@ var accountChangeRules = map[string]accountChangeRule{
 	AccountOwnerKeyReplacement:   {verdifaxMay: true},
 	AccountSettingOwnerReplace:   {ownerMay: true, values: []string{SettingAllowed, SettingBlocked}},
 	AccountSettingVerdifaxDelete: {ownerMay: true, values: []string{SettingAllowed, SettingBlocked}},
+	AccountWebhookSubscribed:     {ownerMay: true, webhookValue: true},
+	AccountWebhookDeleted:        {ownerMay: true, webhookValue: true},
 }
 
 // AccountChangeActions lists every account-change action, in a fixed order.
 var AccountChangeActions = []string{AccountCreated, AccountRequestKeyCleared, AccountKeyTierSet, AccountKeySubmitterClassSet,
 	AccountKeyBillingSet, AccountOwnerKeyReplacement, AccountSettingOwnerReplace, AccountSettingVerdifaxDelete,
-	AccountRequestKeyRegistered, AccountRequestKeyRotated}
+	AccountRequestKeyRegistered, AccountRequestKeyRotated, AccountWebhookSubscribed, AccountWebhookDeleted}
 
 // IsRequestKeyAction reports a change to one key's request key: registered,
 // rotated or cleared.
@@ -226,6 +257,8 @@ func (c *AccountChange) Validate() error {
 		return errors.New("account change: value is not one this action takes")
 	case rule.publicKeyValue && !validBase64Len(c.Value, ed25519.PublicKeySize):
 		return errors.New("account change: a registered or rotated request key's value is its base64 Ed25519 public key")
+	case rule.webhookValue && !webhookValuePattern.MatchString(c.Value):
+		return errors.New("account change: a webhook change's value is sha256=<the address's SHA-256> kinds=<all, or the kinds joined with commas>")
 	case rule.values == nil && (c.Value == "" || len(c.Value) > 200):
 		return errors.New("account change: value must be 1 to 200 bytes")
 	case c.ChangedAt == "":

@@ -574,7 +574,7 @@ the API serves (it serves every receipt document with `ok` true), and
 the flag is not reported. Receipts issued with
 `anchor_required` need v0.14.0 or a later release, since earlier releases do not
 model that field. Since v0.17.11 the flags that apply only to audit
-bundles (`--strict`, `--allow-partial`, `--policy`,
+bundles (today `--strict`, `--allow-partial`, `--strict-signoff`,
 `--show-evidence-summary`) are refused on a receipt document with exit
 2, as `--self-hosted-receipt` is on a bundle, instead of being ignored,
 and `--tamper-test`, with or without `--recompute-hashes`, runs on a
@@ -582,7 +582,9 @@ receipt document: it changes every value as it does for a bundle and
 judges each change by the receipt's hash, its public-log entry and the
 entry's signer and timestamps; the forger's recompute rebuilds the
 receipt's hash and writes it wherever the old one appeared, the anchor's
-copy included. On the anchored receipts in `testdata/round10`, run 241's receipt, whose v1 anchor does not bind the run number, has one rewritable path, `run_id`, and the forger test exits 1 on it; the four receipts with a v2 anchor have none.
+copy included. Before v0.20.0 `--policy` was refused on a receipt too; since then it
+checks the policy decision a refusal's receipt seals, and from v0.35.0 on,
+with `--account-policy`, the policy an attestation gap receipt names. On the anchored receipts in `testdata/round10`, run 241's receipt, whose v1 anchor does not bind the run number, has one rewritable path, `run_id`, and the forger test exits 1 on it; the four receipts with a v2 anchor have none.
 
 **Also checks, since v0.10.0:** that each logged entry body names the
 leaf the bundle claims for it. The Merkle proof covers the hashedrekord
@@ -776,6 +778,16 @@ covers the runs its keys made through Verdifax, not runs made elsewhere.
 
 The verifier reads these fields since v0.21.0; older releases refuse fields
 they do not know. Records without the fields hash exactly as before.
+
+Since v0.35.0, `--account-policy` or `--policy` given with an attestation gap
+receipt (a refusal for missing declared fields) checks that the document is
+the policy the receipt names, by policy hash, identifier and name, that it
+requires exactly the fields the receipt lists as required, and that every
+field listed as missing is one of them. From the server release that came
+with v0.35.0 on, an account policy's `required_attested_fields` binds every
+key in the account, so such a refusal can name the account policy. Earlier
+releases fail any receipt of this kind given a policy document, since it
+seals no policy gate.
 
 ### The AI review: `--aivp-trace` and `--aivp-traces`
 
@@ -1023,6 +1035,28 @@ keys given. The JSON report lists each key's chain in `request_key_chains`.
 A feed whose owner key's request key was registered before the server sealed
 registrations (the release that came with v0.34.0) verifies as before, and
 the report says the key was not registered in the feed and names the flag.
+
+Since v0.35.0 the verifier treats every fresh start of the owner's chain the
+same way: Verdifax clearing the owner key's request key, the owner clearing
+its own, and Verdifax replacing the owner key. An owner decision signed by a
+key registered after such a start is reported as unconfirmed
+(`unconfirmed_owner_changes`, and an `Unconfirmed:` line in the text report)
+until `--owner-request-key` names that key, and it is never counted as the
+owner's: an unconfirmed allow lifts no block, while a block counts whoever
+signed it, since a block only restricts Verdifax. A Verdifax deletion or
+owner-key change that only an unconfirmed allow would permit fails the feed,
+and so does Verdifax clearing the owner key's request key while the owner
+blocks owner-key replacement, which the server refuses from its release that
+came with v0.35.0 on.
+
+Since v0.35.0 the verifier reads the account changes that add and remove a
+webhook (`webhook.subscribed`, `webhook.deleted`), signed by the owner's
+request key, whose value is `sha256=` and the SHA-256 of the address, then
+` kinds=` and the kinds it takes. The text report prints each one, and for a
+feed read from its start the report lists the subscriptions in place at its
+end (`webhooks`, and a `Webhooks:` line), so a reader sees every place the
+account's events are sent; a part of a feed only counts its changes
+(`webhook_changes`).
 
 Since v0.34.0 a page of `GET /signals` that reaches the feed's end ends with
 a head statement, `verdifax.feed-head.v1`: Verdifax states the feed's highest

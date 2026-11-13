@@ -120,6 +120,10 @@ type ReceiptReport struct {
 	// the receipt's hash, its public-log entry, the entry's signer or
 	// timestamps, or a consistency rule. Not part of the JSON report.
 	caught string
+	// gap is the receipt of a refusal for missing fields, which a policy
+	// document given with --policy or --account-policy is checked against
+	// (round 62).
+	gap *artifacts.AttestationGapReceipt
 }
 
 // receiptFacts is the kind-independent view of one receipt.
@@ -261,6 +265,7 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 	f := all[0]
 	rep.ReceiptKind, rep.EnvelopeID, rep.ReceiptClock, rep.ReceiptHash, rep.Summary =
 		f.kind, f.envelopeID, f.clock, f.hash, f.summary
+	rep.gap = d.AttestationGapReceipt
 	// An AI review halt receipt's review block (v0.27.0) must be
 	// consistent with itself and with the step having been halted.
 	if d.AivpT4HaltReceipt != nil {

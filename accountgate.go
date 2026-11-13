@@ -217,7 +217,10 @@ func applyAccountFlags(r *Report, policyPath, historyPath string) {
 
 // applyReceiptAccountFlags is the same for a refused or halted run.
 func applyReceiptAccountFlags(r *ReceiptReport, policyPath, historyPath string) {
-	if policyPath != "" {
+	if policyPath != "" && r.gap != nil {
+		c := checkGapPolicyDocument(r.gap, readAccountPolicy(policyPath), "--account-policy")
+		r.AccountPolicyGate = &c
+	} else if policyPath != "" {
 		r.AccountPolicyGate = applyAccountPolicyDocument(r.AccountPolicyGate, readAccountPolicy(policyPath))
 	}
 	if historyPath != "" {

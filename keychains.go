@@ -28,10 +28,57 @@ type requestKeyChains struct {
 	ownerKeys  map[int64]bool
 	notes      []string
 	noted      map[string]bool
+	// freshStart is the latest event, after the account's start, that began
+	// the owner's chain afresh (round 62, N28): Verdifax clearing the owner
+	// key's request key, the owner clearing its own, or Verdifax replacing
+	// the owner key. Nil while the feed shows none.
+	freshStart *ownerFreshStart
+	// unconfirmed marks an owner key whose current request key was
+	// registered after a fresh start and is not named by --owner-request-key.
+	unconfirmed map[int64]bool
 }
 
+// ownerFreshStart is one event that began the owner's chain afresh.
+type ownerFreshStart struct {
+	Sequence int64
+	Route    string
+}
+
+// The three routes that begin the owner's chain afresh (round 62, N28),
+// worded as the report prints them.
+const (
+	freshStartVerdifaxClear = "Verdifax cleared the owner key's request key"
+	freshStartOwnerClear    = "the owner cleared the owner key's request key"
+	freshStartReplaced      = "Verdifax replaced the owner key"
+)
+
 func newRequestKeyChains() *requestKeyChains {
-	return &requestKeyChains{byKey: map[int64]*RequestKeyChain{}, ownerKeys: map[int64]bool{}, noted: map[string]bool{}}
+	return &requestKeyChains{byKey: map[int64]*RequestKeyChain{}, ownerKeys: map[int64]bool{}, noted: map[string]bool{},
+		unconfirmed: map[int64]bool{}}
+}
+
+// startOwnerAfresh records a fresh start of the owner's chain and, when no
+// key is pinned, says how to confirm what follows.
+func (r *requestKeyChains) startOwnerAfresh(sequence int64, route string, keyID int64, pinned map[string]bool) {
+	r.freshStart = &ownerFreshStart{Sequence: sequence, Route: route}
+	r.unconfirmed[keyID] = true
+	if len(pinned) == 0 && route != freshStartVerdifaxClear {
+		r.note(fmt.Sprintf("%s at event %d, so the owner's chain starts afresh there; pass --owner-request-key to confirm later owner changes.", route, sequence))
+	}
+}
+
+// isOwnerKey reports whether the feed has shown keyID as an owner key.
+func (r *requestKeyChains) isOwnerKey(keyID int64) bool { return r.ownerKeys[keyID] }
+
+// unconfirmedOwnerSigner reports whether an owner change signed by signer is
+// unconfirmed, and the fresh start that made it so. A signer the owner key's
+// chain does not hold is left to checkOwnerSigner, which fails it.
+func (r *requestKeyChains) unconfirmedOwnerSigner(signer string) (bool, *ownerFreshStart) {
+	ch, known := r.byKey[r.ownerKeyID]
+	if r.ownerKeyID == 0 || !known || ch.Current != signer || r.freshStart == nil {
+		return false, nil
+	}
+	return r.unconfirmed[r.ownerKeyID], r.freshStart
 }
 
 func (r *requestKeyChains) note(text string) {
@@ -56,6 +103,11 @@ func (r *requestKeyChains) apply(sequence int64, kind string, got *checkedEntry,
 	if got.keyScope == artifacts.KeyScopeOwner {
 		switch kind {
 		case artifacts.SignalKeyCreated:
+			// A second owner key is a replacement: its first request key
+			// starts the owner's chain afresh (round 62, N28).
+			if len(r.ownerKeys) > 0 {
+				r.startOwnerAfresh(sequence, freshStartReplaced, got.keyID, pinned)
+			}
 			r.ownerKeyID, r.ownerKeys[got.keyID] = got.keyID, true
 		case artifacts.SignalKeyRevoked:
 			if r.ownerKeyID == got.keyID {
@@ -91,10 +143,18 @@ func (r *requestKeyChains) applyChange(sequence int64, c *artifacts.AccountChang
 		if ch.Current != "" {
 			return fmt.Sprintf("it registers a request key for key %d, which holds one already; a held request key is replaced only with its own approval", c.KeyID)
 		}
+		// After a fresh start nothing approves the new key, so it is
+		// unconfirmed unless --owner-request-key names it (round 62, N28).
+		if owner {
+			r.unconfirmed[c.KeyID] = r.freshStart != nil && !pinned[c.Value]
+		}
 	case c.Action == artifacts.AccountRequestKeyCleared && c.DecidedBy == artifacts.DecidedByVerdifax:
 		ch.Current, ch.ClearedByVerdifax = "", sequence
-		if owner && len(pinned) == 0 {
-			r.note(fmt.Sprintf("the owner's key chain was cleared by Verdifax at event %d; pass --owner-request-key to confirm later owner changes.", sequence))
+		if owner {
+			if len(pinned) == 0 {
+				r.note(fmt.Sprintf("the owner's key chain was cleared by Verdifax at event %d; pass --owner-request-key to confirm later owner changes.", sequence))
+			}
+			r.startOwnerAfresh(sequence, freshStartVerdifaxClear, c.KeyID, pinned)
 		}
 		return ""
 	default:
@@ -111,6 +171,16 @@ func (r *requestKeyChains) applyChange(sequence int64, c *artifacts.AccountChang
 	}
 	if c.Value != "" && owner && len(pinned) > 0 && !pinned[c.Value] {
 		return fmt.Sprintf("the owner key's request key set here, %s, is not one given with --owner-request-key", truncate(c.Value, 12))
+	}
+	// The holder's own clear starts the owner's chain afresh; a replacement
+	// approved by the key before it keeps that key's standing (round 62, N28).
+	if owner && rooted {
+		switch c.Action {
+		case artifacts.AccountRequestKeyCleared:
+			r.startOwnerAfresh(sequence, freshStartOwnerClear, c.KeyID, pinned)
+		case artifacts.AccountRequestKeyRotated:
+			r.unconfirmed[c.KeyID] = r.unconfirmed[c.KeyID] && !pinned[c.Value]
+		}
 	}
 	ch.Current = c.Value
 	return ""

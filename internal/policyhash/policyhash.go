@@ -87,6 +87,22 @@ func FromDocument(doc []byte) (Result, error) {
 	}, nil
 }
 
+// RequiredAttestedFields reads a policy document the way FromDocument does and
+// returns its required_attested_fields, sorted, as a refusal for missing
+// fields names them (round 62).
+func RequiredAttestedFields(doc []byte) ([]string, error) {
+	if _, err := FromDocument(doc); err != nil {
+		return nil, err
+	}
+	var p policy
+	if parseErr := json.Unmarshal(doc, &p); parseErr != nil {
+		return nil, fmt.Errorf("policyhash: parse json: %w", parseErr)
+	}
+	required := append([]string(nil), p.RequiredAttestedFields...)
+	sort.Strings(required)
+	return required, nil
+}
+
 // The types below copy the server's psl types field for field: same
 // JSON names, same Go kinds, so encoding/json accepts and refuses
 // exactly what it does on the server. Fields the hash excludes
