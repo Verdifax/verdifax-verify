@@ -32,6 +32,9 @@ package main
 // Verdifax's key logged the record; the window shows when.
 
 import (
+	"io"
+	"sort"
+
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
@@ -356,4 +359,27 @@ func staleIndexReason(anchorErr error, logEntryID string, logIndex int64) (strin
 	return fmt.Sprintf("this copy stores the entry's shard position (%d) where its global entry number "+
 		"belongs, as copies of some records downloaded before 2026-10-16 do, so its signed timestamp "+
 		"cannot be checked; download the record again from its public link", logIndex), true
+}
+
+// printLogKeys lists the pinned log-signing keys (--log-keys), one per
+// line: the fingerprint, the name, and the window in which entries it
+// signed are accepted. A client about to rely on a server's records can
+// check that the server's key is here before it starts (round 62).
+func printLogKeys(w io.Writer) {
+	fps := make([]string, 0, len(pinnedEntrySigners))
+	for fp := range pinnedEntrySigners {
+		fps = append(fps, fp)
+	}
+	sort.Slice(fps, func(i, j int) bool { return pinnedEntrySigners[fps[i]].Name < pinnedEntrySigners[fps[j]].Name })
+	for _, fp := range fps {
+		k := pinnedEntrySigners[fp]
+		from, until := "always", "always"
+		if k.NotBefore != 0 {
+			from = time.Unix(k.NotBefore, 0).UTC().Format(time.RFC3339)
+		}
+		if k.NotAfter != 0 {
+			until = time.Unix(k.NotAfter, 0).UTC().Format(time.RFC3339)
+		}
+		fmt.Fprintf(w, "%s  %s  accepted from %s until %s\n", fp, k.Name, from, until)
+	}
 }

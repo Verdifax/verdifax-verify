@@ -202,6 +202,7 @@ type options struct {
 	allowPartial    *bool
 	allowUnanchored *bool
 	showVersion     *bool
+	showLogKeys     *bool
 	selfHosted      *bool
 	policyFile      *string
 	signerKeyFile   *string
@@ -235,6 +236,7 @@ func defineFlags(fs *flag.FlagSet) options {
 		allowPartial:      fs.Bool("allow-partial", false, "exit 0 for a record whose public-log anchor binds only part of it (a record sealed before leaf v5, or one without a verified complete-record anchor); without this flag such a record exits 3, because its unanchored sections could have been rewritten together with their hashes. With --signals, exit 0 for a feed in which some events carry no public-log entry of their own and a later event's entry commits them; without this flag such a feed exits 3, because their time is proven only by the later entry"),
 		allowUnanchored:   fs.Bool("allow-unanchored", false, "exit 0 for a bundle with no public-log anchor; without this flag, unanchored bundles fail, because every sealing property this tool checks hangs off the anchor and an attacker can strip an anchor claim by editing one unprotected field (the documented downgrade attack)"),
 		showVersion:       fs.Bool("version", false, "print version and exit"),
+		showLogKeys:       fs.Bool("log-keys", false, "print the public log-signing keys this verifier trusts, one per line: fingerprint, name, and when each is accepted, then exit"),
 		selfHosted:        fs.Bool("self-hosted-receipt", false, "the receipt was issued by a test or self-hosted deployment that does not anchor receipts on the public log, not by the Verdifax API; exempts it from the rules that receipts dated from run 241 on must carry a public-log anchor and receipts dated from run 242 on must seal anchor_required"),
 		policyFile:        fs.String("policy", "", "a policy document (JSON) to check against the policy decision the record or receipt seals: its hashes and sealed identity must match, and where the run sealed the inputs the rules read, this tool runs the rules itself and must reach the same rule and outcome, or verification fails"),
 		signerKeyFile:     fs.String("signer-key", "", "a file holding the base64 Ed25519 public key you expect signed the request; fails unless the record carries a valid request signature from that key"),
@@ -277,6 +279,10 @@ func main() {
 
 	if *showVersion {
 		fmt.Println("verdifax-verify version", Version)
+		return
+	}
+	if *o.showLogKeys {
+		printLogKeys(os.Stdout)
 		return
 	}
 
@@ -871,7 +877,7 @@ const (
 )
 
 var flagInputKinds = map[string]string{
-	"json": inputBoth, "version": inputBoth, "allow-unanchored": inputBoth,
+	"json": inputBoth, "version": inputBoth, "log-keys": inputBoth, "allow-unanchored": inputBoth,
 	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
 	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "strict-signoff": inputBundle, "signals": inputBoth, "signals-after": inputBoth, "owner-request-key": inputBoth, "signoff-head-max-age": inputBoth, "feed-head-max-age": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
 	"self-hosted-receipt": inputReceipt,

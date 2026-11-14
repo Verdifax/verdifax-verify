@@ -137,6 +137,9 @@ FLAGS
                           and report any change the verifier accepts and
                           which checks caught the rest; exit 0 only if
                           every change fails verification
+  -log-keys               print the public log-signing keys this verifier
+                          trusts, one per line (fingerprint, name, when
+                          each is accepted), and exit
   -version                print version and exit
 
 EXIT
