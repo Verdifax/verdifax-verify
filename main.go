@@ -69,6 +69,20 @@ import (
 // (within a single bundle schema major version).
 const Version = "0.36.0"
 
+// buildFlavor is empty in every release build. The stand-in test build
+// (go build -tags standinlog, standinlog.go) sets it, so every version line
+// and report names that build and no one mistakes it for a release (R284).
+var buildFlavor string
+
+// toolVersion is the version this binary reports: the release number, with
+// the build flavor after a plus sign when it is a test build.
+func toolVersion() string {
+	if buildFlavor == "" {
+		return Version
+	}
+	return Version + "+" + buildFlavor
+}
+
 // HashCheck records one recompute-and-compare verdict.
 type HashCheck struct {
 	Name     string `json:"name"`
@@ -267,6 +281,9 @@ func main() {
 	jsonOutput, strictMode, allowPartial, allowUnanchored, showVersion, selfHosted, policyFile, tamperTest, recomputeHashes, showEvidence := o.jsonOutput, o.strictMode, o.allowPartial, o.allowUnanchored, o.showVersion, o.selfHosted, o.policyFile, o.tamperTest, o.recomputeHashes, o.showEvidence
 	flag.Usage = printUsage
 	flag.Parse()
+	if buildFlavor != "" {
+		fmt.Fprintf(os.Stderr, "verdifax-verify: TEST BUILD (%s): it also trusts the stand-in public log, whose keys are public; never use it to check a real record\n", buildFlavor)
+	}
 
 	// Go's flag package stops at the first argument that is not a flag,
 	// so a flag written after the record path would be read as a second
@@ -278,7 +295,7 @@ func main() {
 	}
 
 	if *showVersion {
-		fmt.Println("verdifax-verify version", Version)
+		fmt.Println("verdifax-verify version", toolVersion())
 		return
 	}
 	if *o.showLogKeys {
@@ -972,7 +989,7 @@ func decodeBundle(data []byte) (*artifacts.AuditBundle, error) {
 func verify(b *artifacts.AuditBundle) *Report {
 	r := &Report{
 		Tool:         "verdifax-verify",
-		ToolVersion:  Version,
+		ToolVersion:  toolVersion(),
 		BundleSchema: b.Kind,
 	}
 
@@ -1773,7 +1790,7 @@ func fetchBundleHTTP(rawURL string) ([]byte, error) {
 		return nil, fmt.Errorf("http request build failed: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "verdifax-verify/"+Version)
+	req.Header.Set("User-Agent", "verdifax-verify/"+toolVersion())
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("http fetch failed: %w", err)
@@ -1812,7 +1829,7 @@ func reportAmbiguousJSON(err error, what string, jsonOut bool) {
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(map[string]any{
 			"tool":            "verdifax-verify",
-			"tool_version":    Version,
+			"tool_version":    toolVersion(),
 			"all_passed":      false,
 			"anchored":        false,
 			"verdict_tier":    "FAILED",

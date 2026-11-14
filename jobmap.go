@@ -324,7 +324,7 @@ func indexJob(records []jobRecord, jobID string, external map[string]bool, add f
 
 // checkJobMap applies the map rules to verified records.
 func checkJobMap(records []jobRecord) JobReport {
-	report := JobReport{Tool: "verdifax-verify", ToolVersion: Version, Records: len(records), JobID: mainJobID(records)}
+	report := JobReport{Tool: "verdifax-verify", ToolVersion: toolVersion(), Records: len(records), JobID: mainJobID(records)}
 	add := func(format string, args ...any) {
 		report.Problems = append(report.Problems, fmt.Sprintf(format, args...))
 	}

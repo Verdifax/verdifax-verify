@@ -61,6 +61,9 @@ type pinnedSigner struct {
 	PEM       string
 	NotBefore int64
 	NotAfter  int64
+	// TestOnly marks a key only the stand-in test build pins (R284); no
+	// release build has one.
+	TestOnly bool
 }
 
 // Key 1 was the production orchestrator's key. It signed every public

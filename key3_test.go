@@ -94,7 +94,15 @@ func TestKeyPeriodsOverlapOnlyWhereDocumented(t *testing.T) {
 	k3 := pinnedEntrySigners[verdifaxLogSigningKey3Fingerprint]
 	k4 := pinnedEntrySigners[verdifaxLogSigningKey4Fingerprint]
 	checkpoints := map[int64]bool{}
-	for _, k := range pinnedEntrySigners {
+	// The published keys only: the stand-in test build's key is accepted at
+	// every time and is no deployment of Verdifax's (R284).
+	published := map[string]pinnedSigner{}
+	for fp, k := range pinnedEntrySigners {
+		if !k.TestOnly {
+			published[fp] = k
+		}
+	}
+	for _, k := range published {
 		for _, edge := range []int64{k.NotBefore, k.NotAfter} {
 			if edge != 0 {
 				checkpoints[edge-1], checkpoints[edge], checkpoints[edge+1] = true, true, true
@@ -104,7 +112,7 @@ func TestKeyPeriodsOverlapOnlyWhereDocumented(t *testing.T) {
 	checkpoints[keySwitchUnix+86400*365] = true
 	for at := range checkpoints {
 		accepted := 0
-		for _, k := range pinnedEntrySigners {
+		for _, k := range published {
 			if signerAcceptsAt(k, at) {
 				accepted++
 			}
