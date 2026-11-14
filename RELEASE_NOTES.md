@@ -2,6 +2,25 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.36.0: the hardware-attested machine's log key, and the trusted keys listed
+
+- Log-signing key 4 is pinned: the key of Verdifax's hardware-attested
+  machine at `attested.verdifax.com` (an AWS SEV-SNP confidential VM). Like
+  key 3 it is a P-256 key in AWS Key Management Service whose private key
+  never leaves KMS. It is accepted from the moment KMS created it,
+  2026-11-14T16:31:57Z, with no end date, alongside key 3; every check names
+  the key that signed the entry. Fingerprint
+  `a872509abc53aac857082aaeb453df9934323080913f52287070c592215ddfd9`.
+- `--log-keys` prints the log-signing keys this release trusts, one per
+  line: the fingerprint (hex SHA-256 of the DER SubjectPublicKeyInfo), the
+  name, and the period in which entries each key signed are accepted. The
+  server's `/version` reports its own key's fingerprint in the same form, so
+  a client can check that a verifier trusts a server before relying on its
+  records.
+- Nothing else changes: 819 saved audit bundles, 152 receipts and 407
+  feeds were checked with both releases, and every report and exit code is
+  identical apart from the version number.
+
 ### v0.35.0: unconfirmed owner decisions after a fresh start, refusals checked against the account policy, and the webhooks in place
 
 - `--signals` reports an owner decision signed by a key registered after a

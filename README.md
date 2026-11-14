@@ -621,10 +621,13 @@ you would rather confirm the entry by hand than trust this binary.
 
 Every public-log entry Verdifax makes is a Rekor `hashedrekord` signed
 with one of these ECDSA P-256 keys. The fingerprint is the hex SHA-256
-of the key's DER SubjectPublicKeyInfo. The verifier embeds all three
-(`entryauth.go`) and checks the fingerprints when it starts. Each key is
-accepted from the start of its period up to, but not including, its
-end, so two keys that hand over at one moment never overlap.
+of the key's DER SubjectPublicKeyInfo. The verifier embeds all four
+(`entryauth.go`), checks the fingerprints when it starts, and lists them
+with `--log-keys`. Each key is accepted from the start of its period up
+to, but not including, its end, so two keys that hand over at one moment
+never overlap. Keys of two separate deployments are accepted side by
+side: key 2 within key 1's period, and key 4 alongside key 3; every
+check names the key that signed the entry.
 
 **Key 3**, the production orchestrator at `api.verdifax.com` from
 2026-10-24T15:59:19Z on. It is an asymmetric ECC_NIST_P256 key in AWS
@@ -662,6 +665,20 @@ so it cannot vouch for anything logged later.
     -----BEGIN PUBLIC KEY-----
     MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtn//E+NR9JsyD5ssGshpIceKCMBo
     SjGPIXP3UGH1hTsdwx+uYHNJ5a0b6nsdiIf+Z0a4L5LWvfEQF1p8kev6Sw==
+    -----END PUBLIC KEY-----
+
+**Key 4**, the hardware-attested machine at `attested.verdifax.com` (an
+AWS SEV-SNP confidential VM), from 2026-11-14T16:31:57Z on, the moment
+it was created. Like key 3 it is an asymmetric P-256 key in AWS Key
+Management Service (us-east-2) whose private key never leaves KMS; the
+machine may only ask KMS to sign each entry's digest. It is separate
+from key 3, so the machine's records and the hosted service's records
+are never signed by the same key.
+
+    fingerprint a872509abc53aac857082aaeb453df9934323080913f52287070c592215ddfd9
+    -----BEGIN PUBLIC KEY-----
+    MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvYfDZ2vhFrFfpU6fawu9Ce+ur4pQ
+    nVRgazluO4ZlR5VRDkYC5jLfT25PzywvkK5VUdo1e1ZSZKh5xaQlvbawiw==
     -----END PUBLIC KEY-----
 
 A new key is added here with the moment it takes effect, and a retired

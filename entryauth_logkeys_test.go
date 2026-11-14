@@ -31,3 +31,21 @@ func TestLogKeysListsEveryPinnedKey(t *testing.T) {
 		t.Errorf("%d lines for %d keys:\n%s", strings.Count(strings.TrimSpace(text), "\n")+1, len(pinnedEntrySigners), text)
 	}
 }
+
+// Key 4, the hardware-attested machine's KMS key, is accepted from the
+// moment KMS created it and never before (round 62).
+func TestKey4IsAcceptedFromItsCreation(t *testing.T) {
+	k, pinned := pinnedEntrySigners[verdifaxLogSigningKey4Fingerprint]
+	if !pinned {
+		t.Fatal("key 4 is not pinned")
+	}
+	if signerAcceptsAt(k, key4CreatedUnix-1) {
+		t.Error("key 4 vouches for an entry logged before it existed")
+	}
+	if !signerAcceptsAt(k, key4CreatedUnix) || !signerAcceptsAt(k, key4CreatedUnix+10*365*24*3600) {
+		t.Error("key 4 must be accepted from its creation with no end date")
+	}
+	if k.NotAfter != 0 {
+		t.Errorf("key 4 has an end date %d; it was decided to have none", k.NotAfter)
+	}
+}

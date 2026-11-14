@@ -81,10 +81,23 @@ type pinnedSigner struct {
 // (2026-10-03T15:00:47Z), and existed only on that instance, which was
 // destroyed after the run. It is accepted only within an hour of that
 // entry, so it can never vouch for anything logged later.
+//
+// Key 4 is the hardware-attested machine's key (attested.verdifax.com, an
+// AWS SEV-SNP confidential VM), decided by Robert on November 14, 2026. Like
+// key 3 it is an asymmetric ECC_NIST_P256 key in AWS KMS (us-east-2) whose
+// private key never leaves KMS; the machine's role may only sign SHA-256
+// digests with it. It is accepted from the moment KMS created it
+// (2026-11-14T16:31:57Z), so it can vouch for nothing logged before it
+// existed, and with no end date, as key 3.
 const (
 	verdifaxLogSigningKey1Fingerprint = "0822255b6c085f394088d1ce4142dc927941789be75faf084d163059551000b7"
 	verdifaxLogSigningKey2Fingerprint = "16349c23103f9bd5fd59f0be45e199540e430ab02587e497f96856817d47fe0a"
 	verdifaxLogSigningKey3Fingerprint = "df009371c140e355d6c9dd46b29ed7fb37ff835bf94192a1f13bded66c92a54f"
+	verdifaxLogSigningKey4Fingerprint = "a872509abc53aac857082aaeb453df9934323080913f52287070c592215ddfd9"
+
+	// key4CreatedUnix is 2026-11-14T16:31:57Z, when AWS KMS created key 4:
+	// the first moment it is accepted.
+	key4CreatedUnix = 1794673917
 
 	// keySwitchUnix is 2026-10-24T15:59:19Z, when the production server
 	// restarted signing with key 3: the first moment key 3 is accepted
@@ -124,6 +137,15 @@ gK6+Bq6yDgRDbbisjdAwHGmcT6Mo/7xNFNuOlr1Z/SJzkU5xvpFPieYj2A==
 -----END PUBLIC KEY-----
 `,
 		NotBefore: keySwitchUnix,
+	},
+	verdifaxLogSigningKey4Fingerprint: {
+		Name: "Verdifax log-signing key 4 (hardware-attested machine, AWS KMS)",
+		PEM: `-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvYfDZ2vhFrFfpU6fawu9Ce+ur4pQ
+nVRgazluO4ZlR5VRDkYC5jLfT25PzywvkK5VUdo1e1ZSZKh5xaQlvbawiw==
+-----END PUBLIC KEY-----
+`,
+		NotBefore: key4CreatedUnix,
 	},
 }
 

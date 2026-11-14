@@ -81,14 +81,18 @@ func TestKey2StillAcceptsTheHardwareRunEntry(t *testing.T) {
 	}
 }
 
-// The only seconds accepted by two keys are key 2's documented window
-// around the hardware run's entry, which lies inside key 1's period; no
-// handover overlaps and no second up to well past the switch is accepted
-// by no key. A new key or a changed period that adds any other overlap
-// or gap fails here.
-func TestKeyPeriodsOverlapOnlyInKey2sDocumentedWindow(t *testing.T) {
+// The only seconds accepted by two keys are those of two separate
+// deployments, each documented: key 2's window around the October 2026
+// hardware run's entry, inside key 1's period, and key 4, the
+// hardware-attested machine's key, alongside key 3 from its creation
+// (round 62). No handover overlaps and no second up to well past the
+// switch is accepted by no key. A new key or a changed period that adds
+// any other overlap or gap fails here.
+func TestKeyPeriodsOverlapOnlyWhereDocumented(t *testing.T) {
 	k2 := pinnedEntrySigners[verdifaxLogSigningKey2Fingerprint]
 	key1Era := pinnedEntrySigners[verdifaxLogSigningKey1Fingerprint]
+	k3 := pinnedEntrySigners[verdifaxLogSigningKey3Fingerprint]
+	k4 := pinnedEntrySigners[verdifaxLogSigningKey4Fingerprint]
 	checkpoints := map[int64]bool{}
 	for _, k := range pinnedEntrySigners {
 		for _, edge := range []int64{k.NotBefore, k.NotAfter} {
@@ -106,11 +110,12 @@ func TestKeyPeriodsOverlapOnlyInKey2sDocumentedWindow(t *testing.T) {
 			}
 		}
 		inKey2Window := signerAcceptsAt(k2, at)
+		hardwareMachine := signerAcceptsAt(k3, at) && signerAcceptsAt(k4, at)
 		switch {
 		case accepted == 0:
 			t.Fatalf("no key is accepted at %d", at)
-		case accepted == 2 && !(inKey2Window && signerAcceptsAt(key1Era, at)):
-			t.Fatalf("two keys are accepted at %d outside key 2's documented window", at)
+		case accepted == 2 && !(inKey2Window && signerAcceptsAt(key1Era, at)) && !hardwareMachine:
+			t.Fatalf("two keys are accepted at %d outside a documented second deployment", at)
 		case accepted > 2:
 			t.Fatalf("%d keys are accepted at %d", accepted, at)
 		case accepted == 1 && inKey2Window:
