@@ -33,8 +33,92 @@ import (
 	"github.com/Verdifax/verdifax-verify/internal/artifacts"
 )
 
-// signalSource opens the CloudEvents source of every feed event.
+// signalSource opens the CloudEvents source of every feed event the hosted
+// service records.
 const signalSource = "https://api.verdifax.com/accounts/"
+
+// attestedSignalSource opens the source of an event the hardware-attested
+// machine records (round 62): each machine names itself, and its events are
+// logged by its own key, key 4.
+const attestedSignalSource = "https://attested.verdifax.com/accounts/"
+
+// key4HostedSourceUntilUnix is 2026-11-15T00:00:00Z. The hardware machine's
+// events published before then (its demo run of November 14, 2026) carry the
+// hosted service's source, the one name every machine used until round 62;
+// they keep verifying under it.
+// A variable only so tests can move it; every build uses this value.
+var key4HostedSourceUntilUnix int64 = 1794700800
+
+// checkSignalSourceMachine holds an event's source to the machine whose key
+// logged it: an event logged by key 4 names the hardware machine (or, if
+// logged before key4HostedSourceUntilUnix, the hosted service's name), and an
+// event logged by any other key names the hosted service. An event with no
+// public-log entry of its own proves no machine, so either name stands.
+func checkSignalSourceMachine(ce *signalCloudEvent) error {
+	signer, at, found := signalEntrySigner(ce.Data.Entry)
+	if !found {
+		return nil
+	}
+	account := ce.Data.Account
+	switch {
+	case signer == verdifaxLogSigningKey4Fingerprint:
+		if ce.Source == attestedSignalSource+account || (ce.Source == signalSource+account && at < key4HostedSourceUntilUnix) {
+			return nil
+		}
+		return fmt.Errorf("its source %q does not name the hardware-attested machine, whose key logged it", safePrefix(ce.Source))
+	case ce.Source != signalSource+account:
+		return fmt.Errorf("its source %q names the hardware-attested machine, and its entry was logged by %s", safePrefix(ce.Source), pinnedEntrySigners[signer].Name)
+	}
+	return nil
+}
+
+// signalEntrySigner finds the public-log entry an event's record carries,
+// wherever its kind keeps it (any object holding entry_body), and returns its
+// signer's fingerprint and its integrated time. found is false when the
+// record carries no entry or its signer cannot be read; the entry itself is
+// checked with the record.
+func signalEntrySigner(entry json.RawMessage) (signer string, integratedTime int64, found bool) {
+	// any: a feed event's record is one of many kinds, read here only for
+	// the fields its public-log entry carries.
+	var doc any
+	if json.Unmarshal(entry, &doc) != nil {
+		return "", 0, false
+	}
+	if text, isText := doc.(string); isText {
+		if json.Unmarshal([]byte(text), &doc) != nil {
+			return "", 0, false
+		}
+	}
+	var walk func(v any) bool
+	walk = func(v any) bool {
+		switch node := v.(type) {
+		case map[string]any:
+			if body, ok := node["entry_body"].(string); ok && body != "" {
+				if fp, signerErr := entrySignerOf(body); signerErr == nil {
+					signer, found = fp, true
+					if t, ok := node["integrated_time"].(float64); ok {
+						integratedTime = int64(t)
+					}
+					return true
+				}
+			}
+			for _, child := range node {
+				if walk(child) {
+					return true
+				}
+			}
+		case []any:
+			for _, child := range node {
+				if walk(child) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	walk(doc)
+	return signer, integratedTime, found
+}
 
 // signalCloudEvent is one feed event as the API serves it.
 type signalCloudEvent struct {
@@ -580,7 +664,7 @@ func checkSignalEnvelope(ce *signalCloudEvent) error {
 		return fmt.Errorf("its kind %q is not one the feed emits", safePrefix(d.Kind))
 	case ce.Type != artifacts.SignalTypePrefix+d.Kind:
 		return fmt.Errorf("its type %q does not match its kind %s", safePrefix(ce.Type), d.Kind)
-	case ce.Source != signalSource+d.Account:
+	case ce.Source != signalSource+d.Account && ce.Source != attestedSignalSource+d.Account:
 		return fmt.Errorf("its source %q is not account %s", safePrefix(ce.Source), d.Account)
 	case ce.ID != d.Account+"/"+strconv.FormatInt(d.Sequence, 10):
 		return fmt.Errorf("its id %q does not name its account and sequence", safePrefix(ce.ID))
@@ -656,6 +740,9 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 		got, entryErr := checkSignalEntry(ce)
 		if entryErr != nil {
 			return fail("%v", entryErr)
+		}
+		if sourceErr := checkSignalSourceMachine(ce); sourceErr != nil {
+			return fail("%v", sourceErr)
 		}
 		// A feed skips places only where a sealed restore gap, anchored as
 		// its own entry, names exactly the places skipped (round 56, E4).

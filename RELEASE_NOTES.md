@@ -2,6 +2,37 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.37.0: debug and firmware stated on every hardware record, each machine named in its feed, and one more fresh start
+
+- A hardware-attested record's hardware line now states two facts from its
+  AMD SEV-SNP report: its debug setting (`debug off`, or `debug ON, the host
+  could read this machine's memory`) and whether the guest firmware it
+  booted, its launch measurement, is one Verdifax pins for its hardware
+  machines. The measurement covers that firmware, not the Verdifax server
+  program running on it. Both are stated and do not fail the record, as no
+  genuine report failed before; `--strict-hardware` fails a record whose
+  report has debug on or whose firmware Verdifax does not pin. A record that
+  seals its guest policy and privilege level (`verification.policy_hex` and
+  `verification.vmpl`, from the server release after this one) must state
+  the report's own. One firmware is pinned, read from every published
+  hardware report: the October 2026 hardware evidence run and
+  `attested.verdifax.com`'s runs of November 14, 2026 (debug off in all).
+- `--signals` accepts each machine's own name as an event's source,
+  `https://attested.verdifax.com/accounts/N` for the hardware-attested
+  machine, and holds each event's source to the machine whose key logged it.
+  The hardware machine's events published before 2026-11-15T00:00:00Z keep
+  the hosted service's name and keep verifying.
+- `--signals` starts the owner's request-key chain afresh at its first sealed
+  registration when the feed already shows owner changes signed by a key the
+  feed never registered, which only accounts made before registrations were
+  sealed can show; a key registered there is unconfirmed until
+  `--owner-request-key` names it.
+- Nothing else changes: 1,769 saved audit bundles, 912 receipts and 459
+  feeds were checked with both releases. Every exit code is identical, and
+  every report is identical apart from the version number and, on the ten
+  copies of the October 2026 hardware record, the new statement on its
+  hardware line.
+
 ### v0.36.0: the hardware-attested machine's log key, and the trusted keys listed
 
 - Log-signing key 4 is pinned: the key of Verdifax's hardware-attested

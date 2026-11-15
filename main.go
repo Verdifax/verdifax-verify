@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.36.0"
+const Version = "0.37.0"
 
 // buildFlavor is empty in every release build. The stand-in test build
 // (go build -tags standinlog, standinlog.go) sets it, so every version line
@@ -231,6 +231,7 @@ type options struct {
 	approverKey     *string
 	signOffHistory  *string
 	strictSignOff   *bool
+	strictHardware  *bool
 	signals         *string
 	signalsAfter    *string
 	ownerRequestKey *string
@@ -268,6 +269,7 @@ func defineFlags(fs *flag.FlagSet) options {
 		signOffHeadMaxAge: fs.String("signoff-head-max-age", "24h", "with --signoff-history, the oldest the history's head statement may be, as a duration such as 24h or 72h: its time on the public log is shown with its age, and a head older than this fails, since a later sign-off has had that long to exist unseen; fetch the history again, or raise the limit"),
 		feedHeadMaxAge:    fs.String("feed-head-max-age", "24h", "with --signals, the oldest the feed's head statement may be, as a duration such as 24h or 72h: its time on the public log is shown with its age, and a head older than this fails, since a later event has had that long to exist unseen; fetch the feed again, or raise the limit"),
 		signOffHistory:    fs.String("signoff-history", "", "a JSON list of an account's sign-offs, oldest first: every sign-off and link must verify, in one account; runs alone with no record"),
+		strictHardware:    fs.Bool("strict-hardware", false, "fail a hardware-attested record whose AMD SEV-SNP report has debug on (the host could read the machine's memory) or whose launch measurement is not guest firmware Verdifax pins; without this flag both are stated on the record's hardware line and do not fail it"),
 		strictSignOff:     fs.Bool("strict-signoff", false, "fail (exit 1) a record whose rule requires a person's sign-off when no sign-offs are given; without this flag such a record, if every other check passes, reads ANCHORED, SIGN-OFF NOT SHOWN and exits 4"),
 		jobFolder:         fs.String("job", "", "a folder of one job's records: check each record, then the map of links between them; a step whose record was deleted is given as its tombstone (the run.deleted event's entry), which stands for the record hash it seals and whose sealed job links are checked as a present step's, and the job then reads complete except the deleted steps"),
 		tamperTest:        fs.Bool("tamper-test", false, "change every value one at a time, delete every key holding a value, remove and append list items and add unknown keys, and report any change the verifier accepts and which checks caught the rest; exit 0 only if every change fails"),
@@ -281,6 +283,7 @@ func main() {
 	jsonOutput, strictMode, allowPartial, allowUnanchored, showVersion, selfHosted, policyFile, tamperTest, recomputeHashes, showEvidence := o.jsonOutput, o.strictMode, o.allowPartial, o.allowUnanchored, o.showVersion, o.selfHosted, o.policyFile, o.tamperTest, o.recomputeHashes, o.showEvidence
 	flag.Usage = printUsage
 	flag.Parse()
+	strictHardware = *o.strictHardware
 	if buildFlavor != "" {
 		fmt.Fprintf(os.Stderr, "verdifax-verify: TEST BUILD (%s): it also trusts the stand-in public log, whose keys are public; never use it to check a real record\n", buildFlavor)
 	}
@@ -750,6 +753,9 @@ func buildEvidenceSummary(b *artifacts.AuditBundle, r *Report, strictWanted bool
 					meas = meas[:12]
 				}
 				s.HardwareAttest = "sev_snp re-verified · measurement " + meas + "… · pinned AMD Milan root"
+				if statement := strings.TrimPrefix(c.Computed, "verified; "); statement != c.Computed {
+					s.HardwareAttest += " · " + statement
+				}
 			}
 		}
 	case b.HardwareAttestation.Kind != "":
@@ -896,7 +902,7 @@ const (
 var flagInputKinds = map[string]string{
 	"json": inputBoth, "version": inputBoth, "log-keys": inputBoth, "allow-unanchored": inputBoth,
 	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
-	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "strict-signoff": inputBundle, "signals": inputBoth, "signals-after": inputBoth, "owner-request-key": inputBoth, "signoff-head-max-age": inputBoth, "feed-head-max-age": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
+	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "strict-signoff": inputBundle, "strict-hardware": inputBundle, "signals": inputBoth, "signals-after": inputBoth, "owner-request-key": inputBoth, "signoff-head-max-age": inputBoth, "feed-head-max-age": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
 	"self-hosted-receipt": inputReceipt,
 }
 
@@ -1394,13 +1400,27 @@ func verifySevSnpQuote(b *artifacts.AuditBundle) HashCheck {
 	same("verification.vlek_leaf_sha256", v.VLEKLeafSHA256, res.VLEKLeafSHA256)
 	same("enclave_measurement", hwa.EnclaveMeasurement, res.MeasurementHex)
 	same("report_data_hex", hwa.ReportDataHex, res.ReportDataHex)
+	// Round 62, N29: a record that seals its guest policy must state the
+	// report's own.
+	if v.PolicyHex != "" {
+		same("verification.policy_hex", v.PolicyHex, res.PolicyHex)
+	}
+	if v.VMPL != nil {
+		same("verification.vmpl", strconv.FormatUint(uint64(*v.VMPL), 10), strconv.FormatUint(uint64(res.VMPL), 10))
+	}
 	if !v.ChainVerified || !v.SignatureVerified || !v.ReportDataBound {
 		differs = append(differs, "verification.chain_verified, signature_verified and report_data_bound (the report verifies, the record says it does not)")
 	}
 	if len(differs) > 0 {
 		return fail("the record's hardware_attestation fields do not match the AMD report: " + strings.Join(differs, ", "))
 	}
-	return HashCheck{Name: name, Recorded: "verified", Computed: "verified", Match: true}
+	// Round 62, N29: state the debug setting and the firmware on every
+	// hardware record; --strict-hardware fails debug on or unpinned firmware.
+	statement, strictFailure := hardwareStatement(res.Debug, res.MeasurementHex)
+	if strictHardware && strictFailure != "" {
+		return fail(statement + " (" + strictFailure + ")")
+	}
+	return HashCheck{Name: name, Recorded: "verified", Computed: "verified; " + statement, Match: true}
 }
 
 // verifyExecutionRecord recomputes the run's attestation execution
@@ -1646,6 +1666,11 @@ func printCheck(c HashCheck) {
 		tag = "  [scaffold]"
 	}
 	fmt.Printf("  %s  %-25s %s%s\n", mark, c.Name, truncate(c.Recorded, 16), tag)
+	// Round 62, N29: the hardware check states the report's debug setting
+	// and firmware in full.
+	if c.Match && c.Name == "hardware_attestation_sevsnp_quote" && strings.HasPrefix(c.Computed, "verified; ") {
+		fmt.Printf("       %s\n", strings.TrimPrefix(c.Computed, "verified; "))
+	}
 	if !c.Match {
 		fmt.Printf("       recorded: %s\n", c.Recorded)
 		fmt.Printf("       computed: %s\n", c.Computed)

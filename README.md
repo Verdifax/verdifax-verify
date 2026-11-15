@@ -575,7 +575,7 @@ the flag is not reported. Receipts issued with
 `anchor_required` need v0.14.0 or a later release, since earlier releases do not
 model that field. Since v0.17.11 the flags that apply only to audit
 bundles (today `--strict`, `--allow-partial`, `--strict-signoff`,
-`--show-evidence-summary`) are refused on a receipt document with exit
+`--strict-hardware`, `--show-evidence-summary`) are refused on a receipt document with exit
 2, as `--self-hosted-receipt` is on a bundle, instead of being ignored,
 and `--tamper-test`, with or without `--recompute-hashes`, runs on a
 receipt document: it changes every value as it does for a bundle and

@@ -276,6 +276,11 @@ type SevSnpVerifyClaim struct {
 	ReportedTCBHex        string `json:"reported_tcb_hex"`
 	ReportDataHex         string `json:"report_data_hex"`
 	VLEKLeafSHA256        string `json:"vlek_leaf_sha256"`
+	// The guest policy (%016x of the report's POLICY) and the privilege
+	// level the report was requested at, sealed from round 63 on; older
+	// records carry neither and are read from the report alone (N29).
+	PolicyHex string  `json:"policy_hex,omitempty"`
+	VMPL      *uint32 `json:"vmpl,omitempty"`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

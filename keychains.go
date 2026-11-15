@@ -36,6 +36,12 @@ type requestKeyChains struct {
 	// unconfirmed marks an owner key whose current request key was
 	// registered after a fresh start and is not named by --owner-request-key.
 	unconfirmed map[int64]bool
+	// ownerSignedUnregistered is set once the feed shows a change the owner
+	// signed while the owner key's chain held no sealed registration: only
+	// an account made before registrations were sealed can show one. The
+	// first registration after it starts the owner's chain afresh (round
+	// 62, N30).
+	ownerSignedUnregistered bool
 }
 
 // ownerFreshStart is one event that began the owner's chain afresh.
@@ -50,6 +56,7 @@ const (
 	freshStartVerdifaxClear = "Verdifax cleared the owner key's request key"
 	freshStartOwnerClear    = "the owner cleared the owner key's request key"
 	freshStartReplaced      = "Verdifax replaced the owner key"
+	freshStartUnsealed      = "the owner key's request key was first registered after owner changes signed by a key this feed never registered"
 )
 
 func newRequestKeyChains() *requestKeyChains {
@@ -146,6 +153,9 @@ func (r *requestKeyChains) applyChange(sequence int64, c *artifacts.AccountChang
 		// After a fresh start nothing approves the new key, so it is
 		// unconfirmed unless --owner-request-key names it (round 62, N28).
 		if owner {
+			if !rooted && r.ownerSignedUnregistered {
+				r.startOwnerAfresh(sequence, freshStartUnsealed, c.KeyID, pinned)
+			}
 			r.unconfirmed[c.KeyID] = r.freshStart != nil && !pinned[c.Value]
 		}
 	case c.Action == artifacts.AccountRequestKeyCleared && c.DecidedBy == artifacts.DecidedByVerdifax:
@@ -191,6 +201,7 @@ func (r *requestKeyChains) applyChange(sequence int64, c *artifacts.AccountChang
 func (r *requestKeyChains) checkOwnerSigner(sequence int64, signer string) string {
 	ch, known := r.byKey[r.ownerKeyID]
 	if r.ownerKeyID == 0 || !known || len(ch.Events) == 0 {
+		r.ownerSignedUnregistered = true
 		r.note("the owner key's request key is not registered in this feed (it was registered before the server sealed registrations, or before the point checked), " +
 			"so the owner's changes are checked against the key each names; pass --owner-request-key to confirm them.")
 		return ""

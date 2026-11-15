@@ -85,6 +85,10 @@ FLAGS
                           without it such a record, if every other check
                           passes, reads ANCHORED, SIGN-OFF NOT SHOWN and
                           exits 4
+  -strict-hardware        fail a hardware-attested record whose AMD
+                          SEV-SNP report has debug on or whose firmware
+                          Verdifax does not pin; without it both are stated
+                          on the record's hardware line
   -signals FILE           check an account's signal feed, the body of
                           GET /signals: every event's entry must verify on
                           the public log as its kind, seal its place in the

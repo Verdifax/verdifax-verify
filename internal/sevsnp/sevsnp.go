@@ -66,7 +66,22 @@ type Result struct {
 	SigningKeyType        string // "vlek" or "vcek", from the report's flags
 	RootFingerprintSHA256 string // SHA-256 of the pinned root's DER
 	VLEKLeafSHA256        string // SHA-256 of the leaf certificate's DER
+	// The guest policy the machine was launched with (report offset 0x08)
+	// and the privilege level the report was requested at (0x30). Debug
+	// is policy bit 19: with it set, the host can read and change the
+	// guest's memory, so the report no longer shows the guest was
+	// confidential (round 62, N29).
+	PolicyHex string // %016x of the little-endian POLICY
+	Debug     bool
+	SMT       bool // policy bit 16: simultaneous multithreading allowed
+	VMPL      uint32
 }
+
+// Guest policy bits (AMD SEV-SNP firmware ABI, the POLICY field).
+const (
+	policySMTBit   = 16
+	policyDebugBit = 19
+)
 
 // BindingReportData recomputes the 64-byte run-binding value from the
 // bundle's own envelope and AER hashes.
@@ -100,7 +115,12 @@ func Verify(rawReport, vlekPEM, chainPEM, expectedReportData []byte) (*Result, e
 		ReportDataHex:  hex.EncodeToString(rawReport[0x50:0x90]),
 		CurrentTCBHex:  fmt.Sprintf("%016x", binary.LittleEndian.Uint64(rawReport[0x38:])),
 		ReportedTCBHex: fmt.Sprintf("%016x", binary.LittleEndian.Uint64(rawReport[0x180:])),
+		VMPL:           binary.LittleEndian.Uint32(rawReport[0x30:]),
 	}
+	policy := binary.LittleEndian.Uint64(rawReport[0x08:])
+	res.PolicyHex = fmt.Sprintf("%016x", policy)
+	res.Debug = policy&(1<<policyDebugBit) != 0
+	res.SMT = policy&(1<<policySMTBit) != 0
 	switch (binary.LittleEndian.Uint32(rawReport[0x48:]) >> 2) & 0x7 {
 	case 0:
 		res.SigningKeyType = "vcek"
