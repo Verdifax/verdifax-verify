@@ -521,17 +521,17 @@ func TestAnEventWithoutItsOwnLogEntryIsCommittedByALaterOne(t *testing.T) {
 	if err := os.WriteFile(path, feedBody(t, gaps), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if code := runSignalsMode(path, "", "", true, false); code != 3 {
+	if code := runSignalsMode(path, "", "", "", true, false); code != 3 {
 		t.Fatalf("a feed committed in part by later entries exits %d, want 3", code)
 	}
-	if code := runSignalsMode(path, "", "", true, true); code != 0 {
+	if code := runSignalsMode(path, "", "", "", true, true); code != 0 {
 		t.Fatalf("with --allow-partial it exits %d, want 0", code)
 	}
 	whole := filepath.Join(t.TempDir(), "whole.json")
 	if err := os.WriteFile(whole, feedBody(t, events), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if code := runSignalsMode(whole, "", "", true, false); code != 0 {
+	if code := runSignalsMode(whole, "", "", "", true, false); code != 0 {
 		t.Fatalf("a fully logged feed exits %d", code)
 	}
 

@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"reflect"
 )
 
 // Who wrote the policy a run was decided under. A customer's policy must
@@ -32,6 +34,48 @@ type PolicyInputs struct {
 	// DataQuality is the request's declaration about the data its decision
 	// used (round 58, B9): the customer's own statement, sealed as given.
 	DataQuality *DataQuality `json:"data_quality,omitempty"`
+	// Setup is the run's setup facts, each labelled by who stated it, and
+	// DataUse the request's declaration of its data use (round 64). Each is
+	// absent unless sealed, so every record and receipt sealed without them
+	// hashes as before.
+	Setup   *SetupFacts `json:"setup,omitempty"`
+	DataUse *DataUse    `json:"data_use,omitempty"`
+}
+
+// SetupFacts is psleval.Setup's sealed form: the setup facts grouped by who
+// stated them. A test holds the two in step.
+type SetupFacts struct {
+	DeclaredByCaller   *DeclaredSetup `json:"declared_by_caller,omitempty"`
+	AttestedByVerdifax *AttestedSetup `json:"attested_by_verdifax,omitempty"`
+}
+
+// DeclaredSetup is what the caller declared about its AI setup, the AI
+// assistant's declared name and version among it: declared, not verified.
+type DeclaredSetup struct {
+	ModelProvider    string `json:"model_provider,omitempty"`
+	ModelName        string `json:"model_name,omitempty"`
+	ModelVersion     string `json:"model_version,omitempty"`
+	ModelTemperature string `json:"model_temperature,omitempty"`
+	PromptHash       string `json:"prompt_hash,omitempty"`
+	ClientName       string `json:"client_name,omitempty"`
+	ClientVersion    string `json:"client_version,omitempty"`
+}
+
+// AttestedSetup is what Verdifax's AI review states about itself.
+type AttestedSetup struct {
+	ReviewModel     string `json:"review_model,omitempty"`
+	ReviewPromptID  string `json:"review_prompt_id,omitempty"`
+	ReviewCheckerID string `json:"review_checker_id,omitempty"`
+}
+
+// DataUse is psleval.DataUse's sealed form: the customer's own codes for the
+// purpose, basis and categories of data, and an optional reference it keyed
+// itself. Verdifax seals the declaration as made.
+type DataUse struct {
+	Purpose    string   `json:"purpose,omitempty"`
+	Basis      string   `json:"basis,omitempty"`
+	Categories []string `json:"categories,omitempty"`
+	Reference  string   `json:"reference,omitempty"`
 }
 
 // DataQuality is a request's declaration about its data: where it came
@@ -79,4 +123,61 @@ func (b *PolicyBinding) labeledFields(label string) []string {
 		}
 	}
 	return []string{label, b.Source, b.PolicyHash, b.DocumentHash, b.ActivationHash, b.Outcome, b.FiredRuleID, inputs}
+}
+
+// ErrDataUseCopiesDiffer means a record or receipt would seal two different
+// data-use declarations: its own field and a policy gate's inputs must hold
+// one value, the one the request declared (round 64, the copy group).
+var ErrDataUseCopiesDiffer = errors.New("the data-use declaration sealed in the policy inputs differs from the one in its own field")
+
+// dataUseCopiesAgree checks every policy inputs copy of a data-use
+// declaration against the record's own field. Inputs that seal none agree
+// only when the own field is absent too, unless they are nil (no decision
+// was made, as when a run stopped before the rules ran).
+func dataUseCopiesAgree(own *DataUse, inputs ...*PolicyInputs) error {
+	for _, in := range inputs {
+		if in == nil {
+			continue
+		}
+		if !reflect.DeepEqual(in.DataUse, own) {
+			return ErrDataUseCopiesDiffer
+		}
+	}
+	return nil
+}
+
+// DataUseCopiesAgree checks an allowed run's EPA section: its own data-use
+// field and each policy gate's sealed inputs hold one value.
+func (e *EPA) DataUseCopiesAgree() error {
+	var inputs []*PolicyInputs
+	for _, g := range []*PolicyGate{e.PolicyGate, e.AccountPolicyGate} {
+		if g != nil {
+			inputs = append(inputs, g.Inputs)
+		}
+	}
+	return dataUseCopiesAgree(e.DataUse, inputs...)
+}
+
+// DataUseCopiesAgree checks a receipt context: its own data-use field and
+// each policy binding's sealed inputs hold one value.
+func (c *ReceiptContext) DataUseCopiesAgree() error {
+	var inputs []*PolicyInputs
+	for _, b := range []*PolicyBinding{c.Policy, c.AccountPolicy} {
+		if b != nil {
+			inputs = append(inputs, b.Inputs)
+		}
+	}
+	return dataUseCopiesAgree(c.DataUse, inputs...)
+}
+
+// DataUseDigest is the SHA-256 of a data-use declaration's JSON, the form it
+// joins a receipt context's hash in: its values are codes, but a digest keeps
+// the joined list unambiguous, as the inputs digest does.
+func DataUseDigest(du *DataUse) string {
+	encoded, encodeErr := json.Marshal(du)
+	if encodeErr != nil {
+		return ""
+	}
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:])
 }

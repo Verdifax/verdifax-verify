@@ -1,0 +1,197 @@
+[
+  {
+    "name": "base",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}]}",
+    "policy_hash": "30f81236245ab1a0c8b9bd3bf02554ad9c5b96b4cf1293b2f8d9cfcbbecabc68"
+  },
+  {
+    "name": "watch_setup",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"watch_setup\":{\"fields\":[\"model_name\"],\"scope\":\"account\"}}",
+    "policy_hash": "e116a1da0d0d78f6aebbf90651eac0b0355a0e6326599115247a7207ef20a5df"
+  },
+  {
+    "name": "watch_setup refused",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"watch_setup\":{\"fields\":[\"model_name\",\"client_version\"],\"scope\":\"key\",\"include_refused\":true}}",
+    "policy_hash": "8de870b68a2b16b903c9351116652f50174176e5e0771ccebf12088dbd70f912"
+  },
+  {
+    "name": "review_by",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"review\":{\"review_by\":\"2027-02-17T00:00:00Z\"}}",
+    "policy_hash": "ba3b209dbd2c49f27a1c3ca87fcc4eff2e9d5113abe4939a8adad2903410e56e"
+  },
+  {
+    "name": "interval_days",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"review\":{\"interval_days\":30}}",
+    "policy_hash": "7c3071324807d0d00957247a79f2c69d103ff5641bbabf206241903588f847b4"
+  },
+  {
+    "name": "refusal target",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"response_targets\":{\"refusals\":{\"within\":60,\"compare\":\"first_signoff\",\"notice\":\"head\"}}}",
+    "policy_hash": "075931dc38ad3f2e2b6b91d60d16decdc12749f67a36059ff56c9519aa944b02"
+  },
+  {
+    "name": "stop target",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"response_targets\":{\"stops\":{\"within\":60,\"compare\":\"first_approval\",\"notice\":\"event\",\"seal_in_result\":true}}}",
+    "policy_hash": "25e818022831a2b22ff82e3ced7732b18add4e884db3caafeefa9cca5d51fc56"
+  },
+  {
+    "name": "signoff target",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"signoff\":{\"required\":true,\"within\":600,\"compare\":\"decision_in_force\",\"notice\":\"both\"}}]}",
+    "policy_hash": "84ba1e9d1ed7f70f5a941409d4ecad9d49145a4aa7d836115da939f7884cfe37"
+  },
+  {
+    "name": "signoff target sealed",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"signoff\":{\"required\":true,\"within\":600,\"compare\":\"first_signoff\",\"notice\":\"head\",\"seal_in_result\":true}}]}",
+    "policy_hash": "a5d736a4135b4377ddacd4ae0d423cabe8d7f802060e6bfdcb9dd2f8f435800e"
+  },
+  {
+    "name": "attested_setup",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"conditions\":[{\"type\":\"attested_setup\",\"facts\":[{\"fact\":\"model_provider\",\"match\":{\"operator\":\"exact\",\"value\":\"anthropic\"}}]}]}]}",
+    "policy_hash": "873968048c884e2fbbc927eb178bb8d7a7d607705ef3116a43e55043ce91a5f3"
+  },
+  {
+    "name": "attested_setup any",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"conditions\":[{\"type\":\"attested_setup\",\"facts\":[{\"fact\":\"review_checker_id\",\"match\":{\"operator\":\"any\"}}]}]}]}",
+    "policy_hash": "698dbe4619c570fd627ba405cfc769d7d2c9d04c5b5da3f697531d050d9980f3"
+  },
+  {
+    "name": "attested_setup two",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"conditions\":[{\"type\":\"attested_setup\",\"facts\":[{\"fact\":\"client_name\",\"match\":{\"operator\":\"prefix\",\"value\":\"claude\"}},{\"fact\":\"model_temperature\",\"match\":{\"operator\":\"in\",\"values\":[\"0\",\"0.2\"]}}]}]}]}",
+    "policy_hash": "08056574836b8052bf9b32ca89f2ae52e0b85bb4c0033d3bcde9201f8b975854"
+  },
+  {
+    "name": "data_use declared",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"conditions\":[{\"type\":\"data_use\"}]}]}",
+    "policy_hash": "07e884e0159085079df62eadb6cff62df396be42e79ec7833975bf67c8345682"
+  },
+  {
+    "name": "data_use full",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"conditions\":[{\"type\":\"data_use\",\"purpose_match\":{\"operator\":\"prefix\",\"value\":\"claims.\"},\"basis_match\":{\"operator\":\"not_in\",\"values\":[\"none\"]},\"categories_allowed\":[\"health\"],\"reference_required\":true}]}]}",
+    "policy_hash": "69e779546b64f2115f36c1b759418b67f95f060e1dcc4c5312e41b251ef6d36b"
+  },
+  {
+    "name": "watch no fields",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"watch_setup\":{\"fields\":[],\"scope\":\"account\"}}",
+    "refused": "psl: invalid watch_setup: fields must name from 1 to 10 setup facts"
+  },
+  {
+    "name": "watch unknown fact",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"watch_setup\":{\"fields\":[\"actor_id\"],\"scope\":\"account\"}}",
+    "refused": "psl: invalid watch_setup: fields names \"actor_id\", which is not a setup fact (model_provider, model_name, model_version, model_temperature, prompt_hash, client_name, client_version, review_model, review_prompt_id, review_checker_id)"
+  },
+  {
+    "name": "watch fact twice",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"watch_setup\":{\"fields\":[\"model_name\",\"model_name\"],\"scope\":\"account\"}}",
+    "refused": "psl: invalid watch_setup: fields names \"model_name\" twice"
+  },
+  {
+    "name": "watch bad scope",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"watch_setup\":{\"fields\":[\"model_name\"],\"scope\":\"tenant\"}}",
+    "refused": "psl: invalid watch_setup: scope must be account or key, not \"tenant\""
+  },
+  {
+    "name": "watch no scope",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"watch_setup\":{\"fields\":[\"model_name\"]}}",
+    "refused": "psl: invalid watch_setup: scope must be account or key, not \"\""
+  },
+  {
+    "name": "review both",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"review\":{\"review_by\":\"2027-02-17T00:00:00Z\",\"interval_days\":30}}",
+    "refused": "psl: invalid review: set exactly one of review_by and interval_days"
+  },
+  {
+    "name": "review neither",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"review\":{}}",
+    "refused": "psl: invalid review: set exactly one of review_by and interval_days"
+  },
+  {
+    "name": "review bad time",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"review\":{\"review_by\":\"next spring\"}}",
+    "refused": "psl: invalid review: review_by \"next spring\" is not an RFC 3339 time"
+  },
+  {
+    "name": "review before effect",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"review\":{\"review_by\":\"2026-11-16T00:00:00Z\"}}",
+    "refused": "psl: invalid review: review_by must be after effective_at"
+  },
+  {
+    "name": "review too long",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"review\":{\"interval_days\":3661}}",
+    "refused": "psl: invalid review: interval_days must be from 1 to 3660"
+  },
+  {
+    "name": "review negative",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"review\":{\"interval_days\":-1}}",
+    "refused": "psl: invalid review: interval_days must be from 1 to 3660"
+  },
+  {
+    "name": "targets empty",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"response_targets\":{}}",
+    "refused": "psl: invalid response target: response_targets sets neither refusals nor stops; leave it out to set none"
+  },
+  {
+    "name": "target no within",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"response_targets\":{\"stops\":{\"within\":0,\"compare\":\"first_signoff\",\"notice\":\"head\"}}}",
+    "refused": "psl: invalid response target: response_targets.stops within must be from 1 to 31622400 seconds"
+  },
+  {
+    "name": "target too long",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"response_targets\":{\"stops\":{\"within\":31622401,\"compare\":\"first_signoff\",\"notice\":\"head\"}}}",
+    "refused": "psl: invalid response target: response_targets.stops within must be from 1 to 31622400 seconds"
+  },
+  {
+    "name": "target bad compare",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"response_targets\":{\"refusals\":{\"within\":60,\"compare\":\"fastest\",\"notice\":\"head\"}}}",
+    "refused": "psl: invalid response target: response_targets.refusals compare must be first_signoff, first_approval or decision_in_force, not \"fastest\""
+  },
+  {
+    "name": "target bad notice",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"response_targets\":{\"refusals\":{\"within\":60,\"compare\":\"first_signoff\",\"notice\":\"email\"}}}",
+    "refused": "psl: invalid response target: response_targets.refusals notice must be event, head or both, not \"email\""
+  },
+  {
+    "name": "signoff within alone",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"signoff\":{\"within\":600,\"compare\":\"first_signoff\",\"notice\":\"head\"}}]}",
+    "refused": "psl: invalid signoff: rule \"r\" sets signoff without required: true; leave it out to require no sign-off"
+  },
+  {
+    "name": "signoff compare alone",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"signoff\":{\"required\":true,\"compare\":\"first_signoff\"}}]}",
+    "refused": "psl: invalid signoff: rule \"r\" sets compare, notice or seal_in_result without within"
+  },
+  {
+    "name": "signoff seal alone",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"signoff\":{\"required\":true,\"seal_in_result\":true}}]}",
+    "refused": "psl: invalid signoff: rule \"r\" sets compare, notice or seal_in_result without within"
+  },
+  {
+    "name": "signoff no notice",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"signoff\":{\"required\":true,\"within\":600,\"compare\":\"first_signoff\"}}]}",
+    "refused": "psl: invalid signoff: rule \"r\" notice must be event, head or both, not \"\""
+  },
+  {
+    "name": "signoff case variant",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"signoff\":{\"required\":true,\"Within\":600}}]}",
+    "refused": "psl: policy JSON is ambiguous or carries fields this reader does not model: $.rules[0].signoff.Within is a case variant of \"within\"; keys are matched byte for byte, so other readers would not read it as \"within\""
+  },
+  {
+    "name": "watch unknown key",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"watch_setup\":{\"fields\":[\"model_name\"],\"scope\":\"account\",\"baseline\":\"x\"}}",
+    "refused": "psl: policy JSON is ambiguous or carries fields this reader does not model: $.watch_setup.baseline is not a field this reader models; other readers would keep it"
+  },
+  {
+    "name": "fact unknown key",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"conditions\":[{\"type\":\"attested_setup\",\"facts\":[{\"fact\":\"model_name\",\"match\":{\"operator\":\"any\"},\"label\":\"x\"}]}]}]}",
+    "refused": "psl: policy JSON is ambiguous or carries fields this reader does not model: $.rules[0].conditions[0].facts[0].label is not a field this reader models; other readers would keep it"
+  },
+  {
+    "name": "review string days",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"r64\",\"policy_name\":\"R64\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"r\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}}}],\"review\":{\"interval_days\":\"30\"}}",
+    "refused": "psl: parse json: json: cannot unmarshal string into Go struct field Policy.review.interval_days of type int"
+  },
+  {
+    "name": "round64_vector.json",
+    "document": "{\"schema\":\"psl.v1\",\"policy_id\":\"round64-vector\",\"policy_name\":\"Round 64 vector\",\"policy_version\":\"1\",\"effective_at\":\"2026-11-17T00:00:00Z\",\"default_effect\":\"deny\",\"rules\":[{\"rule_id\":\"reviewed\",\"effect\":\"allow\",\"subject\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"verb\":{\"match\":{\"operator\":\"any\"}},\"object\":{\"type\":\"any\",\"id_match\":{\"operator\":\"any\"}},\"conditions\":[{\"type\":\"attested_setup\",\"facts\":[{\"fact\":\"model_name\",\"match\":{\"operator\":\"in\",\"values\":[\"claims-model-2\"]}},{\"fact\":\"review_prompt_id\",\"match\":{\"operator\":\"exact\",\"value\":\"statements-v1\"}}]},{\"type\":\"data_use\",\"purpose_match\":{\"operator\":\"exact\",\"value\":\"claims.review\"},\"basis_match\":{\"operator\":\"in\",\"values\":[\"contract\",\"legitimate_interest\"]},\"categories_allowed\":[\"claims\",\"contact\"],\"reference_required\":true}],\"signoff\":{\"required\":true,\"within\":14400,\"compare\":\"first_approval\",\"notice\":\"both\",\"seal_in_result\":true}}],\"watch_setup\":{\"fields\":[\"model_name\",\"model_version\",\"client_name\"],\"scope\":\"key\",\"include_refused\":true},\"review\":{\"interval_days\":90},\"response_targets\":{\"refusals\":{\"within\":86400,\"compare\":\"first_signoff\",\"notice\":\"event\"},\"stops\":{\"within\":3600,\"compare\":\"decision_in_force\",\"notice\":\"head\",\"seal_in_result\":true}}}\n",
+    "policy_hash": "d0fb2a62f58a45f060ea8e99f611eb1f77e347dabf0e6d7554a26c9d1f1b7ceb"
+  }
+]

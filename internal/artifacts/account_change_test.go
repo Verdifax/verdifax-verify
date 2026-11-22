@@ -52,6 +52,7 @@ func TestAccountChangeDeciders(t *testing.T) {
 		sealedAccountChange(AccountOwnerKeyReplacement, DecidedByVerdifax, 0, "2026-11-15T18:00:00Z"),
 		sealedAccountChange(AccountSettingOwnerReplace, DecidedByOwner, 0, SettingBlocked),
 		sealedAccountChange(AccountSettingVerdifaxDelete, DecidedByOwner, 0, SettingAllowed),
+		sealedAccountChange(AccountSettingVerdifaxStop, DecidedByOwner, 0, SettingBlocked),
 		requestKeyChange(AccountRequestKeyRegistered, DecidedByOwner, publicOf(testHolderKey), nil),
 		requestKeyChange(AccountRequestKeyRotated, DecidedByOwner, publicOf(testNextKey), approve(testHolderKey, publicOf(testNextKey))),
 		requestKeyChange(AccountRequestKeyCleared, DecidedByOwner, "", approve(testHolderKey, "")),
@@ -73,6 +74,7 @@ func TestAccountChangeDeciders(t *testing.T) {
 	bad := map[string]*AccountChange{
 		"the owner setting a tier":             sealedAccountChange(AccountKeyTierSet, DecidedByOwner, 12, "production"),
 		"Verdifax setting the owner's block":   sealedAccountChange(AccountSettingOwnerReplace, DecidedByVerdifax, 0, SettingAllowed),
+		"Verdifax allowing its own stop":       sealedAccountChange(AccountSettingVerdifaxStop, DecidedByVerdifax, 0, SettingAllowed),
 		"Verdifax adding a webhook":            sealedAccountChange(AccountWebhookSubscribed, DecidedByVerdifax, 0, WebhookValue("https://x.example/", nil)),
 		"a webhook change naming the address":  sealedAccountChange(AccountWebhookSubscribed, DecidedByOwner, 0, "https://hooks.example.com/in"),
 		"a webhook change naming a key":        sealedAccountChange(AccountWebhookDeleted, DecidedByOwner, 12, WebhookValue("https://x.example/", nil)),

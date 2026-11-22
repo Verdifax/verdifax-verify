@@ -7,14 +7,16 @@ package main
 // Verdifax server program that runs on it, so it is named as firmware.
 
 // pinnedFirmware lists the launch measurements of the guest firmware
-// Verdifax's hardware machines boot, each with the machines it was read
-// from. A measurement not listed is stated as one Verdifax does not pin;
+// Verdifax's hardware machines boot, each with what it identifies. Round 63:
+// the measurement is the cloud's guest firmware, which every guest of that
+// platform shares, so it identifies the platform and never a Verdifax machine
+// (R300). A measurement not listed is stated as one Verdifax does not pin;
 // --strict-hardware fails it.
 var pinnedFirmware = map[string]string{
 	// Read from every published hardware report: the October 2026 hardware
 	// evidence run (key 2) and attested.verdifax.com's runs of November 14,
 	// 2026 (key 4), both AWS EC2 SEV-SNP guests in us-east-2.
-	"7a89cceaaba0bbdddc4f775acca3ef15d1f9bf8abccdc6115cfad7fb8eae113df3ee0bb50efa34db9c53ae065b1dc766": "the AWS EC2 SEV-SNP guest firmware of Verdifax's hardware machines (the October 2026 hardware evidence run and attested.verdifax.com)",
+	"7a89cceaaba0bbdddc4f775acca3ef15d1f9bf8abccdc6115cfad7fb8eae113df3ee0bb50efa34db9c53ae065b1dc766": "AWS's EC2 SEV-SNP guest firmware, which Verdifax's hardware machines boot (the October 2026 hardware evidence run and attested.verdifax.com) and which every AWS SEV-SNP guest of this generation shares; the report identifies the platform and the debug setting, not the Verdifax machine",
 }
 
 // strictHardware is --strict-hardware: a hardware record whose report has
@@ -31,7 +33,7 @@ func hardwareStatement(debug bool, measurementHex string) (statement string, str
 	firmwareWords := "firmware not one Verdifax pins"
 	machine, pinned := pinnedFirmware[measurementHex]
 	if pinned {
-		firmwareWords = "firmware matches " + machine
+		firmwareWords = "firmware is " + machine
 	}
 	statement = debugWords + "; " + firmwareWords
 	var why []string

@@ -39,8 +39,11 @@ type PolicyHistoryCheck struct {
 	RecordInChain bool                 `json:"record_in_chain,omitempty"`
 	// Gaps lists the restore gaps the history holds, each sealed and on the
 	// public log (round 56, E4).
-	Gaps   []string `json:"restore_gaps,omitempty"`
-	Reason string   `json:"reason,omitempty"`
+	Gaps []string `json:"restore_gaps,omitempty"`
+	// RuleInForce (v0.38.0), for a refusal for missing fields, names the
+	// change in force at the refusal's clock that it was made under.
+	RuleInForce string `json:"rule_in_force,omitempty"`
+	Reason      string `json:"reason,omitempty"`
 }
 
 var reflectActivation = reflect.TypeOf(artifacts.PolicyActivation{})
@@ -263,6 +266,9 @@ func printHistoryLines(c PolicyHistoryCheck, label string) {
 	}
 	if c.RecordInChain {
 		fmt.Println("                    The record's policy change is in this history")
+	}
+	if c.RuleInForce != "" {
+		fmt.Printf("  %-18s%s\n", "Rule in force:", c.RuleInForce)
 	}
 	fmt.Println("                    This covers the changes supplied; a later record shows whether more followed")
 }

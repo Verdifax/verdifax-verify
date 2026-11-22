@@ -120,6 +120,20 @@ func checkCondition(ruleID string, c Condition, ctx *EvaluationContext) error {
 			return fmt.Errorf("%w: rule %q has a data_quality age at clock %q", ErrUnreadable, ruleID, ctx.ClockEpoch)
 		}
 		return nil
+	case ConditionAttestedSetup:
+		for _, f := range c.Facts {
+			if SetupFactSource(f.Fact) == "" || !knownOperator(f.Match.Operator) {
+				return fmt.Errorf("%w: rule %q has an attested_setup fact %q with operator %q", ErrUnreadable, ruleID, f.Fact, f.Match.Operator)
+			}
+		}
+		return nil
+	case ConditionDataUse:
+		for _, m := range []*Matcher{c.PurposeMatch, c.BasisMatch} {
+			if m != nil && !knownOperator(m.Operator) {
+				return fmt.Errorf("%w: rule %q has a data_use matcher with operator %q", ErrUnreadable, ruleID, m.Operator)
+			}
+		}
+		return nil
 	case ConditionTimeWindow:
 		_, startOK := ParseHHMM(c.StartUTC)
 		_, endOK := ParseHHMM(c.EndUTC)
@@ -193,9 +207,108 @@ func matchOneCondition(ruleID string, c Condition, ctx *EvaluationContext) bool 
 		return ctx.RateCounts[ruleID] < c.MaxPerWindow
 	case ConditionDataQuality:
 		return dataQualityHolds(c, ctx)
+	case ConditionAttestedSetup:
+		return declaredSetupHolds(c, ctx)
+	case ConditionDataUse:
+		return dataUseHolds(c, ctx)
 	default:
 		return false
 	}
+}
+
+// declaredSetupHolds reports whether every caller-declared setup fact an
+// attested_setup condition names was declared and matches (round 64, setup
+// change). A fact the condition names that is not declared does not hold, so
+// a rule on it does not fire: the request declared nothing for it.
+//
+// A fact labelled attested_by_verdifax (review_model, review_prompt_id,
+// review_checker_id) is not read here. Verdifax's AI review states those
+// facts only after the rules ran, so no decision could read them; the rule
+// that allowed the step names them, and the step halts after the review when
+// the review stated something else (ReviewSetupMismatch). A reader repeating
+// the decision from the sealed inputs therefore reaches the same rule.
+func declaredSetupHolds(c Condition, ctx *EvaluationContext) bool {
+	for _, f := range c.Facts {
+		if SetupFactSource(f.Fact) != SetupDeclaredByCaller {
+			continue
+		}
+		value, stated := ctx.Setup.Fact(f.Fact)
+		if !stated || !Match(f.Match, value) {
+			return false
+		}
+	}
+	return true
+}
+
+// dataUseHolds reports whether the request's data-use declaration meets a
+// data_use condition (round 64, data-use basis). Verdifax seals the
+// declaration as made and judges none of it; the condition compares codes.
+//
+// Absent declaration: a request that declared no data use meets no data_use
+// condition, whatever the condition sets, as a data_quality condition is not
+// met without a data-quality declaration. A rule with one does not fire, and
+// the customer's own rule order decides what happens instead (usually the
+// default effect, or a later rule).
+//
+// With a declaration: purpose_match and basis_match, when set, must match
+// the declared code, and a code not declared matches neither; every declared
+// category must be one of categories_allowed, when set (declaring none
+// meets it); reference_required needs a declared reference.
+func dataUseHolds(c Condition, ctx *EvaluationContext) bool {
+	du := ctx.DataUse
+	if du == nil {
+		return false
+	}
+	if c.PurposeMatch != nil && (du.Purpose == "" || !Match(*c.PurposeMatch, du.Purpose)) {
+		return false
+	}
+	if c.BasisMatch != nil && (du.Basis == "" || !Match(*c.BasisMatch, du.Basis)) {
+		return false
+	}
+	if c.CategoriesAllowed != nil {
+		for _, category := range du.Categories {
+			if !inSet(category, c.CategoriesAllowed) {
+				return false
+			}
+		}
+	}
+	return !c.ReferenceRequired || du.Reference != ""
+}
+
+// ReviewSetupNamed lists the facts labelled attested_by_verdifax that the
+// rule's attested_setup conditions name, in the rule's order: the AI review
+// setup the step must have been reviewed with.
+func ReviewSetupNamed(fired *Rule) []SetupFactMatch {
+	if fired == nil {
+		return nil
+	}
+	var out []SetupFactMatch
+	for _, c := range fired.Conditions {
+		if c.Type != ConditionAttestedSetup {
+			continue
+		}
+		for _, f := range c.Facts {
+			if SetupFactSource(f.Fact) == SetupAttestedByVerdifax {
+				out = append(out, f)
+			}
+		}
+	}
+	return out
+}
+
+// ReviewSetupMismatch returns the first named review fact Verdifax's AI
+// review did not state, or stated with a value the rule does not accept, and
+// the value it stated (empty when none); it returns "" when every named fact
+// holds. The step halts on a mismatch.
+func ReviewSetupMismatch(named []SetupFactMatch, review *AttestedSetup) (string, string) {
+	stated := &Setup{AttestedByVerdifax: review}
+	for _, f := range named {
+		value, ok := stated.Fact(f.Fact)
+		if !ok || !Match(f.Match, value) {
+			return f.Fact, value
+		}
+	}
+	return "", ""
 }
 
 // dataQualityHolds reports whether the request's data-quality declaration

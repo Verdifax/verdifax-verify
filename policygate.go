@@ -49,8 +49,16 @@ type PolicyGateCheck struct {
 	// SignOffRequired is whether the rule that allowed the run requires a
 	// person's sign-off on its result (round 58, B7), read from the policy
 	// document when the rules are run again.
-	SignOffRequired bool   `json:"signoff_required,omitempty"`
-	Reason          string `json:"reason,omitempty"`
+	SignOffRequired bool `json:"signoff_required,omitempty"`
+	// SetupFacts (round 64) says, for each setup fact an attested_setup
+	// condition on the deciding rule names, what was stated and what the
+	// policy names, read when the rules are run again.
+	SetupFacts []string `json:"setup_facts,omitempty"`
+	// ReviewSetupMismatch (round 64), on an AI review halt for the review's
+	// setup, is the review fact the deciding rule names that the sealed
+	// review did not meet, found when the rules are run again.
+	ReviewSetupMismatch string `json:"review_setup_mismatch,omitempty"`
+	Reason              string `json:"reason,omitempty"`
 
 	inputs *artifacts.PolicyInputs
 	// aiOutputDeclared is whether the record or receipt seals an AI
@@ -66,6 +74,10 @@ type PolicyGateCheck struct {
 	// Empty for refusals, where no step ran.
 	reviewCheck  string
 	reviewSealed bool
+	// review is the sealed AI review (the record's, or an AI review halt
+	// receipt's), against which a rule naming the review's own setup is
+	// held (round 64); nil when none is sealed.
+	review *artifacts.AivpReview
 }
 
 // haltReasonReviewRequired is the AI review halt of a step whose policy
@@ -76,7 +88,7 @@ const haltReasonReviewRequired = "AIVP_T4_REVIEW_REQUIRED"
 func policyGateOf(b *artifacts.AuditBundle) PolicyGateCheck {
 	c := policyGateOfRecord(b)
 	c.aiOutputDeclared = b.AivpT4.AiOutputHash != ""
-	c.reviewCheck, c.reviewSealed = "record", b.AivpT4.Review != nil
+	c.reviewCheck, c.reviewSealed, c.review = "record", b.AivpT4.Review != nil, b.AivpT4.Review
 	return c
 }
 
@@ -179,42 +191,38 @@ func checkPolicyDocument(c PolicyGateCheck, doc []byte) PolicyGateCheck {
 		return c
 	}
 	c.RulesChecked = true
-	signOffRequired, ruleErr := rerunRules(c, doc)
-	if ruleErr != nil {
+	if ruleErr := rerunRules(&c, doc); ruleErr != nil {
 		c.Reason = ruleErr.Error()
 		return c
 	}
-	c.SignOffRequired = signOffRequired
 	c.DocumentMatch = true
 	return c
 }
 
-// rerunRules decides again from the document and the sealed inputs, and
-// reports whether the rule that allowed the run requires a sign-off.
-func rerunRules(c PolicyGateCheck, doc []byte) (bool, error) {
+// rerunRules decides again from the document and the sealed inputs. It
+// records whether the rule that allowed the run requires a sign-off and, from
+// round 64, what the deciding rule's setup facts were held to.
+func rerunRules(c *PolicyGateCheck, doc []byte) error {
 	rules, readErr := psleval.ReadDocument(doc)
 	if readErr != nil {
-		return false, fmt.Errorf("the rules could not be read: %w", readErr)
+		return fmt.Errorf("the rules could not be read: %w", readErr)
 	}
 	inputs, convertErr := sealedInputs(c.inputs)
 	if convertErr != nil {
-		return false, fmt.Errorf("the sealed inputs could not be read: %w", convertErr)
+		return fmt.Errorf("the sealed inputs could not be read: %w", convertErr)
 	}
 	ctx := inputs.Context()
 	ctx.AIOutputDeclared = c.aiOutputDeclared
 	result, decideErr := psleval.DecideDocument(rules, ctx)
 	if errors.Is(decideErr, psleval.ErrUnreadable) {
-		return false, fmt.Errorf("the rules cannot be decided on the sealed inputs: %w", decideErr)
+		return fmt.Errorf("the rules cannot be decided on the sealed inputs: %w", decideErr)
 	}
 	if decideErr != nil {
-		return false, fmt.Errorf("the rules could not be run: %w", decideErr)
+		return fmt.Errorf("the rules could not be run: %w", decideErr)
 	}
 	if result.FiredRuleID != c.FiredRuleID || string(result.Outcome) != c.Outcome {
-		return false, fmt.Errorf("running the rules on the sealed inputs gives %s by rule %q, the record says %s by rule %q",
+		return fmt.Errorf("running the rules on the sealed inputs gives %s by rule %q, the record says %s by rule %q",
 			result.Outcome, result.FiredRuleID, c.Outcome, c.FiredRuleID)
-	}
-	if result.Outcome != psleval.EffectAllow {
-		return false, nil
 	}
 	var fired *psleval.Rule
 	for i := range rules.Rules {
@@ -223,14 +231,32 @@ func rerunRules(c PolicyGateCheck, doc []byte) (bool, error) {
 			break
 		}
 	}
+	c.SetupFacts = setupFactLines(fired, &inputs, c.review)
+	if result.Outcome != psleval.EffectAllow {
+		return nil
+	}
 	required := psleval.ReviewRequired(fired, rules.AIReview)
 	switch {
 	case c.reviewCheck == "record" && required && !c.reviewSealed:
-		return false, fmt.Errorf("the policy requires an AI review on the steps rule %q allows, and the record seals none", result.FiredRuleID)
+		return fmt.Errorf("the policy requires an AI review on the steps rule %q allows, and the record seals none", result.FiredRuleID)
 	case c.reviewCheck == "review-required-halt" && !required:
-		return false, fmt.Errorf("the receipt says the step stopped because its policy requires an AI review, and rule %q requires none", result.FiredRuleID)
+		return fmt.Errorf("the receipt says the step stopped because its policy requires an AI review, and rule %q requires none", result.FiredRuleID)
 	}
-	return psleval.SignOffRequired(fired), nil
+	// Round 64: a rule that allowed the step and names the AI review's own
+	// setup was held, after the review, against what the review stated. A
+	// completed record must meet it; an AI review halt for the review's
+	// setup is held to the rules once both decisions are run again.
+	mismatch := reviewSetupMismatch(fired, c.review)
+	switch c.reviewCheck {
+	case "record":
+		if mismatch != "" {
+			return fmt.Errorf("rule %q names the AI review's %s, the sealed review does not meet it, and the step was not halted", result.FiredRuleID, mismatch)
+		}
+	case "review-setup-halt":
+		c.ReviewSetupMismatch = mismatch
+	}
+	c.SignOffRequired = psleval.SignOffRequired(fired)
+	return nil
 }
 
 // sealedInputs turns the record's form of the inputs into the decision's. The
@@ -311,6 +337,9 @@ func printGateLines(c PolicyGateCheck, l gateLabels) {
 		line(l.document, "✗ FAILED · %s", c.Reason)
 	case c.RulesChecked:
 		line(l.document, "matches, and the rules run on the sealed inputs reach the same rule and outcome")
+		for _, f := range c.SetupFacts {
+			line("Setup fact:", "%s", f)
+		}
 		line("", "The inputs are what was declared; this does not show they were true")
 	default:
 		line(l.document, "matches: its recomputed hash and the sealed identity agree; this record seals no inputs, so the rules were not run")
@@ -331,7 +360,9 @@ func applyPolicyDocument(r *Report, doc []byte) {
 // applyReceiptPolicyDocument is the same check for a refused or halted run.
 func applyReceiptPolicyDocument(r *ReceiptReport, doc []byte) {
 	if r.gap != nil {
+		activation := r.PolicyGate.ActivationHash
 		r.PolicyGate = checkGapPolicyDocument(r.gap, doc, "--policy")
+		r.PolicyGate.ActivationHash = activation
 	} else {
 		r.PolicyGate = checkPolicyDocument(r.PolicyGate, doc)
 	}

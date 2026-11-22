@@ -82,21 +82,22 @@ func accountGateOfBundle(b *artifacts.AuditBundle) *PolicyGateCheck {
 	}
 	g := gateOf(b.EPA.AccountPolicyGate)
 	g.aiOutputDeclared = b.AivpT4.AiOutputHash != ""
-	g.reviewCheck, g.reviewSealed = "record", b.AivpT4.Review != nil
+	g.reviewCheck, g.reviewSealed, g.review = "record", b.AivpT4.Review != nil, b.AivpT4.Review
 	c := checkAccountGate(g, b.Nrep.AccountID)
 	return &c
 }
 
 // accountGateOfReceipt reads a refused or halted run's account decision.
 // reviewCheck is "review-required-halt" for an AI review halt that names a
-// missing required review, else empty.
-func accountGateOfReceipt(ctx *artifacts.ReceiptContext, reviewCheck string) *PolicyGateCheck {
+// missing required review, "review-setup-halt" for one that names the
+// review's setup (round 64), else empty; review is the halt's sealed review.
+func accountGateOfReceipt(ctx *artifacts.ReceiptContext, reviewCheck string, review *artifacts.AivpReview) *PolicyGateCheck {
 	if ctx == nil || ctx.AccountPolicy == nil {
 		return nil
 	}
 	g := policyBindingOf(ctx.AccountPolicy)
 	g.aiOutputDeclared = ctx.Request.AiOutputHash != ""
-	g.reviewCheck = reviewCheck
+	g.reviewCheck, g.review = reviewCheck, review
 	c := checkAccountGate(g, ctx.AccountID)
 	return &c
 }
@@ -219,12 +220,16 @@ func applyAccountFlags(r *Report, policyPath, historyPath string) {
 func applyReceiptAccountFlags(r *ReceiptReport, policyPath, historyPath string) {
 	if policyPath != "" && r.gap != nil {
 		c := checkGapPolicyDocument(r.gap, readAccountPolicy(policyPath), "--account-policy")
+		if r.AccountPolicyGate != nil {
+			c.ActivationHash = r.AccountPolicyGate.ActivationHash
+		}
 		r.AccountPolicyGate = &c
 	} else if policyPath != "" {
 		r.AccountPolicyGate = applyAccountPolicyDocument(r.AccountPolicyGate, readAccountPolicy(policyPath))
 	}
 	if historyPath != "" {
 		r.AccountPolicyHistory = loadAccountPolicyHistory(historyPath, r.AccountID, r.AccountPolicyGate)
+		applyGapRuleInForce(r, r.AccountPolicyHistory)
 	}
 	if accountFailed(r.AccountPolicyGate, r.AccountPolicyHistory) {
 		r.VerdictTier, r.AllPassed, r.Reason = "FAILED", false, accountFailureReason(r.AccountPolicyGate, r.AccountPolicyHistory)

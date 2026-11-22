@@ -39,7 +39,30 @@ type Rule struct {
 // and the requirement is sealed through the policy hash.
 type SignOff struct {
 	Required bool `json:"required,omitempty"`
+	// Within, Compare, Notice and SealInResult are the customer's response
+	// target for the results the rule allows (round 64, response times):
+	// Within is the target in whole seconds, Compare names the sign-off whose
+	// time is compared with it, Notice how a passed target is shown, and
+	// SealInResult also seals the target into each result's feed entry. Each
+	// is absent unless set, so a policy without a target reads and hashes as
+	// before. The policy reader checks them; nothing evaluates them yet.
+	Within       int    `json:"within,omitempty"`
+	Compare      string `json:"compare,omitempty"`
+	Notice       string `json:"notice,omitempty"`
+	SealInResult bool   `json:"seal_in_result,omitempty"`
 }
+
+// The sign-off a response target is compared with, and how a passed target is
+// shown (round 64, response times).
+const (
+	CompareFirstSignOff    = "first_signoff"
+	CompareFirstApproval   = "first_approval"
+	CompareDecisionInForce = "decision_in_force"
+
+	NoticeEvent = "event"
+	NoticeHead  = "head"
+	NoticeBoth  = "both"
+)
 
 // SignOffRequired reports whether the rule that allowed a step requires a
 // person's sign-off on its result.
@@ -167,6 +190,24 @@ type Condition struct {
 	// when set, and each named check declared with the result pass.
 	MaxAgeSeconds int      `json:"max_age_seconds,omitempty"`
 	Checks        []string `json:"checks,omitempty"`
+	// Facts belongs to an attested_setup condition (round 64, setup change):
+	// each named setup fact must have been stated and match.
+	Facts []SetupFactMatch `json:"facts,omitempty"`
+	// PurposeMatch, BasisMatch, CategoriesAllowed and ReferenceRequired
+	// belong to a data_use condition (round 64, data-use basis): the
+	// request's declared purpose and basis match, every declared category is
+	// one of those allowed, and a reference was declared.
+	PurposeMatch      *Matcher `json:"purpose_match,omitempty"`
+	BasisMatch        *Matcher `json:"basis_match,omitempty"`
+	CategoriesAllowed []string `json:"categories_allowed,omitempty"`
+	ReferenceRequired bool     `json:"reference_required,omitempty"`
+}
+
+// SetupFactMatch is one setup fact an attested_setup condition names, by its
+// sealed name (see inputs.go), and the value it must match.
+type SetupFactMatch struct {
+	Fact  string  `json:"fact"`
+	Match Matcher `json:"match"`
 }
 
 // ConditionType is one of the documented condition kinds.
@@ -182,6 +223,13 @@ const (
 	// quality, with every check it names passing and, when max_age_seconds
 	// is set, data no older than that at the decision (round 58, B9).
 	ConditionDataQuality ConditionType = "data_quality"
+	// ConditionAttestedSetup holds when each setup fact it names was stated
+	// and matches (round 64, setup change). The request declared the facts
+	// labelled declared_by caller; Verdifax's AI review states the others.
+	ConditionAttestedSetup ConditionType = "attested_setup"
+	// ConditionDataUse holds when the request's data-use declaration meets
+	// it (round 64, data-use basis). Verdifax seals the declaration as made.
+	ConditionDataUse ConditionType = "data_use"
 )
 
 // Matcher is the predicate used in subject, verb and object matching.

@@ -22,8 +22,8 @@ func TestHardwareStatementCases(t *testing.T) {
 		want        string
 		strict      bool
 	}{
-		{false, october2026Firmware, "debug off; firmware matches ", false},
-		{true, october2026Firmware, "debug ON, the host could read this machine's memory; firmware matches ", true},
+		{false, october2026Firmware, "debug off; firmware is ", false},
+		{true, october2026Firmware, "debug ON, the host could read this machine's memory; firmware is ", true},
 		{false, strings.Repeat("ab", 48), "debug off; firmware not one Verdifax pins", true},
 		{true, strings.Repeat("ab", 48), "debug ON, the host could read this machine's memory; firmware not one Verdifax pins", true},
 	}
@@ -54,7 +54,7 @@ func loadHardwareRecord(t *testing.T) *artifacts.AuditBundle {
 func TestHardwareRecordStatesDebugAndFirmware(t *testing.T) {
 	b := loadHardwareRecord(t)
 	c := verifySevSnpQuote(b)
-	if !c.Match || c.Computed != "verified; debug off; firmware matches "+pinnedFirmware[october2026Firmware] {
+	if !c.Match || c.Computed != "verified; debug off; firmware is "+pinnedFirmware[october2026Firmware] {
 		t.Fatalf("the October 2026 record reads %+v, want verified with debug off and its firmware pinned", c)
 	}
 	strictHardware = true
@@ -97,5 +97,22 @@ func TestSealedGuestPolicyMustMatchTheReport(t *testing.T) {
 	vmpl = 1
 	if c := verifySevSnpQuote(b); !c.Match {
 		t.Fatalf("a sealed policy and privilege level equal to the report's must pass: %+v", c)
+	}
+}
+
+// R300 (round 63): a pinned firmware statement says what the measurement
+// identifies: the platform every guest of that generation shares, never a
+// Verdifax machine of its own.
+func TestPinnedFirmwareNamesThePlatformNotTheMachine(t *testing.T) {
+	for m, words := range pinnedFirmware {
+		statement, _ := hardwareStatement(false, m)
+		for _, want := range []string{"shares", "identifies the platform", "not the Verdifax machine"} {
+			if !strings.Contains(statement, want) {
+				t.Errorf("firmware %s...: statement %q does not say %q", m[:8], statement, want)
+			}
+		}
+		if strings.Contains(words, "firmware of Verdifax") || strings.Contains(statement, "firmware matches") {
+			t.Errorf("firmware %s...: statement %q reads as identifying a Verdifax machine", m[:8], statement)
+		}
 	}
 }

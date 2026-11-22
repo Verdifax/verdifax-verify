@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -85,7 +86,11 @@ func TestInputsCarryEveryField(t *testing.T) {
 	ctx := EvaluationContext{SubjectID: "a", SubjectType: SubjectTypeAgent, SubjectRole: "b", Verb: "c", ObjectType: ObjectTypeData,
 		ObjectID: "d", Classification: ClassificationInternal, MFASatisfied: true, SessionAgeSeconds: 5, ClockEpoch: "e",
 		RateCounts:  map[string]int{"r": 1},
-		DataQuality: &DataQuality{Source: "ledger", AsOf: "2026-11-11T00:00:00Z", Checks: []DataCheck{{Name: "complete", Result: DataCheckPass}}}}
+		DataQuality: &DataQuality{Source: "ledger", AsOf: "2026-11-11T00:00:00Z", Checks: []DataCheck{{Name: "complete", Result: DataCheckPass}}},
+		Setup: &Setup{DeclaredByCaller: &DeclaredSetup{ModelName: "m", ClientName: "c"},
+			AttestedByVerdifax: &AttestedSetup{ReviewPromptID: "statements-v1"}},
+		DataUse: &DataUse{Purpose: "claims.review", Basis: "contract", Categories: []string{"claims"},
+			Reference: "hmac-sha256:" + strings.Repeat("a", 64)}}
 	v := reflect.ValueOf(ctx)
 	for i := 0; i < v.NumField(); i++ {
 		name := v.Type().Field(i).Name
@@ -169,5 +174,85 @@ func TestADataQualityConditionTestsTheDeclaration(t *testing.T) {
 		if got := matchOneCondition("r", c.cond, ctx); got != c.want {
 			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+// Round 64: every setup fact a policy can name is read from the group of the
+// party that states it, and a fact in the other group is never read for it.
+func TestSetupFactsAreReadFromTheirOwnGroup(t *testing.T) {
+	full := &Setup{
+		DeclaredByCaller: &DeclaredSetup{ModelProvider: "p", ModelName: "n", ModelVersion: "v", ModelTemperature: "0.2",
+			PromptHash: "h", ClientName: "cn", ClientVersion: "cv"},
+		AttestedByVerdifax: &AttestedSetup{ReviewModel: "rm", ReviewPromptID: "rp", ReviewCheckerID: "rc"},
+	}
+	want := map[string]string{"model_provider": "p", "model_name": "n", "model_version": "v", "model_temperature": "0.2",
+		"prompt_hash": "h", "client_name": "cn", "client_version": "cv", "review_model": "rm", "review_prompt_id": "rp",
+		"review_checker_id": "rc"}
+	if len(SetupFacts) != len(want) {
+		t.Fatalf("%d setup facts, want %d", len(SetupFacts), len(want))
+	}
+	for _, fact := range SetupFacts {
+		if got, stated := full.Fact(fact); !stated || got != want[fact] {
+			t.Errorf("%s: %q %v, want %q", fact, got, stated, want[fact])
+		}
+		if SetupFactSource(fact) == "" {
+			t.Errorf("%s names no party that states it", fact)
+		}
+	}
+	callerOnly := &Setup{DeclaredByCaller: full.DeclaredByCaller}
+	for _, fact := range []string{"review_model", "review_prompt_id", "review_checker_id"} {
+		if _, stated := callerOnly.Fact(fact); stated {
+			t.Errorf("%s is stated by Verdifax's review only", fact)
+		}
+		if SetupFactSource(fact) != SetupAttestedByVerdifax {
+			t.Errorf("%s is attested by Verdifax", fact)
+		}
+	}
+	if _, stated := (*Setup)(nil).Fact("model_name"); stated || SetupFactSource("actor_id") != "" {
+		t.Fatal("no setup states nothing, and actor_id is not a setup fact")
+	}
+}
+
+// Round 64, R304: a sealed input with no setup and no data use encodes
+// exactly as before the fields existed.
+func TestAbsentSetupAndDataUseEncodeAsBefore(t *testing.T) {
+	in := Inputs{SubjectID: "a", SubjectType: SubjectTypeAgent, Verb: "v", ObjectType: ObjectTypeData, ObjectID: "o",
+		Classification: ClassificationInternal, EvaluatedAt: "2026-11-17T00:00:00Z"}
+	got, encodeErr := json.Marshal(in)
+	if encodeErr != nil {
+		t.Fatal(encodeErr)
+	}
+	const before = `{"subject_id":"a","subject_type":"agent","verb":"v","object_type":"data","object_id":"o","classification":"INTERNAL","evaluated_at":"2026-11-17T00:00:00Z"}`
+	if string(got) != before {
+		t.Fatalf("got %s, want %s", got, before)
+	}
+}
+
+// Round 64: the review facts a rule names are held after the review, against
+// what Verdifax's AI review stated; the decision itself never reads them.
+func TestReviewSetupIsHeldAgainstTheReview(t *testing.T) {
+	rule := &Rule{RuleID: "r", Effect: EffectAllow, Conditions: []Condition{
+		{Type: ConditionAttestedSetup, Facts: []SetupFactMatch{
+			{Fact: "model_name", Match: Matcher{Operator: MatchAny}},
+			{Fact: "review_prompt_id", Match: Matcher{Operator: MatchExact, Value: "statements-v1"}},
+			{Fact: "review_model", Match: Matcher{Operator: MatchPrefix, Value: "claude-"}},
+		}},
+		{Type: ConditionMFARequired, Required: false},
+	}}
+	named := ReviewSetupNamed(rule)
+	if len(named) != 2 || named[0].Fact != "review_prompt_id" || named[1].Fact != "review_model" {
+		t.Fatalf("named %+v, want the two review facts in the rule's order", named)
+	}
+	if fact, _ := ReviewSetupMismatch(named, &AttestedSetup{ReviewModel: "claude-opus-5-5", ReviewPromptID: "statements-v1"}); fact != "" {
+		t.Fatalf("a matching review is held as a mismatch on %s", fact)
+	}
+	if fact, value := ReviewSetupMismatch(named, &AttestedSetup{ReviewModel: "gpt-9", ReviewPromptID: "statements-v1"}); fact != "review_model" || value != "gpt-9" {
+		t.Fatalf("got %s %q, want review_model gpt-9", fact, value)
+	}
+	if fact, value := ReviewSetupMismatch(named, nil); fact != "review_prompt_id" || value != "" {
+		t.Fatalf("no review states nothing: got %s %q", fact, value)
+	}
+	if ReviewSetupNamed(nil) != nil || ReviewSetupNamed(&Rule{}) != nil {
+		t.Fatal("no rule names no review fact")
 	}
 }

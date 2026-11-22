@@ -29,6 +29,12 @@ import (
 // representation. Do not reorder fields without bumping the artifact
 // version (currently "vfa.attestation_gap_receipt.v1").
 type AttestationGapReceipt struct {
+	// ActivationHash, present only for an account with a round 64 feature
+	// on, is the change record of the policy that found the gap: the rule in
+	// force, sealed on the receipt itself, as every decision seals it.
+	// Receipts without it hash exactly as before.
+	ActivationHash string `json:"activation_hash,omitempty"`
+
 	// AnchorRequired, present only when true, states that this receipt
 	// must carry a public-log receipt_anchor under receipt anchor v2.
 	// It is part of the hash, so deleting the anchor from
@@ -131,6 +137,7 @@ func BuildAttestationGapReceiptHash(receipt *AttestationGapReceipt) (string, err
 	sort.Strings(required)
 
 	preimage := struct {
+		ActivationHash     string   `json:"activation_hash,omitempty"`
 		AnchorRequired     bool     `json:"anchor_required,omitempty"`
 		DecisionReasonCode string   `json:"decision_reason_code"`
 		EnvelopeID         string   `json:"envelope_id"`
@@ -144,6 +151,7 @@ func BuildAttestationGapReceiptHash(receipt *AttestationGapReceipt) (string, err
 		RequiredFields     []string `json:"required_fields"`
 		Version            string   `json:"version"`
 	}{
+		ActivationHash:     receipt.ActivationHash,
 		AnchorRequired:     receipt.AnchorRequired,
 		DecisionReasonCode: receipt.DecisionReasonCode,
 		EnvelopeID:         receipt.EnvelopeID,

@@ -36,9 +36,20 @@ type RunSealed struct {
 	// SignOffRequired says the policy rule that allowed the run requires a
 	// person's sign-off on its result (round 58, B7), so the account's feed
 	// shows each such result waiting for one. Present only when true.
-	SignOffRequired bool           `json:"signoff_required,omitempty"`
-	RunSealedHash   string         `json:"run_sealed_hash"`
-	Anchor          *ReceiptAnchor `json:"anchor,omitempty"`
+	SignOffRequired bool `json:"signoff_required,omitempty"`
+	// SetupHash is the run's setup fingerprint (round 64, SetupHash),
+	// present only when the policy in force watches the setup, so a reader
+	// of the feed sees each counted run's fingerprint and every record
+	// sealed without a watch hashes as it did.
+	SetupHash string `json:"setup_hash,omitempty"`
+	// SignOffTarget is the response target of the rule that allowed the run
+	// (round 64, response times), present only when the rule's
+	// signoff.within sets seal_in_result, so the feed alone shows the
+	// target in force for this result; every record sealed without one
+	// hashes as it did.
+	SignOffTarget *SealedTarget  `json:"signoff_target,omitempty"`
+	RunSealedHash string         `json:"run_sealed_hash"`
+	Anchor        *ReceiptAnchor `json:"anchor,omitempty"`
 }
 
 // ComputeHash returns the record's hash: every field but the hash and the
@@ -49,6 +60,12 @@ func (r *RunSealed) ComputeHash() string {
 		r.Signal.fields()...)
 	if r.SignOffRequired {
 		fields = append(fields, "signoff_required=true")
+	}
+	if r.SetupHash != "" {
+		fields = append(fields, "setup_hash="+r.SetupHash)
+	}
+	if r.SignOffTarget != nil {
+		fields = append(fields, r.SignOffTarget.fields("signoff_target")...)
 	}
 	return lengthPrefixedHash(fields)
 }
@@ -69,6 +86,12 @@ func (r *RunSealed) Validate() error {
 		return errors.New("run sealed: a record in a job names both its job and its step")
 	case r.SealedAt == "":
 		return errors.New("run sealed: sealed_at is required")
+	case r.SetupHash != "" && !jobHashPattern.MatchString(r.SetupHash):
+		return errors.New("run sealed: setup_hash must be 64 lowercase hex characters")
+	case r.SignOffTarget != nil && !r.SignOffRequired:
+		return errors.New("run sealed: a sign-off target is sealed only on a result that requires a sign-off")
+	case r.SignOffTarget != nil && r.SignOffTarget.Validate() != nil:
+		return r.SignOffTarget.Validate()
 	case !jobHashPattern.MatchString(r.RunSealedHash):
 		return errors.New("run sealed: run_sealed_hash must be 64 lowercase hex characters")
 	}

@@ -48,6 +48,24 @@ const (
 	// owner or by Verdifax; the tombstone stays in the feed (round 60).
 	SignalRunDeleted = "run.deleted"
 
+	// The round 64 kinds. Each is emitted only for an account that turned
+	// its feature on, and only once the server's release setting accepts
+	// them; until then the server reads them and emits none.
+	//
+	// SignalAccountStopped and SignalAccountResumed: the owner or Verdifax
+	// placed, or lifted, its own stop on the account.
+	SignalAccountStopped = "account.stopped"
+	SignalAccountResumed = "account.resumed"
+	// SignalSetupChanged: a run's setup facts differ from the baseline the
+	// account's policy watches.
+	SignalSetupChanged = "setup.changed"
+	// SignalReviewDue: the review date an activation's policy declares has
+	// come, sealed once per activation.
+	SignalReviewDue = "review.due"
+	// SignalSignOffTargetPassed: the response target the policy declares
+	// passed with no sign-off of the kind it compares.
+	SignalSignOffTargetPassed = "signoff.target_passed"
+
 	// SignalTypePrefix opens every CloudEvents type the feed emits.
 	SignalTypePrefix = "com.verdifax."
 )
@@ -58,6 +76,13 @@ var SignalKinds = []string{SignalRunRefused, SignalRunHalted, SignalRunFailed, S
 	SignalRunPublished, SignalRunUnpublished, SignalChainGap, SignalRunSealed, SignalChainInterrupted,
 	SignalAccountChanged, SignalRunDeleted}
 
+// StagedSignalKinds lists the round 64 kinds, in a fixed order. They are
+// kept apart from SignalKinds, which every existing answer lists, so a server
+// whose release setting is off answers exactly as before: it reads these kinds
+// in a feed and accepts none of them in a new request.
+var StagedSignalKinds = []string{SignalAccountStopped, SignalAccountResumed, SignalSetupChanged, SignalReviewDue,
+	SignalSignOffTargetPassed, SignalSignOffRefused}
+
 // IsSignalKind reports a kind the feed emits.
 func IsSignalKind(kind string) bool {
 	for _, k := range SignalKinds {
@@ -67,6 +92,33 @@ func IsSignalKind(kind string) bool {
 	}
 	return false
 }
+
+// IsStagedSignalKind reports one of the round 64 kinds.
+func IsStagedSignalKind(kind string) bool {
+	for _, k := range StagedSignalKinds {
+		if k == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// IsKnownSignalKind reports a kind this server can read in a feed: one it
+// emits today or one of the round 64 kinds.
+func IsKnownSignalKind(kind string) bool { return IsSignalKind(kind) || IsStagedSignalKind(kind) }
+
+// The leaf kinds of the round 64 records' public-log entries.
+const (
+	// AccountStopKind logs a verdifax.account-stop.v1 record, the entry of
+	// an account.stopped or account.resumed event.
+	AccountStopKind = "account_stop"
+	// SetupChangeKind logs a verdifax.setup-change.v1 record (setup.changed).
+	SetupChangeKind = "setup_change"
+	// ReviewDueKind logs the record of a review.due event.
+	ReviewDueKind = "review_due"
+	// SignOffTargetKind logs the record of a signoff.target_passed event.
+	SignOffTargetKind = "signoff_target"
+)
 
 var signalAccount = regexp.MustCompile(`^account-[1-9][0-9]{0,18}$`)
 
@@ -143,12 +195,17 @@ type KeyChange struct {
 	Action string `json:"action"`
 	// DecidedBy is owner or verdifax_admin; sealed in v2 and absent from v1,
 	// whose every change was the owner's.
-	DecidedBy     string         `json:"decided_by,omitempty"`
-	KeyID         int64          `json:"key_id"`
-	KeyScope      string         `json:"key_scope"`
-	PublicKey     string         `json:"public_key,omitempty"`
-	Name          string         `json:"name"`
-	ChangedAt     string         `json:"changed_at"`
+	DecidedBy string `json:"decided_by,omitempty"`
+	KeyID     int64  `json:"key_id"`
+	KeyScope  string `json:"key_scope"`
+	PublicKey string `json:"public_key,omitempty"`
+	Name      string `json:"name"`
+	ChangedAt string `json:"changed_at"`
+	// AllowedTools (round 64) is, on a member key's key.created record, the
+	// tool allowlist its owner granted it, sorted: verdifax-mcp tool names
+	// and the stop permission. Absent when none was granted, and then the
+	// record and its hash are exactly as before.
+	AllowedTools  []string       `json:"allowed_tools,omitempty"`
 	Signal        SignalLink     `json:"signal"`
 	KeyChangeHash string         `json:"key_change_hash"`
 	Anchor        *ReceiptAnchor `json:"anchor,omitempty"`
@@ -161,9 +218,13 @@ func (k *KeyChange) ComputeHash() string {
 	if k.Format != KeyChangeFormatV1 {
 		head = append(head, k.DecidedBy)
 	}
-	fields := append(append(head, strconv.FormatInt(k.KeyID, 10), k.KeyScope, k.PublicKey,
-		k.Name, k.ChangedAt), k.Signal.fields()...)
-	return lengthPrefixedHash(fields)
+	fields := append(head, strconv.FormatInt(k.KeyID, 10), k.KeyScope, k.PublicKey, k.Name, k.ChangedAt)
+	// Round 64: the allowlist joins behind a label and its length only when
+	// present, so every record without one hashes as before.
+	if len(k.AllowedTools) > 0 {
+		fields = append(append(fields, "allowed_tools", strconv.Itoa(len(k.AllowedTools))), k.AllowedTools...)
+	}
+	return lengthPrefixedHash(append(fields, k.Signal.fields()...))
 }
 
 // Decider is who made the change: the sealed decided_by, or the owner for a
@@ -206,6 +267,10 @@ func (k *KeyChange) Validate() error {
 		return errors.New("key change: name is longer than 200 bytes")
 	case !jobHashPattern.MatchString(k.KeyChangeHash):
 		return errors.New("key change: key_change_hash must be 64 lowercase hex characters")
+	case k.AllowedTools != nil && (k.Format != KeyChangeFormat || k.Action != SignalKeyCreated || k.KeyScope != KeyScopeRun):
+		return errors.New("key change: only a v2 member key's key.created record carries a tool allowlist")
+	case k.AllowedTools != nil && !validAllowedTools(k.AllowedTools):
+		return errors.New("key change: allowed_tools must be distinct grantable tool names, sorted")
 	}
 	return k.Signal.Validate()
 }

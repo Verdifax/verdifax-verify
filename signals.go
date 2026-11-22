@@ -195,6 +195,24 @@ type SignalFeedEntry struct {
 	GapChain string `json:"gap_chain,omitempty"`
 	GapFrom  int64  `json:"gap_from,omitempty"`
 	GapTo    int64  `json:"gap_to,omitempty"`
+	// Setup, on a setup.changed event (round 64), says what the request
+	// declared and what Verdifax's AI review stated; SetupHash, on a run's
+	// event under a setup watch, is the run's sealed setup fingerprint.
+	Setup     string `json:"setup,omitempty"`
+	SetupHash string `json:"setup_hash,omitempty"`
+	// ReviewDue, on a review.due event (round 64), says which declared date
+	// passed while which activation was in force.
+	ReviewDue string `json:"review_due,omitempty"`
+	// Stop, on an account.stopped or account.resumed event (round 64), says
+	// who placed or lifted which stop and with what scope; SignOffRefused,
+	// on a signoff.refused event, which sign-off was refused under which
+	// stop; TargetPassed, on a signoff.target_passed event, which target
+	// passed; AllowedTools, on a key.created event, the tool allowlist its
+	// owner granted the key.
+	Stop           string   `json:"stop,omitempty"`
+	SignOffRefused string   `json:"signoff_refused,omitempty"`
+	TargetPassed   string   `json:"target_passed,omitempty"`
+	AllowedTools   []string `json:"allowed_tools,omitempty"`
 }
 
 // SignalFeedCheck is the --signals result.
@@ -250,10 +268,45 @@ type SignalFeedCheck struct {
 	// it takes, so a reader sees every place the account's events are sent.
 	WebhookChanges int      `json:"webhook_changes,omitempty"`
 	Webhooks       []string `json:"webhooks,omitempty"`
+	// SetupChanges and ReviewsDue count the round 64 setup.changed and
+	// review.due events, each checked as its own kind and against the feed.
+	SetupChanges int `json:"setup_changes,omitempty"`
+	ReviewsDue   int `json:"reviews_due,omitempty"`
+	// StoppedPeriods (round 64, part 2) are the stops the feed shows, each
+	// with its lift when the feed shows one; SignOffsRefused counts the
+	// sign-offs refused during a stop and TargetsPassed the passed response
+	// targets, each checked against the feed.
+	StoppedPeriods  []StoppedPeriod `json:"stopped_periods,omitempty"`
+	SignOffsRefused int             `json:"signoffs_refused,omitempty"`
+	TargetsPassed   int             `json:"targets_passed,omitempty"`
 	// Notes are what the check could not confirm without more evidence, and
 	// how to give it.
 	Notes  []string `json:"notes,omitempty"`
 	Reason string   `json:"reason,omitempty"`
+	// events and head are the feed as read, for the modes that count it
+	// (--response-times, --summary); headAgeErr is the head's age failure
+	// when a mode keeps it apart.
+	events     []signalCloudEvent
+	head       *artifacts.FeedHead
+	headAgeErr error
+}
+
+// feedOptions are what a mode adds to the feed check (round 64): the policy
+// documents given by --signals-policy; headAgeApart, which keeps a head
+// older than --feed-head-max-age from failing the feed so the mode decides;
+// and headAgeExempt, the statement hash of a head that is not held to the
+// limit at all (a period summary's own head).
+type feedOptions struct {
+	documents     map[string][]byte
+	headAgeApart  bool
+	headAgeExempt string
+}
+
+// checkSignalFeedWith is checkSignalFeedPinned with the policy documents
+// given by --signals-policy, by their text hash (round 64): each review date
+// they declare is recomputed for every change that put them in force.
+func checkSignalFeedWith(data []byte, after *signalPoint, ownerKeys []string, documents map[string][]byte) SignalFeedCheck {
+	return checkSignalFeedPinned(data, after, ownerKeys, feedOptions{documents: documents})
 }
 
 // UnconfirmedOwnerChange is one owner change the feed cannot tie to the owner
@@ -386,6 +439,35 @@ type checkedEntry struct {
 	// tombstoneAt is, on an event whose record was deleted, the
 	// tombstone's own event (round 61, N25).
 	tombstoneAt int64
+	// The round 64 facts: a policy change's record; a setup change's or a
+	// review date's record; a run's setup fingerprint and, on a receipt,
+	// its kind; and the policy change an attestation-gap receipt seals as
+	// the rule in force, with its clock.
+	activation    *artifacts.PolicyActivation
+	setupChange   *artifacts.SetupChange
+	reviewDue     *artifacts.ReviewDue
+	setupHash     string
+	recordHash    string
+	receiptKind   string
+	gapActivation string
+	gapClock      string
+	// Round 64, part 2: an account stop's record, a sign-off refused during
+	// a stop, a passed response target; a sign-off's record; a key's sealed
+	// tool allowlist and an approver's public key; a deny receipt sealed for
+	// a run refused because the account was stopped, with the policy it
+	// names; and a result's sealed response target, public-log time and
+	// sealed record time, for the response-time checks.
+	stop         *artifacts.AccountStop
+	refusal      *artifacts.SignOffRefusal
+	targetPassed *artifacts.SignOffTargetPassed
+	signOff      *artifacts.SignOff
+	allowedTools []string
+	approverKey  string
+	stopRefusal  bool
+	policyHash   string
+	resultTarget *artifacts.SealedTarget
+	logged       int64
+	recordClock  string
 }
 
 // unloggedOr passes a check that failed only for want of a public-log entry,
@@ -442,7 +524,19 @@ func checkSignalEntry(ce *signalCloudEvent) (checkedEntry, error) {
 		if ctx.AccountID != e.Account {
 			return checkedEntry{}, fmt.Errorf("its receipt seals account %q, not %s", ctx.AccountID, e.Account)
 		}
-		return checkedEntry{hash: rep.ReceiptHash, at: rep.ReceiptClock, logEntry: rep.AnchorLogEntry, link: ctx.Signal, runID: doc.RunID, unlogged: unlogged}, nil
+		got := checkedEntry{hash: rep.ReceiptHash, at: rep.ReceiptClock, logEntry: rep.AnchorLogEntry, link: ctx.Signal, runID: doc.RunID, unlogged: unlogged,
+			setupHash: ctx.SetupHash, recordHash: rep.ReceiptHash, receiptKind: rep.ReceiptKind, resultTarget: ctx.ResponseTarget, recordClock: rep.ReceiptClock}
+		if doc.ReceiptAnchor != nil {
+			got.logged = doc.ReceiptAnchor.IntegratedTime
+		}
+		if d := doc.DenyReceipt; d != nil {
+			got.policyHash = d.PolicyHash
+			got.stopRefusal = d.FiredRuleID == artifacts.StopRuleID && d.DecisionReasonCode == artifacts.StopReasonCode
+		}
+		if g := doc.AttestationGapReceipt; g != nil && g.ActivationHash != "" {
+			got.gapActivation, got.gapClock = g.ActivationHash, g.GapClock
+		}
+		return got, nil
 	case artifacts.SignalPolicyChanged:
 		var a artifacts.PolicyActivation
 		if decodeErr := strictDecode(e.Entry, &a); decodeErr != nil {
@@ -455,7 +549,7 @@ func checkSignalEntry(ce *signalCloudEvent) (checkedEntry, error) {
 		if checkErr != nil {
 			return checkedEntry{}, fmt.Errorf("its policy change: %w", checkErr)
 		}
-		return checkedEntry{hash: a.ActivationHash, at: a.ActivatedAt, logEntry: logEntryOf(a.Anchor), link: a.Signal, unlogged: unlogged}, nil
+		return checkedEntry{hash: a.ActivationHash, at: a.ActivatedAt, logEntry: logEntryOf(a.Anchor), link: a.Signal, unlogged: unlogged, activation: &a}, nil
 	case artifacts.SignalSignOffRecorded:
 		var s artifacts.SignOff
 		if decodeErr := strictDecode(e.Entry, &s); decodeErr != nil {
@@ -468,7 +562,8 @@ func checkSignalEntry(ce *signalCloudEvent) (checkedEntry, error) {
 		if checkErr != nil {
 			return checkedEntry{}, fmt.Errorf("its sign-off: %w", checkErr)
 		}
-		return checkedEntry{hash: s.SignOffHash, at: s.RecordedAt, logEntry: logEntryOf(s.Anchor), link: s.Signal, runID: s.Target.RunID, unlogged: unlogged}, nil
+		return checkedEntry{hash: s.SignOffHash, at: s.RecordedAt, logEntry: logEntryOf(s.Anchor), link: s.Signal, runID: s.Target.RunID, unlogged: unlogged,
+			signOff: &s}, nil
 	case artifacts.SignalApproverRegistered, artifacts.SignalApproverRevoked, artifacts.SignalKeyCreated, artifacts.SignalKeyRevoked:
 		var k artifacts.KeyChange
 		if decodeErr := strictDecode(e.Entry, &k); decodeErr != nil {
@@ -483,7 +578,7 @@ func checkSignalEntry(ce *signalCloudEvent) (checkedEntry, error) {
 		}
 		link := k.Signal
 		return checkedEntry{hash: k.KeyChangeHash, at: k.ChangedAt, logEntry: logEntryOf(k.Anchor), link: &link,
-			decidedBy: k.Decider(), keyScope: k.KeyScope, keyID: k.KeyID, unlogged: unlogged}, nil
+			decidedBy: k.Decider(), keyScope: k.KeyScope, keyID: k.KeyID, unlogged: unlogged, allowedTools: k.AllowedTools, approverKey: k.PublicKey}, nil
 	case artifacts.SignalAccountChanged:
 		var c artifacts.AccountChange
 		if decodeErr := strictDecode(e.Entry, &c); decodeErr != nil {
@@ -545,7 +640,46 @@ func checkSignalEntry(ce *signalCloudEvent) (checkedEntry, error) {
 			return checkedEntry{}, fmt.Errorf("it names run %d, and its record is run %d's", e.RunID, rs.RunID)
 		}
 		link := rs.Signal
-		return checkedEntry{hash: rs.RunSealedHash, at: rs.SealedAt, logEntry: logEntryOf(rs.Anchor), link: &link, runID: rs.RunID, unlogged: unlogged}, nil
+		got := checkedEntry{hash: rs.RunSealedHash, at: rs.SealedAt, logEntry: logEntryOf(rs.Anchor), link: &link, runID: rs.RunID, unlogged: unlogged,
+			setupHash: rs.SetupHash, recordHash: rs.RecordHash, resultTarget: rs.SignOffTarget, recordClock: rs.SealedAt}
+		if rs.Anchor != nil {
+			got.logged = rs.Anchor.IntegratedTime
+		}
+		return got, nil
+	case artifacts.SignalSetupChanged:
+		// Round 64: a setup change seen by a policy's setup watch.
+		var c artifacts.SetupChange
+		if decodeErr := strictDecode(e.Entry, &c); decodeErr != nil {
+			return checkedEntry{}, fmt.Errorf("its entry is not a setup change: %w", decodeErr)
+		}
+		unlogged, checkErr := unloggedOr(checkSealedEntry(c.Validate(), c.ComputeHash(), c.SetupChangeHash, c.ChangedAt, "changed_at",
+			c.Anchor, artifacts.SetupChangeKind, c.LeafHash()))
+		if checkErr != nil {
+			return checkedEntry{}, fmt.Errorf("its setup change: %w", checkErr)
+		}
+		if e.RunID != c.RunID {
+			return checkedEntry{}, fmt.Errorf("it names run %d, and its setup change is run %d's", e.RunID, c.RunID)
+		}
+		link := c.Signal
+		return checkedEntry{hash: c.SetupChangeHash, at: c.ChangedAt, logEntry: logEntryOf(c.Anchor), link: &link, runID: c.RunID, unlogged: unlogged,
+			setupChange: &c}, nil
+	case artifacts.SignalReviewDue:
+		// Round 64: a policy's declared review date passed while one of its
+		// activations was in force.
+		var r artifacts.ReviewDue
+		if decodeErr := strictDecode(e.Entry, &r); decodeErr != nil {
+			return checkedEntry{}, fmt.Errorf("its entry is not a review date record: %w", decodeErr)
+		}
+		unlogged, checkErr := unloggedOr(checkSealedEntry(r.Validate(), r.ComputeHash(), r.ReviewDueHash, r.StatedAt, "stated_at",
+			r.Anchor, artifacts.ReviewDueKind, r.LeafHash()))
+		if checkErr != nil {
+			return checkedEntry{}, fmt.Errorf("its review date record: %w", checkErr)
+		}
+		link := r.Signal
+		return checkedEntry{hash: r.ReviewDueHash, at: r.StatedAt, logEntry: logEntryOf(r.Anchor), link: &link, unlogged: unlogged, reviewDue: &r}, nil
+	case artifacts.SignalAccountStopped, artifacts.SignalAccountResumed, artifacts.SignalSignOffRefused, artifacts.SignalSignOffTargetPassed:
+		// Round 64, part 2 (signals_stop.go).
+		return checkStopFeedEntry(ce)
 	case artifacts.SignalChainGap:
 		var g artifacts.RestoreGap
 		if decodeErr := strictDecode(e.Entry, &g); decodeErr != nil {
@@ -660,7 +794,7 @@ func checkSignalEnvelope(ce *signalCloudEvent) error {
 		return errors.New("its datacontenttype is not application/json")
 	case d.Form != artifacts.SignalFormat:
 		return fmt.Errorf("its data form is %q, not %s", safePrefix(d.Form), artifacts.SignalFormat)
-	case !artifacts.IsSignalKind(d.Kind):
+	case !isReadSignalKind(d.Kind):
 		return fmt.Errorf("its kind %q is not one the feed emits", safePrefix(d.Kind))
 	case ce.Type != artifacts.SignalTypePrefix+d.Kind:
 		return fmt.Errorf("its type %q does not match its kind %s", safePrefix(ce.Type), d.Kind)
@@ -684,7 +818,15 @@ func checkSignalFeed(data []byte, after *signalPoint) SignalFeedCheck {
 // without a pin the check proves that key signed, and the feed's request-key
 // chain proves it was the owner key's request key from its registration on;
 // the pin proves the registration itself was the owner's.
-func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) SignalFeedCheck {
+//
+// Round 64: opts, when given, carries the policy documents given by
+// --signals-policy and how the feed's head is held to --feed-head-max-age.
+func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string, opts ...feedOptions) SignalFeedCheck {
+	var o feedOptions
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	documents := o.documents
 	c := SignalFeedCheck{Checked: true}
 	pinned := map[string]bool{}
 	for _, k := range ownerKeys {
@@ -721,6 +863,9 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 	default:
 		c.ContinuityFrom = "not checked"
 	}
+	r64 := newRound64Feed(documents, c.ContinuityFrom == "start")
+	stops := newStopFeed(c.ContinuityFrom == "start", documents)
+	targets := newTargetFeed()
 	for i := range events {
 		ce := &events[i]
 		d := &ce.Data
@@ -794,6 +939,15 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 		if chainErr := chains.apply(d.Sequence, d.Kind, &got, pinned); chainErr != "" {
 			return fail("%s", chainErr)
 		}
+		if r64Err := r64.event(d.Kind, d.Sequence, &got); r64Err != "" {
+			return fail("%s", r64Err)
+		}
+		if stopErr := stops.event(d.Kind, d.Sequence, &got, chains.isOwnerKey); stopErr != "" {
+			return fail("%s", stopErr)
+		}
+		if targetErr := targets.event(d.Kind, d.Sequence, &got); targetErr != "" {
+			return fail("%s", targetErr)
+		}
 		if got.ownerKey != "" {
 			if len(pinned) > 0 && !pinned[got.ownerKey] {
 				return fail("a change the owner decided is signed by request key %s, which is not one given with --owner-request-key", truncate(got.ownerKey, 12))
@@ -807,6 +961,15 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 			KeyScope: got.keyScope, KeyID: got.keyID, OwnerSignedBy: got.ownerKey, RecordDeletedBy: got.deletedBy, TombstoneSequence: got.tombstoneAt}
 		if got.change != nil {
 			entry.Change, entry.Value = got.change.Action, got.change.Value
+		}
+		entry.SetupHash = got.setupHash
+		if got.setupChange != nil {
+			entry.Setup, entry.SetupHash = setupStatement(got.setupChange), ""
+		}
+		entry.Stop, entry.SignOffRefused, entry.TargetPassed, entry.AllowedTools = stopEntryText(&got), refusalEntryText(got.refusal), targetEntryText(got.targetPassed), got.allowedTools
+		if r := got.reviewDue; r != nil {
+			entry.ReviewDue = fmt.Sprintf("the date the policy declared (%s from change %d of %s, due %s) passed while that change was in force; this says nothing about whether anyone reviewed the policy",
+				reviewDeclarationText(r.ReviewBy, r.IntervalDays), r.ActivationSequence, r.ChainID, r.DueAt)
 		}
 		if got.unlogged {
 			entry.CommittedBy = -1 // resolved below, once the later events are checked
@@ -848,12 +1011,30 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 			return c
 		}
 		asOf, age, ageErr := headAsOf(head.Anchor.IntegratedTime, feedHeadMaxAge, "--feed-head-max-age", "feed")
-		if ageErr != nil {
+		// Round 64: a mode that decides itself whether the head's age
+		// matters (--response-times), or a head that is a period summary's
+		// own (--summary), keeps the age failure apart.
+		exempt := o.headAgeExempt != "" && head.HeadStatementHash == o.headAgeExempt
+		if ageErr != nil && !o.headAgeApart && !exempt {
 			c.Reason, c.Entries = "the feed's head statement: "+ageErr.Error(), nil
 			return c
 		}
+		if !exempt {
+			c.headAgeErr = ageErr
+		}
 		c.HeadSequence, c.CompleteAsOf, c.CompleteAge = head.Sequence, asOf, age
 	}
+	var headAt int64
+	if head != nil && head.Anchor != nil {
+		headAt = head.Anchor.IntegratedTime
+	}
+	if r64Err := r64.finish(headAt, head != nil); r64Err != "" {
+		c.Reason, c.Entries = r64Err, nil
+		return c
+	}
+	c.SetupChanges, c.ReviewsDue = r64.changes, r64.reviews
+	c.StoppedPeriods, c.SignOffsRefused, c.TargetsPassed = stops.report(), stops.refusedSignOffs, targets.count
+	c.events, c.head = events, head
 	if len(blocked) > 0 {
 		c.OwnerBlocks = map[string]string{}
 		for action, isBlocked := range blocked {
@@ -863,7 +1044,7 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 	}
 	c.RequestKeyChains, c.Notes = chains.report()
 	c.UnconfirmedOwnerChanges = unconfirmed
-	for _, action := range []string{artifacts.AccountSettingOwnerReplace, artifacts.AccountSettingVerdifaxDelete} {
+	for _, action := range ownerBlockSettings {
 		if p, waiting := pendingAllow[action]; waiting && blocked[action] {
 			c.Notes = append(c.Notes, fmt.Sprintf("%s is held: the allow at event %d is signed by a key registered after %s at event %d, so it counts only with --owner-request-key.",
 				settingName(action), p.Sequence, p.FreshStart, p.FreshStartAt))
@@ -871,6 +1052,9 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string) 
 	}
 	c.OwnerKeysPinned = len(pinned) > 0 && len(c.OwnerSigningKeys) > 0
 	c.WebhookChanges, c.Webhooks, c.Notes = webhooksOf(c.Entries, c.ContinuityFrom == "start", c.Notes)
+	c.Notes = append(c.Notes, r64.notes...)
+	c.Notes = append(c.Notes, stops.notes...)
+	c.Notes = append(c.Notes, targets.notes...)
 	c.OK = true
 	return c
 }
@@ -1002,7 +1186,7 @@ func ownerKeyOf(o *artifacts.OwnerSignature) string {
 // blocked owner-key replacement fails, as any other owner-key change does.
 func checkOwnerBlocks(blocked map[string]bool, pending map[string]UnconfirmedOwnerChange, kind string, got *checkedEntry,
 	unconfirmed *UnconfirmedOwnerChange, isOwnerKey func(int64) bool) string {
-	if c := got.change; c != nil && (c.Action == artifacts.AccountSettingOwnerReplace || c.Action == artifacts.AccountSettingVerdifaxDelete) {
+	if c := got.change; c != nil && isOwnerBlockSetting(c.Action) {
 		switch {
 		case c.Value == artifacts.SettingBlocked || unconfirmed == nil:
 			blocked[c.Action] = c.Value == artifacts.SettingBlocked
@@ -1039,9 +1223,23 @@ func checkOwnerBlocks(blocked map[string]bool, pending map[string]UnconfirmedOwn
 			return why
 		}
 		return "Verdifax deleted a record after the owner blocked Verdifax deletion"
+	case verdifax && blocked[artifacts.AccountSettingVerdifaxStop] && got.stop != nil && got.stop.Action == artifacts.StopActionStop:
+		// Round 64: while the owner blocks Verdifax stops, Verdifax cannot
+		// place its stop; lifting its own stays open.
+		if why := held(artifacts.AccountSettingVerdifaxStop, "stopped the account"); why != "" {
+			return why
+		}
+		return "Verdifax stopped the account after the owner blocked Verdifax stops (setting.verdifax_stop)"
 	}
 	return ""
 }
+
+// ownerBlockSettings are the owner's settings that block Verdifax, in the
+// order the report lists them: owner-key replacement and deletion (round
+// 60), and Verdifax's stop (round 64).
+var ownerBlockSettings = []string{artifacts.AccountSettingOwnerReplace, artifacts.AccountSettingVerdifaxDelete, artifacts.AccountSettingVerdifaxStop}
+
+func isOwnerBlockSetting(action string) bool { return containsString(ownerBlockSettings, action) }
 
 // settingName is an owner setting as the API names it.
 func settingName(action string) string {
@@ -1050,15 +1248,22 @@ func settingName(action string) string {
 		return "owner-replacement"
 	case artifacts.AccountSettingVerdifaxDelete:
 		return "verdifax-deletion"
+	case artifacts.AccountSettingVerdifaxStop:
+		return "verdifax-stop"
 	}
 	return action
 }
 
 // runSignalsMode is --signals run alone.
-func runSignalsMode(path, after, ownerKeyFiles string, asJSON, allowPartial bool) int {
+func runSignalsMode(path, after, ownerKeyFiles, policyFiles string, asJSON, allowPartial bool) int {
 	point, pointErr := parseSignalPoint(after)
 	if pointErr != nil {
 		fmt.Fprintln(os.Stderr, "verdifax-verify:", pointErr)
+		return 2
+	}
+	documents, documentsErr := readFeedPolicies(policyFiles)
+	if documentsErr != nil {
+		fmt.Fprintln(os.Stderr, "verdifax-verify:", documentsErr)
 		return 2
 	}
 	var ownerKeys []string
@@ -1077,7 +1282,7 @@ func runSignalsMode(path, after, ownerKeyFiles string, asJSON, allowPartial bool
 		fmt.Fprintln(os.Stderr, "verdifax-verify: read --signals:", readErr)
 		return 2
 	}
-	c := checkSignalFeedPinned(data, point, ownerKeys)
+	c := checkSignalFeedWith(data, point, ownerKeys, documents)
 	if asJSON {
 		encoded, _ := json.MarshalIndent(c, "", "  ")
 		fmt.Println(string(encoded))
@@ -1138,12 +1343,41 @@ func printSignalFeed(c *SignalFeedCheck) {
 		if e.Change == artifacts.AccountWebhookSubscribed || e.Change == artifacts.AccountWebhookDeleted {
 			by += fmt.Sprintf(": %s, %s", e.Change, e.Value)
 		}
+		if e.Setup != "" {
+			by += ": " + e.Setup
+		}
+		if e.ReviewDue != "" {
+			by += ": " + e.ReviewDue
+		}
+		for _, text := range []string{e.Stop, e.SignOffRefused, e.TargetPassed} {
+			if text != "" {
+				by += ": " + text
+			}
+		}
+		if len(e.AllowedTools) > 0 {
+			by += ": tool allowlist " + strings.Join(e.AllowedTools, ", ")
+		}
 		if e.RecordDeletedBy != "" {
 			// Round 61, N25: the event reads at its own time, and names the
 			// tombstone that stands for its deleted record.
 			by += fmt.Sprintf(", record deleted by %s, tombstone at event %d", deciderName(e.RecordDeletedBy), e.TombstoneSequence)
 		}
 		fmt.Printf("    %d. %s  %s%s%s%s\n", e.Sequence, e.At, e.Kind, run, by, late)
+	}
+	if c.SetupChanges > 0 {
+		fmt.Printf("  %-18s%d setup change(s), each followed by the run it names, each scope's fingerprints linked; what the request declared and what Verdifax's AI review stated, never which model ran\n", "Setup changes:", c.SetupChanges)
+	}
+	if c.ReviewsDue > 0 {
+		fmt.Printf("  %-18s%d review date(s) passed, each logged at or after its due date while its policy change was in force\n", "Review dates:", c.ReviewsDue)
+	}
+	for i := range c.StoppedPeriods {
+		fmt.Printf("  %-18s%s\n", "Stopped:", stopPeriodLine(&c.StoppedPeriods[i], c.CompleteAsOf))
+	}
+	if c.SignOffsRefused > 0 {
+		fmt.Printf("  %-18s%d sign-off(s) refused during a stop, each placed inside a standing stop that refuses sign-offs; the approver's signed attempt is kept whole\n", "Refused sign-offs:", c.SignOffsRefused)
+	}
+	if c.TargetsPassed > 0 {
+		fmt.Printf("  %-18s%d response target(s) passed, each logged at or after its deadline with no sign-off of the compared kind logged by then; the target is the customer's own\n", "Targets passed:", c.TargetsPassed)
 	}
 	if c.DeclaredGaps > 0 {
 		fmt.Printf("  %-18s%d declared restore gap(s): each is sealed and on the public log, and names the places it skips\n", "Restore gaps:", c.DeclaredGaps)
@@ -1155,7 +1389,7 @@ func printSignalFeed(c *SignalFeedCheck) {
 	}
 	if len(c.OwnerBlocks) > 0 {
 		var blocks []string
-		for _, action := range []string{artifacts.AccountSettingOwnerReplace, artifacts.AccountSettingVerdifaxDelete} {
+		for _, action := range ownerBlockSettings {
 			if v, ok := c.OwnerBlocks[action]; ok {
 				blocks = append(blocks, action+" "+v)
 			}

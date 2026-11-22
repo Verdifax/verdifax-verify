@@ -138,6 +138,20 @@ type ReceiptContext struct {
 	// Signal is the receipt's place in the account's signal feed; it joins
 	// the hash under its own label, only when present.
 	Signal *SignalLink `json:"signal,omitempty"`
+	// DataUse is the request's data-use declaration in its own field
+	// (round 64), sealed on every receipt, a refusal before the rules ran
+	// included; where a decision was made its inputs hold the same value.
+	// SetupHash is the run's setup fingerprint, present only when the
+	// policy in force watches the setup and counts refused runs. Each joins
+	// the hash under its own label, only when present.
+	DataUse   *DataUse `json:"data_use,omitempty"`
+	SetupHash string   `json:"setup_hash,omitempty"`
+	// ResponseTarget is the policy's response target for refusals or for
+	// stops (round 64, response times), present only when that target sets
+	// seal_in_result: a refused run's receipt carries response_targets
+	// .refusals, a halted run's response_targets.stops. It joins the hash
+	// under its own label, only when present.
+	ResponseTarget *SealedTarget `json:"response_target,omitempty"`
 }
 
 // Hash digests the context for the receipt leaf.
@@ -162,6 +176,15 @@ func (c ReceiptContext) Hash() string {
 	}
 	if c.Signal != nil {
 		parts = append(parts, c.Signal.fields()...)
+	}
+	if c.DataUse != nil {
+		parts = append(parts, "data_use", DataUseDigest(c.DataUse))
+	}
+	if c.SetupHash != "" {
+		parts = append(parts, "setup_hash", c.SetupHash)
+	}
+	if c.ResponseTarget != nil {
+		parts = append(parts, c.ResponseTarget.fields("response_target")...)
 	}
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(sum[:])

@@ -91,11 +91,16 @@ func ComputeAttestedContextDigest(ac AttestedContext) string {
 	if ac.ModelTemperature != nil {
 		temp = fmt.Sprintf("%g", *ac.ModelTemperature)
 	}
-	return nullJoinHash(attestedContextDomain,
-		boolWord(ac.Attested),
+	parts := []string{boolWord(ac.Attested),
 		ac.ActorID, ac.ActorRole, ac.AuthorizationPolicy, ac.ActorSignature,
 		ac.ModelProvider, ac.ModelName, ac.ModelVersion, temp, ac.PromptHash,
-		ac.DecisionKind, ac.DecisionResult, ac.DecisionNote)
+		ac.DecisionKind, ac.DecisionResult, ac.DecisionNote}
+	// Round 64: the declared client joins, labelled, only when declared, so
+	// every digest made without it is unchanged.
+	if ac.ClientName != "" || ac.ClientVersion != "" {
+		parts = append(parts, "client", ac.ClientName, ac.ClientVersion)
+	}
+	return nullJoinHash(attestedContextDomain, parts...)
 }
 
 // PreAnchorNames is the frozen key order of the pre-anchor table.

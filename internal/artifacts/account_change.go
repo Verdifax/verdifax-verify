@@ -188,14 +188,17 @@ var accountChangeRules = map[string]accountChangeRule{
 	AccountOwnerKeyReplacement:   {verdifaxMay: true},
 	AccountSettingOwnerReplace:   {ownerMay: true, values: []string{SettingAllowed, SettingBlocked}},
 	AccountSettingVerdifaxDelete: {ownerMay: true, values: []string{SettingAllowed, SettingBlocked}},
-	AccountWebhookSubscribed:     {ownerMay: true, webhookValue: true},
-	AccountWebhookDeleted:        {ownerMay: true, webhookValue: true},
+	// Round 64: the owner's setting that allows or blocks Verdifax's stop.
+	AccountSettingVerdifaxStop: {ownerMay: true, values: []string{SettingAllowed, SettingBlocked}},
+	AccountWebhookSubscribed:   {ownerMay: true, webhookValue: true},
+	AccountWebhookDeleted:      {ownerMay: true, webhookValue: true},
 }
 
 // AccountChangeActions lists every account-change action, in a fixed order.
 var AccountChangeActions = []string{AccountCreated, AccountRequestKeyCleared, AccountKeyTierSet, AccountKeySubmitterClassSet,
 	AccountKeyBillingSet, AccountOwnerKeyReplacement, AccountSettingOwnerReplace, AccountSettingVerdifaxDelete,
-	AccountRequestKeyRegistered, AccountRequestKeyRotated, AccountWebhookSubscribed, AccountWebhookDeleted}
+	AccountRequestKeyRegistered, AccountRequestKeyRotated, AccountWebhookSubscribed, AccountWebhookDeleted,
+	AccountSettingVerdifaxStop}
 
 // IsRequestKeyAction reports a change to one key's request key: registered,
 // rotated or cleared.

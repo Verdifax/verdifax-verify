@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.37.0"
+const Version = "0.38.0"
 
 // buildFlavor is empty in every release build. The stand-in test build
 // (go build -tags standinlog, standinlog.go) sets it, so every version line
@@ -170,6 +170,10 @@ type Report struct {
 	// AIReview is what this tool found about the record's AI review
 	// (v0.27.0), or nil when the record seals none.
 	AIReview *AIReviewCheck `json:"ai_review,omitempty"`
+	// Declared (v0.38.0) is what the record seals as declared: the
+	// customer's data-use declaration and the AI assistant's declared
+	// client, each sealed as declared and not checked by Verdifax.
+	Declared *DeclaredReport `json:"declared,omitempty"`
 	// AccountPolicyHistory is the --account-policy-history check.
 	AccountPolicyHistory *PolicyHistoryCheck `json:"account_policy_history,omitempty"`
 	// SignOffs is the --signoff check (v0.22.0): the approvers' decisions on
@@ -235,6 +239,15 @@ type options struct {
 	signals         *string
 	signalsAfter    *string
 	ownerRequestKey *string
+	signalsPolicy   *string
+	// Round 64, part 2: the response-time report and the board summary,
+	// each checked with --signals.
+	responseTimes *bool
+	target        *string
+	from          *string
+	to            *string
+	summary       *string
+	summaryHead   *string
 	// signOffHeadMaxAge and feedHeadMaxAge are the oldest a head statement
 	// may be (round 61, N24).
 	signOffHeadMaxAge *string
@@ -265,7 +278,14 @@ func defineFlags(fs *flag.FlagSet) options {
 		approverKey:       fs.String("approver-key", "", "with --signoff, a file holding the base64 Ed25519 public key you expect signed the decision in force; fails unless it did"),
 		signals:           fs.String("signals", "", "an account's signal feed, the body of GET /signals: every event's entry must verify as its kind on the public log, seal its place in the feed, belong to one account, and link to the event before it without a gap; each key's request keys are followed from their registration, and a page that ends with Verdifax's head statement must reach the head's event; runs alone with no record"),
 		signalsAfter:      fs.String("signals-after", "", "with --signals, N:hash, the last event a system already read: the feed must continue from it"),
+		signalsPolicy:     fs.String("signals-policy", "", "with --signals, the policy documents (JSON) of the feed's policy changes, as files separated by commas: each is matched to the changes that put it in force by the hash of its exact text, the review date it declares is recomputed for each, every review.due event must match it, and a feed whose head statement is past a declared review date with no review.due for that change fails"),
 		ownerRequestKey:   fs.String("owner-request-key", "", "with --signals, a file holding the base64 Ed25519 public key of the owner key's request key, or several such files separated by commas (the keys it has had): fails unless every change the owner decided in the feed is signed by one of them and every request key registered or set for the owner key is one of them"),
+		responseTimes:     fs.Bool("response-times", false, "with --signals, the feed is a response-time report (GET /account/signoffs/response-times?pack=1): its feed is checked as --signals checks one, every stated figure is recounted from that feed with the counting rules the server uses, and any figure that differs fails; given a plain feed page instead, the period --from to --to is measured and stated. A result unsigned as of the head, or longer than its target, fails unless the head is within --feed-head-max-age. Waits are stated as measured, never judged"),
+		target:            fs.String("target", "", "with --response-times, the request target, as whole seconds or a duration such as 4h, applied to each result that seals no target of its own; a report must have been asked with the same target"),
+		from:              fs.String("from", "", "with --response-times, the period's start (RFC 3339, included); a report must cover the same period"),
+		to:                fs.String("to", "", "with --response-times, the period's end (RFC 3339, excluded); a report must cover the same period"),
+		summary:           fs.String("summary", "", "with --signals, a period summary (GET /account/summaries/{id}): its hash, leaf and public-log entry are checked, its head must be the feed's event and stated after the period, no event after the head may be sealed before the period's end, and every figure and events digest is recounted from the feed; --feed-head-max-age does not apply to the summary's own head"),
+		summaryHead:       fs.String("summary-head", "", "with --summary, the summary's feed head statement (GET /account/summaries/{id}/head), when the feed page given does not end with it"),
 		signOffHeadMaxAge: fs.String("signoff-head-max-age", "24h", "with --signoff-history, the oldest the history's head statement may be, as a duration such as 24h or 72h: its time on the public log is shown with its age, and a head older than this fails, since a later sign-off has had that long to exist unseen; fetch the history again, or raise the limit"),
 		feedHeadMaxAge:    fs.String("feed-head-max-age", "24h", "with --signals, the oldest the feed's head statement may be, as a duration such as 24h or 72h: its time on the public log is shown with its age, and a head older than this fails, since a later event has had that long to exist unseen; fetch the feed again, or raise the limit"),
 		signOffHistory:    fs.String("signoff-history", "", "a JSON list of an account's sign-offs, oldest first: every sign-off and link must verify, in one account; runs alone with no record"),
@@ -315,8 +335,8 @@ func main() {
 	if *o.accountHistory != "" && flag.NArg() == 0 {
 		os.Exit(runAccountHistoryMode(*o.accountHistory, *jsonOutput))
 	}
-	if (*o.signalsAfter != "" || *o.ownerRequestKey != "" || flagSet("feed-head-max-age")) && *o.signals == "" {
-		fmt.Fprintln(os.Stderr, "verdifax-verify: --signals-after, --owner-request-key and --feed-head-max-age apply only with --signals")
+	if (*o.signalsAfter != "" || *o.ownerRequestKey != "" || *o.signalsPolicy != "" || flagSet("feed-head-max-age")) && *o.signals == "" {
+		fmt.Fprintln(os.Stderr, "verdifax-verify: --signals-after, --owner-request-key, --signals-policy and --feed-head-max-age apply only with --signals")
 		os.Exit(2)
 	}
 	if flagSet("signoff-head-max-age") && *o.signOffHistory == "" {
@@ -339,8 +359,17 @@ func main() {
 		fmt.Fprintln(os.Stderr, "verdifax-verify: --signals checks a feed file and runs alone, with no record")
 		os.Exit(2)
 	}
-	if *o.signals != "" {
-		os.Exit(runSignalsMode(*o.signals, *o.signalsAfter, *o.ownerRequestKey, *jsonOutput, *allowPartial))
+	if msg := round64FlagsMisused(o); msg != "" {
+		fmt.Fprintln(os.Stderr, "verdifax-verify:", msg)
+		os.Exit(2)
+	}
+	switch {
+	case *o.signals != "" && *o.summary != "":
+		os.Exit(runSummaryMode(*o.summary, *o.summaryHead, *o.signals, *o.signalsAfter, *o.ownerRequestKey, *o.signalsPolicy, *jsonOutput, *allowPartial))
+	case *o.signals != "" && *o.responseTimes:
+		os.Exit(runResponseTimesMode(*o.signals, *o.signalsAfter, *o.ownerRequestKey, *o.signalsPolicy, *o.target, *o.from, *o.to, *jsonOutput, *allowPartial))
+	case *o.signals != "":
+		os.Exit(runSignalsMode(*o.signals, *o.signalsAfter, *o.ownerRequestKey, *o.signalsPolicy, *jsonOutput, *allowPartial))
 	}
 	if *o.signOffHistory != "" && flag.NArg() == 0 && *o.signOff == "" {
 		os.Exit(runSignOffHistoryMode(*o.signOffHistory, *jsonOutput))
@@ -415,6 +444,7 @@ func main() {
 		}
 		if *o.policyHistory != "" {
 			rr.PolicyHistory = loadPolicyHistory(*o.policyHistory, rr.PolicyGate.ActivationHash)
+			applyGapRuleInForce(rr, rr.PolicyHistory)
 			if !rr.PolicyHistory.OK {
 				rr.VerdictTier, rr.AllPassed, rr.Reason = "FAILED", false, rr.PolicyHistory.Reason
 			}
@@ -428,6 +458,7 @@ func main() {
 			rr.VerdictTier, rr.AllPassed, rr.Reason = "FAILED", false, rr.AIReview.Reason
 		}
 		applyReceiptSignOffFlags(rr, doc, *o.signOff, *o.approverKey, *o.signOffHistory)
+		applyReviewSetupHalt(rr)
 		if *jsonOutput {
 			emitReceiptJSON(rr)
 		} else {
@@ -902,7 +933,8 @@ const (
 var flagInputKinds = map[string]string{
 	"json": inputBoth, "version": inputBoth, "log-keys": inputBoth, "allow-unanchored": inputBoth,
 	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
-	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "strict-signoff": inputBundle, "strict-hardware": inputBundle, "signals": inputBoth, "signals-after": inputBoth, "owner-request-key": inputBoth, "signoff-head-max-age": inputBoth, "feed-head-max-age": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
+	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "strict-signoff": inputBundle, "strict-hardware": inputBundle, "signals": inputBoth, "signals-after": inputBoth, "owner-request-key": inputBoth, "signals-policy": inputBoth, "signoff-head-max-age": inputBoth, "feed-head-max-age": inputBoth,
+	"response-times": inputBoth, "target": inputBoth, "from": inputBoth, "to": inputBoth, "summary": inputBoth, "summary-head": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
 	"self-hosted-receipt": inputReceipt,
 }
 
@@ -1144,6 +1176,11 @@ func verify(b *artifacts.AuditBundle) *Report {
 	if idErr := checkAccountID(b.Nrep.AccountID); idErr != nil {
 		r.CrossChecks = append(r.CrossChecks, idErr.Error())
 	}
+	// Round 64 (v0.38.0): the data-use copies are one value, the setup
+	// facts a decision sealed repeat the attested context, and every new
+	// sealed fact has the form the server seals.
+	r.CrossChecks = append(r.CrossChecks, round64BundleProblems(b)...)
+	r.Declared = declaredOfBundle(b)
 
 	// Roll-up.
 	allPassed := r.BundleHashOK
@@ -1555,6 +1592,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 		printPolicyHistory(*r.PolicyHistory)
 	}
 	printAccount(r.AccountID, r.AccountPolicyGate, r.AccountPolicyHistory)
+	printDeclared(r.Declared)
 	printSignOffs(r.SignOffs, r.SignOffHistory)
 	printSignOffRequirement(r.SignOffRequirement)
 	for _, f := range r.CrossChecks {
@@ -1870,4 +1908,22 @@ func reportAmbiguousJSON(err error, what string, jsonOut bool) {
 	fmt.Println(label + "✗ FAILED · " + strings.TrimPrefix(err.Error(), "invalid bundle JSON: "))
 	fmt.Println("VERDICT: ✗ FAILED, the " + what + "'s JSON is ambiguous or carries unmodeled fields, so")
 	fmt.Println("         other readers would see values this tool did not check.")
+}
+
+// round64FlagsMisused says why the round 64 report flags were given where
+// they do not apply, or "": --response-times and --summary each check a
+// feed given with --signals, and never both at once; --target, --from and
+// --to belong to --response-times and --summary-head to --summary.
+func round64FlagsMisused(o options) string {
+	switch {
+	case (*o.responseTimes || *o.summary != "") && *o.signals == "":
+		return "--response-times and --summary check a feed given with --signals"
+	case *o.responseTimes && *o.summary != "":
+		return "--response-times and --summary are separate checks; give one"
+	case (*o.target != "" || *o.from != "" || *o.to != "") && !*o.responseTimes:
+		return "--target, --from and --to apply only with --response-times"
+	case *o.summaryHead != "" && *o.summary == "":
+		return "--summary-head applies only with --summary"
+	}
+	return ""
 }

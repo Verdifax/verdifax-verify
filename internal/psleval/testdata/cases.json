@@ -1980,5 +1980,1079 @@
    }
   ],
   "unreadable": true
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "setup": {
+    "declared_by_caller": {
+     "model_name": "claude-opus-5-5",
+     "model_temperature": "0.2"
+    }
+   },
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "attested_setup holds when every declared fact it names matches",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "facts": [
+       {
+        "fact": "model_name",
+        "match": {
+         "operator": "exact",
+         "value": "claude-opus-5-5"
+        }
+       },
+       {
+        "fact": "model_temperature",
+        "match": {
+         "operator": "in",
+         "values": [
+          "0",
+          "0.2"
+         ]
+        }
+       }
+      ],
+      "type": "attested_setup"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "setup": {
+    "declared_by_caller": {
+     "model_name": "claude-sonnet-5",
+     "model_temperature": "0.2"
+    }
+   },
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "attested_setup does not hold when a named fact differs",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "facts": [
+       {
+        "fact": "model_name",
+        "match": {
+         "operator": "exact",
+         "value": "claude-opus-5-5"
+        }
+       },
+       {
+        "fact": "model_temperature",
+        "match": {
+         "operator": "in",
+         "values": [
+          "0",
+          "0.2"
+         ]
+        }
+       }
+      ],
+      "type": "attested_setup"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "setup": {
+    "declared_by_caller": {
+     "model_name": "claude-opus-5-5"
+    }
+   },
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "attested_setup does not hold when a named fact was not declared",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "facts": [
+       {
+        "fact": "model_name",
+        "match": {
+         "operator": "exact",
+         "value": "claude-opus-5-5"
+        }
+       },
+       {
+        "fact": "model_temperature",
+        "match": {
+         "operator": "in",
+         "values": [
+          "0",
+          "0.2"
+         ]
+        }
+       }
+      ],
+      "type": "attested_setup"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "attested_setup does not hold with no setup sealed",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "facts": [
+       {
+        "fact": "model_name",
+        "match": {
+         "operator": "exact",
+         "value": "claude-opus-5-5"
+        }
+       },
+       {
+        "fact": "model_temperature",
+        "match": {
+         "operator": "in",
+         "values": [
+          "0",
+          "0.2"
+         ]
+        }
+       }
+      ],
+      "type": "attested_setup"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "setup": {
+    "declared_by_caller": {
+     "model_name": "claude-opus-5-5"
+    }
+   },
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "attested_setup leaves review facts to the halt after the review",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "facts": [
+       {
+        "fact": "model_name",
+        "match": {
+         "operator": "prefix",
+         "value": "claude-"
+        }
+       },
+       {
+        "fact": "review_prompt_id",
+        "match": {
+         "operator": "exact",
+         "value": "statements-v1"
+        }
+       }
+      ],
+      "type": "attested_setup"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "setup": {
+    "declared_by_caller": {
+     "model_name": "claude-opus-5-5",
+     "model_temperature": "0.2"
+    }
+   },
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "attested_setup with an unknown fact is unreadable",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "facts": [
+       {
+        "fact": "actor_id",
+        "match": {
+         "operator": "any"
+        }
+       }
+      ],
+      "type": "attested_setup"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "unreadable": true
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "setup": {
+    "declared_by_caller": {
+     "model_name": "claude-opus-5-5",
+     "model_temperature": "0.2"
+    }
+   },
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "attested_setup with an unknown operator is unreadable",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "facts": [
+       {
+        "fact": "model_name",
+        "match": {
+         "operator": "regex",
+         "value": "x"
+        }
+       }
+      ],
+      "type": "attested_setup"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "unreadable": true
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "data_use": {
+    "basis": "contract",
+    "categories": [
+     "claims"
+    ],
+    "purpose": "claims.review",
+    "reference": "hmac-sha256:abababababababababababababababababababababababababababababababab"
+   },
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "data_use holds when the declaration meets every setting",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "basis_match": {
+       "operator": "in",
+       "values": [
+        "contract",
+        "legitimate_interest"
+       ]
+      },
+      "categories_allowed": [
+       "claims",
+       "contact"
+      ],
+      "purpose_match": {
+       "operator": "exact",
+       "value": "claims.review"
+      },
+      "reference_required": true,
+      "type": "data_use"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "data_use does not hold without a declaration",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "basis_match": {
+       "operator": "in",
+       "values": [
+        "contract",
+        "legitimate_interest"
+       ]
+      },
+      "categories_allowed": [
+       "claims",
+       "contact"
+      ],
+      "purpose_match": {
+       "operator": "exact",
+       "value": "claims.review"
+      },
+      "reference_required": true,
+      "type": "data_use"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "data_use with no settings does not hold without a declaration",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "type": "data_use"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "data_use": {
+    "basis": "consent",
+    "purpose": "marketing"
+   },
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "data_use with no settings holds for any declaration",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "type": "data_use"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "r",
+   "outcome": "allow",
+   "reason_code": "RULE_ALLOWED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "data_use": {
+    "basis": "contract",
+    "categories": [
+     "claims"
+    ],
+    "purpose": "marketing",
+    "reference": "hmac-sha256:abababababababababababababababababababababababababababababababab"
+   },
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "data_use does not hold when the purpose differs",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "basis_match": {
+       "operator": "in",
+       "values": [
+        "contract",
+        "legitimate_interest"
+       ]
+      },
+      "categories_allowed": [
+       "claims",
+       "contact"
+      ],
+      "purpose_match": {
+       "operator": "exact",
+       "value": "claims.review"
+      },
+      "reference_required": true,
+      "type": "data_use"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "data_use": {
+    "basis": "consent",
+    "categories": [
+     "claims"
+    ],
+    "purpose": "claims.review",
+    "reference": "hmac-sha256:abababababababababababababababababababababababababababababababab"
+   },
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "data_use does not hold when the basis is not named",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "basis_match": {
+       "operator": "in",
+       "values": [
+        "contract",
+        "legitimate_interest"
+       ]
+      },
+      "categories_allowed": [
+       "claims",
+       "contact"
+      ],
+      "purpose_match": {
+       "operator": "exact",
+       "value": "claims.review"
+      },
+      "reference_required": true,
+      "type": "data_use"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "data_use": {
+    "basis": "contract",
+    "categories": [
+     "claims",
+     "health"
+    ],
+    "purpose": "claims.review",
+    "reference": "hmac-sha256:abababababababababababababababababababababababababababababababab"
+   },
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "data_use does not hold when a category is not allowed",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "basis_match": {
+       "operator": "in",
+       "values": [
+        "contract",
+        "legitimate_interest"
+       ]
+      },
+      "categories_allowed": [
+       "claims",
+       "contact"
+      ],
+      "purpose_match": {
+       "operator": "exact",
+       "value": "claims.review"
+      },
+      "reference_required": true,
+      "type": "data_use"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "data_use": {
+    "basis": "contract",
+    "categories": [
+     "claims"
+    ],
+    "purpose": "claims.review"
+   },
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "data_use does not hold without a required reference",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "basis_match": {
+       "operator": "in",
+       "values": [
+        "contract",
+        "legitimate_interest"
+       ]
+      },
+      "categories_allowed": [
+       "claims",
+       "contact"
+      ],
+      "purpose_match": {
+       "operator": "exact",
+       "value": "claims.review"
+      },
+      "reference_required": true,
+      "type": "data_use"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "data_use": {
+    "basis": "contract"
+   },
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "data_use not_in does not hold for an undeclared purpose",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "purpose_match": {
+       "operator": "not_in",
+       "values": [
+        "marketing"
+       ]
+      },
+      "type": "data_use"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "want": {
+   "fired_rule_id": "default",
+   "outcome": "deny",
+   "reason_code": "DEFAULT_EFFECT_APPLIED"
+  }
+ },
+ {
+  "default_effect": "deny",
+  "inputs": {
+   "classification": "INTERNAL",
+   "data_use": {
+    "basis": "contract",
+    "categories": [
+     "claims"
+    ],
+    "purpose": "claims.review",
+    "reference": "hmac-sha256:abababababababababababababababababababababababababababababababab"
+   },
+   "evaluated_at": "2026-11-17T09:00:00Z",
+   "object_id": "claims/9",
+   "object_type": "data",
+   "subject_id": "agent-7",
+   "subject_type": "agent",
+   "verb": "tool.review_claim"
+  },
+  "name": "data_use with an unknown operator is unreadable",
+  "rules": [
+   {
+    "conditions": [
+     {
+      "basis_match": {
+       "operator": "glob",
+       "value": "c*"
+      },
+      "type": "data_use"
+     }
+    ],
+    "effect": "allow",
+    "object": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "rule_id": "r",
+    "subject": {
+     "id_match": {
+      "operator": "any"
+     },
+     "type": "any"
+    },
+    "verb": {
+     "match": {
+      "operator": "any"
+     }
+    }
+   }
+  ],
+  "unreadable": true
  }
 ]

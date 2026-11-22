@@ -127,6 +127,41 @@ type policy struct {
 	SignaturePolicy        *signaturePolicy  `json:"signature_policy,omitempty"`
 	Signers                []policySignature `json:"signers,omitempty"`
 	AIReview               *aiReview         `json:"ai_review,omitempty"`
+	// The round 64 fields (v0.38.0), as the server's psl/round64.go reads
+	// them: each joins the hash only when present.
+	WatchSetup      *watchSetup      `json:"watch_setup,omitempty"`
+	Review          *policyReview    `json:"review,omitempty"`
+	ResponseTargets *responseTargets `json:"response_targets,omitempty"`
+}
+
+// watchSetup is a policy's setup watch (round 64): the setup facts it
+// watches, the scope it compares within and whether refused runs count.
+type watchSetup struct {
+	Fields         []string `json:"fields"`
+	Scope          string   `json:"scope"`
+	IncludeRefused bool     `json:"include_refused,omitempty"`
+}
+
+// policyReview is a policy's review date (round 64): a fixed time or a
+// number of days from each activation, exactly one of them.
+type policyReview struct {
+	ReviewBy     string `json:"review_by,omitempty"`
+	IntervalDays int    `json:"interval_days,omitempty"`
+}
+
+// responseTargets are a policy's response targets for its refusals and for
+// account stops (round 64).
+type responseTargets struct {
+	Refusals *responseTarget `json:"refusals,omitempty"`
+	Stops    *responseTarget `json:"stops,omitempty"`
+}
+
+// responseTarget is one response target.
+type responseTarget struct {
+	Within       int    `json:"within"`
+	Compare      string `json:"compare"`
+	Notice       string `json:"notice"`
+	SealInResult bool   `json:"seal_in_result,omitempty"`
 }
 
 // aiReview is a policy's or a rule's choice about the AI review: what a
@@ -169,9 +204,14 @@ type rule struct {
 	SignOff *signOff `json:"signoff,omitempty"`
 }
 
-// signOff is a rule's sign-off requirement.
+// signOff is a rule's sign-off requirement and, from round 64, its response
+// target.
 type signOff struct {
-	Required bool `json:"required,omitempty"`
+	Required     bool   `json:"required,omitempty"`
+	Within       int    `json:"within,omitempty"`
+	Compare      string `json:"compare,omitempty"`
+	Notice       string `json:"notice,omitempty"`
+	SealInResult bool   `json:"seal_in_result,omitempty"`
 }
 
 type subject struct {
@@ -204,6 +244,19 @@ type condition struct {
 	// reads them.
 	MaxAgeSeconds int      `json:"max_age_seconds,omitempty"`
 	Checks        []string `json:"checks,omitempty"`
+	// An attested_setup condition's facts and a data_use condition's
+	// settings (round 64), as the server reads them.
+	Facts             []setupFactMatch `json:"facts,omitempty"`
+	PurposeMatch      *matcher         `json:"purpose_match,omitempty"`
+	BasisMatch        *matcher         `json:"basis_match,omitempty"`
+	CategoriesAllowed []string         `json:"categories_allowed,omitempty"`
+	ReferenceRequired bool             `json:"reference_required,omitempty"`
+}
+
+// setupFactMatch is one setup fact an attested_setup condition names.
+type setupFactMatch struct {
+	Fact  string  `json:"fact"`
+	Match matcher `json:"match"`
 }
 
 type matcher struct {
@@ -241,6 +294,13 @@ func validate(p *policy) error {
 		if r.SignOff != nil && r.Effect != "allow" {
 			return fmt.Errorf("policyhash: invalid signoff: rule %q denies, so it allows no result to sign off", r.RuleID)
 		}
+		// Round 64: a sign-off's response target is whole or absent.
+		if targetErr := checkSignOffTarget(r.RuleID, r.SignOff); targetErr != nil {
+			return targetErr
+		}
+	}
+	if round64Err := checkRound64(p); round64Err != nil {
+		return round64Err
 	}
 	return checkAIReview("the policy", "allow", p.AIReview)
 }
@@ -301,6 +361,9 @@ func canonicalPolicyForHash(p *policy) map[string]any {
 	if p.AIReview != nil {
 		out["ai_review"] = aiReviewHashFields(p.AIReview)
 	}
+	// Round 64: each new field only when present, so every policy written
+	// before them hashes as it did.
+	round64Preimage(p, out)
 	return out
 }
 
@@ -359,7 +422,7 @@ func ruleHashPreimage(r rule) map[string]any {
 	// The server's: present only when required, so every policy written
 	// before it hashes as it did.
 	if r.SignOff != nil && r.SignOff.Required {
-		out["signoff"] = map[string]any{"required": true}
+		out["signoff"] = signOffPreimage(r.SignOff)
 	}
 	return out
 }
@@ -429,6 +492,8 @@ func conditionPreimage(c condition) map[string]any {
 			}
 			out["checks"] = checks
 		}
+	case "attested_setup", "data_use":
+		round64ConditionPreimage(c, out)
 	}
 	return out
 }
@@ -555,4 +620,13 @@ func aiReviewHashFields(a *aiReview) map[string]any {
 		out["required"] = true
 	}
 	return out
+}
+
+// parsed decodes a document FromDocument has already read.
+func parsed(doc []byte) (*policy, error) {
+	var p policy
+	if parseErr := json.Unmarshal(doc, &p); parseErr != nil {
+		return nil, fmt.Errorf("policyhash: parse json: %w", parseErr)
+	}
+	return &p, nil
 }

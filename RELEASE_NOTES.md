@@ -2,6 +2,82 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.38.0: setup facts, the declared data-use basis, review dates, the rule in force, account stops, response times and period summaries
+
+- A record or receipt from an account that turned on a round 64 feature may
+  seal new facts, each read strictly and hashed as the server hashes it:
+  `epa.data_use` and `receipt_context.data_use`, the customer's data-use
+  declaration, which must equal the copy each policy decision's inputs seal;
+  `inputs.setup`, the setup facts a decision under an `attested_setup`
+  condition read, which must repeat the record's attested context;
+  `attested_context.client_name` and `client_version`, inside the attested
+  digest; `receipt_context.setup_hash` and `run.sealed` `setup_hash`, the
+  run's setup fingerprint under a setup watch; and an attestation-gap
+  receipt's `activation_hash`. The report states them as declared: "declared
+  by the customer: purpose X; basis Y. Sealed as declared; Verdifax did not
+  check it.", and the AI assistant's client as "declared by the AI
+  assistant, not verified".
+- `--policy` and `--account-policy` read the new policy keys (`watch_setup`,
+  `review`, `response_targets`, a sign-off's `within`, `compare`, `notice`
+  and `seal_in_result`, and the `attested_setup` and `data_use` conditions)
+  and run the new conditions again on the sealed inputs, saying for each
+  setup fact "the request declared X; the policy names Y". A rule that names
+  the AI review's own setup is held against the sealed review: a completed
+  record must meet it, and an `AIVP_T4_REVIEW_SETUP` halt stands only when a
+  rule that allowed the step names a fact the review did not meet.
+- The rule in force: an attestation-gap receipt is matched to the policy
+  change in force at its `gap_clock` in `--policy-history` or
+  `--account-policy-history`, and one that seals `activation_hash` must name
+  that change and the change its receipt context names.
+- `--signals` reads two new kinds. `setup.changed`
+  (`verdifax.setup-change.v1`): each is followed by the run it names, whose
+  fingerprint is the new one, and each `previous_setup_hash` is the
+  fingerprint the scope's change before it set. `review.due`
+  (`verdifax.policy-review-due.v1`): each names a policy change the feed
+  shows, once, logged at or after its due time; it says nothing about whether
+  anyone reviewed the policy. New flag `--signals-policy FILES`: with the
+  policy documents of the feed's changes, every declared review date is
+  recomputed, and a feed whose head statement is past a due date (plus the
+  sweep's minute and the anchoring window) with no `review.due` fails.
+- `--signals` reads the account stop (part 2): `account.stopped` and
+  `account.resumed` (`verdifax.account-stop.v1`, leaf `account_stop`), the
+  owner's `setting.verdifax_stop`, a member key's sealed `allowed_tools` on
+  `key.created`, and `signoff.refused` (`verdifax.signoff-refusal.v1`, leaf
+  `signoff_refusal`, the approver's signature checked over the attempted
+  sign-off). It follows the owner's and Verdifax's holds and fails a lift by
+  the other holder, a lift naming no standing stop, an unsigned owner's lift,
+  a Verdifax stop while the owner blocks it, a member key's stop without a
+  sealed `account_stop` grant, a run refused with `ACCOUNT_STOPPED` or a
+  refused sign-off outside a standing stop that covers it, a sign-off
+  recorded while a stop that refuses sign-offs stands, and more run outcomes
+  after a stop than the runs in progress it sealed. Each stopped period is
+  reported: from and to, who decided, signed or "unsigned: the server's
+  word", scope, runs in progress and the refusals made while it stood.
+- `--signals` reads `signoff.target_passed`
+  (`verdifax.signoff-target-passed.v1`, leaf `signoff_target`), the
+  `run.sealed` `signoff_target` and the receipt context's `response_target`.
+  A passed target must name an earlier result of its kind, run and hash, start from the result's public-log time (or its sealed record time when it has no entry), repeat the result's sealed target, be logged at or after its deadline when it carries its own entry, and follow no sign-off of the compared kind logged by then.
+- New mode `--signals pack.json --response-times [--target D] [--from T
+  --to T]`: the response-time report (`verdifax.response-times.v1`) is
+  recounted from the feed it carries with the server's counting rules
+  (`internal/feedcount`, copied byte for byte), and any stated figure that
+  differs fails. A result unsigned as of the head fails unless the head is
+  within `--feed-head-max-age`. Waits are stated as measured, never judged.
+- New mode `--summary summary.json --signals feed.json [--summary-head
+  FILE]`: the period summary (`verdifax.period-summary.v1`, leaf
+  `period_summary`) is checked on the public log, its head is held to the
+  feed and to the period's end, an event after the head sealed before the
+  period ended fails, and every figure and events digest is recounted and
+  printed in plain words ("a registered approver key signed approve").
+  `--feed-head-max-age` does not apply to the summary's own head.
+- v0.37.0 refuses, and never passes, a record, receipt, policy or feed
+  carrying any of these, as a field or kind it does not model.
+- Nothing else changes, measured on November 22, 2026: 2,242 saved files
+  (1,305 audit bundles, 635 receipts and 302 feeds) give identical exit codes
+  under v0.37.0 and this release, and every successful run among the 3,788
+  records stored in production, read from a copy restored from the backup,
+  keeps the verdict v0.37.0 gives it.
+
 ### v0.37.0: debug and firmware stated on every hardware record, each machine named in its feed, and one more fresh start
 
 - A hardware-attested record's hardware line now states two facts from its

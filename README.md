@@ -1092,6 +1092,72 @@ An event whose record was deleted reads at the time the feed served it, with
 tombstone's own event; the JSON report keeps `record_deleted_by` and adds
 `tombstone_sequence`.
 
+### Account stops, response times and period summaries (v0.38.0)
+
+These apply only to an account that turned the feature on; every other feed
+reads exactly as before. Releases before v0.38.0 refuse, and never pass, a feed
+or record that carries them.
+
+**Account stops.** The account's owner and Verdifax each hold a stop of
+their own (`account.stopped`, `account.resumed`, record
+`verdifax.account-stop.v1`), and each lifts only its own. `--signals` follows
+both and fails:
+
+- **A wrong lift:** a resume by the other holder, one naming no standing
+  stop, or an owner's resume without the owner's request-key signature.
+- **A blocked stop:** a Verdifax stop placed while the owner's
+  `setting.verdifax_stop` is `blocked`.
+- **A member key's stop:** one asked by a member key whose `key.created`
+  record seals no `account_stop` grant in its `allowed_tools`, a signed
+  member-key stop, and any resume by a member key.
+- **A refusal outside a stop:** a run refused with code `ACCOUNT_STOPPED`
+  (rule `account_stop`), or a sign-off refused during a stop
+  (`signoff.refused`, record `verdifax.signoff-refusal.v1`, which keeps the
+  approver's signed attempt whole), with no standing stop that covers it. A
+  customer whose own policy names a rule `account_stop` gives that policy
+  with `--signals-policy`.
+- **A sign-off during a refusing stop:** a `signoff.recorded` while a stop
+  whose scope refuses sign-offs stands.
+- **Too many runs ending:** more run outcomes sealed after a stop, while the
+  account stayed stopped, than the runs in progress the stop sealed.
+
+The report states each stopped period (`stopped_periods`, and a `Stopped:`
+line): when it began and ended, as sealed and on the public log; who
+decided; signed, or "unsigned: the server's word"; its scope; the runs in
+progress; and the runs and sign-offs refused while it stood. A resume is
+read whatever the server's release setting was. The report never says
+whether a stop was right.
+
+**Passed response targets.** A `signoff.target_passed` event (`verdifax.signoff-target-passed.v1`) must name an earlier result of its own kind, run and hash, start from that result's public-log time (or its sealed record time when it has no entry of its own), repeat the target the result sealed, be logged at or after its deadline when it carries its own entry, and follow no sign-off of the compared kind logged by then.
+
+**Response times.** `--signals pack.json --response-times` reads the answer
+of `GET /account/signoffs/response-times?pack=1`
+(`verdifax.response-times.v1`): its feed is checked as `--signals` checks
+one, and every stated result and figure is recounted from that feed with the
+counting rules the server uses (a byte-for-byte copy, `internal/feedcount`).
+A figure that differs fails and is named. `--target D` (whole seconds, or a
+duration such as `4h`), `--from T` and `--to T` must match the report's own.
+Given a plain feed page, `--from` and `--to` measure that period. A result
+still unsigned as of the head, with or without a target, is a claim about
+the head's time, so it fails unless the head is within
+`--feed-head-max-age`. Waits are stated as measured, on the public log first
+with the sealed record times beside, negative ones included; a wait over the
+customer's target is "longer than the target", never "late".
+
+**Period summaries.** `--summary summary.json --signals feed.json` checks a
+board summary (`GET /account/summaries/{id}`, `verdifax.period-summary.v1`):
+its hash, leaf (`period_summary`) and public-log entry; that its head names
+the feed's event and was stated, and logged, after the period ended; that no
+event after the head was sealed before the period ended; and every figure
+and events digest, recounted from the feed. Each figure is printed in plain
+words with whether the recount reached it; a sign-off figure says "a
+registered approver key signed approve", never that a person approved. The
+summary's head statement is read from the feed page when the page ends with
+it, or from `--summary-head FILE`, saved from `GET
+/account/summaries/{id}/head`, which serves it after later events too. `--feed-head-max-age` does not apply to
+the summary's own head. Give the feed from its start (`--signals-after`
+works, and the report says what a later start cannot count).
+
 ### `--job`: checking a job's records together
 
 `--job FOLDER` checks every record in the folder in full, then the map of

@@ -88,6 +88,15 @@ type ReceiptReport struct {
 	// SignalSequence is the receipt's sealed place in its account's signal
 	// feed (v0.23.0), or 0 when it seals none.
 	SignalSequence int64 `json:"signal_sequence,omitempty"`
+	// Declared (v0.38.0) is what the receipt's context seals as declared:
+	// the customer's data-use declaration and the run's setup fingerprint.
+	Declared *DeclaredReport `json:"declared,omitempty"`
+	// ReviewSetupHalt (v0.38.0) is what running the rules again showed about
+	// an AI review halt for the review's own setup (AIVP_T4_REVIEW_SETUP).
+	ReviewSetupHalt string `json:"review_setup_halt,omitempty"`
+	// ActivationHash (v0.38.0) is the policy change an attestation-gap
+	// receipt seals as the rule in force, when it seals one.
+	ActivationHash string `json:"activation_hash,omitempty"`
 
 	Tool         string `json:"tool"`
 	ToolVersion  string `json:"tool_version"`
@@ -124,6 +133,13 @@ type ReceiptReport struct {
 	// document given with --policy or --account-policy is checked against
 	// (round 62).
 	gap *artifacts.AttestationGapReceipt
+	// reviewSetupHalt is an AI review halt receipt for the review's setup,
+	// held to the rules once they are run again (round 64).
+	reviewSetupHalt *artifacts.AivpT4HaltReceipt
+	// gapActivation is the policy change a refusal for missing fields was
+	// made under (gapActivationOf), matched to the change in force at its
+	// clock when a history of that change's chain is given (round 64).
+	gapActivation string
 }
 
 // receiptFacts is the kind-independent view of one receipt.
@@ -266,6 +282,12 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 	rep.ReceiptKind, rep.EnvelopeID, rep.ReceiptClock, rep.ReceiptHash, rep.Summary =
 		f.kind, f.envelopeID, f.clock, f.hash, f.summary
 	rep.gap = d.AttestationGapReceipt
+	if g := d.AttestationGapReceipt; g != nil && g.ActivationHash != "" {
+		if !setupHashForm.MatchString(g.ActivationHash) {
+			return fail("the attestation-gap receipt's activation_hash is not 64 lowercase hex characters")
+		}
+		rep.ActivationHash = g.ActivationHash
+	}
 	// An AI review halt receipt's review block (v0.27.0) must be
 	// consistent with itself and with the step having been halted.
 	if d.AivpT4HaltReceipt != nil {
@@ -367,13 +389,33 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		if jobErr := validateContextJob(d.ReceiptContext); jobErr != nil {
 			return failEntry("%v", jobErr)
 		}
+		// Round 64: the data-use copies are one value, and every new
+		// sealed fact has the form the server seals.
+		if round64Err := round64ReceiptProblem(d.ReceiptContext); round64Err != nil {
+			return failEntry("%v", round64Err)
+		}
+		if gapErr := gapActivationProblem(d.AttestationGapReceipt, d.ReceiptContext); gapErr != nil {
+			return failEntry("%v", gapErr)
+		}
+		rep.Declared = declaredOfReceipt(d.ReceiptContext)
+		if d.AttestationGapReceipt != nil {
+			rep.gapActivation = gapActivationOf(d.AttestationGapReceipt, d.ReceiptContext)
+		}
 		keyGate := policyBindingOf(d.ReceiptContext.Policy)
 		keyGate.aiOutputDeclared = d.ReceiptContext.Request.AiOutputHash != ""
 		reviewCheck := ""
-		if d.AivpT4HaltReceipt != nil && d.AivpT4HaltReceipt.HaltReasonCode == haltReasonReviewRequired {
-			reviewCheck = "review-required-halt"
+		var haltReview *artifacts.AivpReview
+		if h := d.AivpT4HaltReceipt; h != nil {
+			haltReview = h.Review
+			switch h.HaltReasonCode {
+			case haltReasonReviewRequired:
+				reviewCheck = "review-required-halt"
+			case haltReasonReviewSetup:
+				reviewCheck = "review-setup-halt"
+				rep.reviewSetupHalt = h
+			}
 		}
-		keyGate.reviewCheck = reviewCheck
+		keyGate.reviewCheck, keyGate.review = reviewCheck, haltReview
 		rep.PolicyGate = checkBuiltIn(keyGate)
 		if policyFailed(rep.PolicyGate) {
 			return failEntry("the receipt's policy decision fails: %s", rep.PolicyGate.Reason)
@@ -391,7 +433,7 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 			}
 			rep.SignalSequence = sig.Sequence
 		}
-		rep.AccountPolicyGate = accountGateOfReceipt(d.ReceiptContext, reviewCheck)
+		rep.AccountPolicyGate = accountGateOfReceipt(d.ReceiptContext, reviewCheck, haltReview)
 		if accountFailed(rep.AccountPolicyGate, nil) {
 			return failEntry("the receipt's account policy decision fails: %s", rep.AccountPolicyGate.Reason)
 		}
@@ -573,6 +615,13 @@ func printReceiptReport(r *ReceiptReport) {
 		printPolicyHistory(*r.PolicyHistory)
 	}
 	printAccount(r.AccountID, r.AccountPolicyGate, r.AccountPolicyHistory)
+	printDeclared(r.Declared)
+	if r.ActivationHash != "" {
+		fmt.Printf("  %-18s%s, the policy change this receipt seals as the one in force\n", "Rule in force:", truncate(r.ActivationHash, 16))
+	}
+	if r.ReviewSetupHalt != "" {
+		fmt.Printf("  %-18s%s\n", "AI review setup:", r.ReviewSetupHalt)
+	}
 	printAIReview(r.AIReview)
 	printSignOffs(r.SignOffs, r.SignOffHistory)
 	switch r.VerdictTier {

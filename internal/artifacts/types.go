@@ -33,6 +33,12 @@ type AttestedContext struct {
 	ModelTemperature *float64 `json:"model_temperature,omitempty"`
 	PromptHash       string   `json:"prompt_hash,omitempty"` // sha256 of the prompt
 
+	// Client, the AI assistant's own declared name and version (round 64),
+	// as an MCP client gives them: declared, not verified. Absent unless
+	// declared, so every record sealed without them hashes as before.
+	ClientName    string `json:"client_name,omitempty"`
+	ClientVersion string `json:"client_version,omitempty"`
+
 	// Decision, the caller's interpretation of the result.
 	DecisionKind   string `json:"decision_kind,omitempty"`   // e.g. "approve", "deny", "advise"
 	DecisionResult string `json:"decision_result,omitempty"` // e.g. "approved"
@@ -117,9 +123,15 @@ type EPA struct {
 	// AccountPolicyGate is the account policy's decision, beside the key's
 	// own in PolicyGate: a run is admitted only when both allow. Absent when
 	// the account has no policy, so earlier records hash as before.
-	AccountPolicyGate *PolicyGate   `json:"account_policy_gate,omitempty"`
-	Hash              string        `json:"hash"`
-	Seal              SealReference `json:"seal"`
+	AccountPolicyGate *PolicyGate `json:"account_policy_gate,omitempty"`
+	// DataUse is the request's data-use declaration in its own field
+	// (round 64, data-use basis), beside the copy each policy gate's inputs
+	// seal: the two copies are one value (DataUseCopiesAgree), and this one
+	// stands even where no gate decided. Absent unless declared, so every
+	// record sealed without one hashes as before.
+	DataUse *DataUse      `json:"data_use,omitempty"`
+	Hash    string        `json:"hash"`
+	Seal    SealReference `json:"seal"`
 }
 
 // PolicyGate records the policy gate's decision in an allowed run's EPA

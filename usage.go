@@ -112,10 +112,50 @@ FLAGS
                           by commas: fails unless one of them signed every
                           change the owner decided and every request key
                           registered or set for the owner key is one of them
+  -signals-policy FILES   with -signals, the policy documents of the feed's
+                          policy changes, separated by commas: the review
+                          date each declares is recomputed, each review.due
+                          must match it, and a feed whose head is past a
+                          declared date with no review.due fails
   -feed-head-max-age D    with -signals, the oldest the feed's head
                           statement may be (default 24h; for example 72h):
                           an older head fails, so fetch the feed again or
-                          raise the limit
+                          raise the limit. Since v0.38.0 each stop and lift
+                          is followed: each holder lifts only its own stop,
+                          the owner's lift is signed, a member key stops
+                          only with a sealed account_stop grant, a Verdifax
+                          stop after the owner's verdifax_stop block fails,
+                          every run or sign-off refused for a stop falls
+                          inside one, and each stopped period is reported
+  -response-times         with -signals, the feed is a response-time report
+                          (GET /account/signoffs/response-times?pack=1):
+                          its feed is checked, every stated figure is
+                          recounted from it and any that differs fails;
+                          given a plain feed page, the period -from to -to
+                          is measured. A result unsigned as of the head or
+                          longer than its target fails unless the head is
+                          within -feed-head-max-age. Waits are stated as
+                          measured, beside the customer's own target
+  -target D               with -response-times, the request target (whole
+                          seconds, or a duration such as 4h) for results
+                          that seal none; a report must use the same one
+  -from T                 with -response-times, the period's start
+                          (RFC 3339, included)
+  -to T                   with -response-times, the period's end
+                          (RFC 3339, excluded)
+  -summary FILE           with -signals, a period summary (GET
+                          /account/summaries/{id}): its hash and public-log
+                          entry are checked, its head must be the feed's
+                          event and stated after the period, no later event
+                          may be sealed before the period's end, and every
+                          figure and events digest is recounted from the
+                          feed and printed in plain words. A sign-off
+                          figure shows a registered approver key signed.
+                          -feed-head-max-age does not apply to the
+                          summary's own head
+  -summary-head FILE      with -summary, the summary's head statement (GET
+                          /account/summaries/{id}/head) when the feed page
+                          given does not end with it
   -signer-key FILE       pass only if the run was requested by the holder
                           of this base64 Ed25519 public key
   -request FILE           pass only if the record's version 2 signature
