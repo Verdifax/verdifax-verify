@@ -261,17 +261,17 @@ func verifyEntryAuthentication(b *artifacts.AuditBundle, r *Report) EntryAuthChe
 	// WHO: the run entry.
 	runSigner, runErr := entrySignerOf(ra.EntryBody)
 	if runErr != nil {
-		return fail("the run's public-log entry has no valid signer: %v", runErr)
+		return fail("the public-log entry of the run has no valid signer: %v", runErr)
 	}
 	out.SignerFingerprint = runSigner
 	key, pinned := pinnedEntrySigners[runSigner]
 	if !pinned {
-		return fail("the run's public-log entry was logged by key %s, which is not a published "+
+		return fail("the public-log entry of the run was logged by key %s, which is not a published "+
 			"Verdifax log-signing key: anyone can add entries to the public log", truncate(runSigner, 16))
 	}
 	out.SignerName = key.Name
 	if !signerAcceptsAt(key, ra.IntegratedTime) {
-		return fail("the run's public-log entry was logged at %s, outside the period in which %s "+
+		return fail("the public-log entry of the run was logged at %s, outside the period in which %s "+
 			"is accepted", out.RunAnchoredAt, key.Name)
 	}
 
@@ -284,18 +284,18 @@ func verifyEntryAuthentication(b *artifacts.AuditBundle, r *Report) EntryAuthChe
 		out.RecordAnchoredAt = utc(ba.IntegratedTime)
 		recordSigner, recordErr := entrySignerOf(ba.EntryBody)
 		if recordErr != nil {
-			return fail("the record's public-log entry has no valid signer: %v", recordErr)
+			return fail("the public-log entry of the record has no valid signer: %v", recordErr)
 		}
 		if recordSigner != runSigner {
-			return fail("the record's public-log entry was logged by key %s, not by %s, the key "+
-				"that logged the run's entry", truncate(recordSigner, 16), truncate(runSigner, 16))
+			return fail("the public-log entry of the record was logged by key %s, not by %s, the key "+
+				"that logged the entry of the run", truncate(recordSigner, 16), truncate(runSigner, 16))
 		}
 		if !signerAcceptsAt(key, ba.IntegratedTime) {
-			return fail("the record's public-log entry was logged at %s, outside the period in which "+
+			return fail("the public-log entry of the record was logged at %s, outside the period in which "+
 				"%s is accepted", out.RecordAnchoredAt, key.Name)
 		}
 		if ba.IntegratedTime < ra.IntegratedTime {
-			return fail("the record's public-log entry (%s) predates the run's entry (%s)",
+			return fail("the public-log entry of the record (%s) predates the entry of the run (%s)",
 				out.RecordAnchoredAt, out.RunAnchoredAt)
 		}
 	}
@@ -327,13 +327,13 @@ func verifyEntryAuthentication(b *artifacts.AuditBundle, r *Report) EntryAuthChe
 			return d >= -anchoringClockSkew.Seconds() && d <= float64(window)
 		}
 		if !within(ra.IntegratedTime) {
-			return fail("the run's public-log entry was logged at %s, outside the sealed %d-second "+
-				"window after the run's clock (%s): the entry was made later than the record claims",
+			return fail("the public-log entry of the run was logged at %s, outside the sealed %d-second "+
+				"window after the clock of the run (%s): the entry was made later than the record claims",
 				out.RunAnchoredAt, window, clock)
 		}
 		if recordOnLog && !within(ba.IntegratedTime) {
-			return fail("the record's public-log entry was logged at %s, outside the sealed %d-second "+
-				"window after the run's clock (%s): the entry was made later than the record claims",
+			return fail("the public-log entry of the record was logged at %s, outside the sealed %d-second "+
+				"window after the clock of the run (%s): the entry was made later than the record claims",
 				out.RecordAnchoredAt, window, clock)
 		}
 	}
@@ -358,7 +358,7 @@ func printEntryAuth(c EntryAuthCheck) {
 	case c.GapSeconds == nil:
 		fmt.Printf("  Logged at:        %s (time authenticated by the log)\n", at)
 	default:
-		fmt.Printf("  Logged at:        %s, %ds after the run's sealed clock\n", at, *c.GapSeconds)
+		fmt.Printf("  Logged at:        %s, %ds after the sealed clock of the run\n", at, *c.GapSeconds)
 	}
 	switch {
 	case c.WindowSealed:
@@ -381,7 +381,7 @@ func staleIndexReason(anchorErr error, logEntryID string, logIndex int64) (strin
 		logEntryID != strconv.FormatInt(logIndex, 10) {
 		return "", false
 	}
-	return fmt.Sprintf("this copy stores the entry's shard position (%d) where its global entry number "+
+	return fmt.Sprintf("this copy stores the shard position of the entry (%d) where its global entry number "+
 		"belongs, as copies of some records downloaded before 2026-10-16 do, so its signed timestamp "+
 		"cannot be checked; download the record again from its public link", logIndex), true
 }

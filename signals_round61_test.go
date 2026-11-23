@@ -122,11 +122,11 @@ func TestRequestKeyChainsAreFollowed(t *testing.T) {
 		}, "with the approval of"},
 		{"an owner change signed by a key the owner key does not hold", func(f *feedBuilder) {
 			f.ownerSetting(artifacts.AccountSettingOwnerReplace, artifacts.SettingBlocked, second)
-		}, "the owner key's request key at this event is"},
+		}, "the request key of the owner key at this event is"},
 		{"an owner change signed by the replaced key", func(f *feedBuilder) {
 			f.requestKeyChange(artifacts.AccountRequestKeyRotated, owner, secondKey, first)
 			f.ownerSetting(artifacts.AccountSettingOwnerReplace, artifacts.SettingBlocked, first)
-		}, "the owner key's request key at this event is"},
+		}, "the request key of the owner key at this event is"},
 		{"a second registration over a held key", func(f *feedBuilder) {
 			f.requestKeyChange(artifacts.AccountRequestKeyRegistered, owner, secondKey, nil)
 		}, "holds one already"},
@@ -152,14 +152,14 @@ func TestRequestKeyChainsAreFollowed(t *testing.T) {
 	g.requestKeyChange(artifacts.AccountRequestKeyRegistered, owner, secondKey, nil)
 	g.ownerSetting(artifacts.AccountSettingVerdifaxDelete, artifacts.SettingBlocked, second)
 	broken := checkSignalFeed(feedBody(t, g.events), nil)
-	want := "the owner's key chain was cleared by Verdifax at event 4; pass --owner-request-key to confirm later owner changes."
+	want := "the key chain of the owner was cleared by Verdifax at event 4; pass --owner-request-key to confirm later owner changes."
 	if !broken.OK || len(broken.Notes) != 1 || broken.Notes[0] != want || broken.RequestKeyChains[0].ClearedByVerdifax != 4 {
 		t.Fatalf("a chain Verdifax cleared verifies with its note: %+v", broken)
 	}
 	// A registration the pin does not name fails even before any owner
 	// change it signs: the pin confirms the chain's start, not only signers.
 	registered := g.events[:5]
-	if pinned := checkSignalFeedPinned(feedBody(t, registered), nil, []string{firstKey}); pinned.OK || !strings.Contains(pinned.Reason, "the owner key's request key set here") {
+	if pinned := checkSignalFeedPinned(feedBody(t, registered), nil, []string{firstKey}); pinned.OK || !strings.Contains(pinned.Reason, "the request key of the owner key set here") {
 		t.Fatalf("a registration the pin does not name must fail: %+v", pinned)
 	}
 	if pinned := checkSignalFeedPinned(feedBody(t, g.events), nil, []string{firstKey}); pinned.OK {
@@ -209,13 +209,13 @@ func TestTheFeedHeadShowsTheFeedIsComplete(t *testing.T) {
 	}
 	n := len(f.events)
 	cut := checkSignalFeed(pageWithHead(t, f.events[:n-1], h), nil)
-	wantCut := "the feed ends at event 6, and Verdifax's head statement of " + h.StatedAt + " says the feed's highest event is 7"
+	wantCut := "the feed ends at event 6, and the Verdifax head statement of " + h.StatedAt + " says the highest event of the feed is 7"
 	if cut.OK || !strings.Contains(cut.Reason, wantCut) {
 		t.Fatalf("a feed cut short before its head must fail: %+v", cut)
 	}
 	early := f.head()
 	f.accountChange(artifacts.AccountSettingVerdifaxDelete, 0, artifacts.SettingAllowed)
-	if past := checkSignalFeed(pageWithHead(t, f.events, early), nil); past.OK || !strings.Contains(past.Reason, "the head is not this feed's") {
+	if past := checkSignalFeed(pageWithHead(t, f.events, early), nil); past.OK || !strings.Contains(past.Reason, "the head does not belong to this feed") {
 		t.Fatalf("a feed that goes past its head must fail: %+v", past)
 	}
 	f.events = f.events[:n]

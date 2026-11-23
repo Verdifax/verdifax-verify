@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.38.0"
+const Version = "0.38.1"
 
 // buildFlavor is empty in every release build. The stand-in test build
 // (go build -tags standinlog, standinlog.go) sets it, so every version line
@@ -1604,7 +1604,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	case r.VerdictTier == "ANCHORED_SIGNOFF_NOT_SHOWN":
 		fmt.Printf("VERDICT: ⚠ ANCHORED, SIGN-OFF NOT SHOWN%s\n", scaffoldSuffix(r))
 		fmt.Println("  Every check of the record passed and the complete record is anchored, but")
-		fmt.Printf("  its rule %q requires a person's sign-off, and no sign-offs were given.\n", r.SignOffRequirement.Rule)
+		fmt.Printf("  its rule %q requires a sign-off by a person, and no sign-offs were given.\n", r.SignOffRequirement.Rule)
 		fmt.Println("  Pass --signoff with the run's sign-offs and --signoff-history with the")
 		fmt.Println("  account's whole history to show whether an approval is in force.")
 		fmt.Println("  Exit code 4; --strict-signoff fails it instead.")
@@ -1772,8 +1772,8 @@ func printRekorAnchor(a RekorAnchorCheck, logEntryID string) {
 		// data in hand.
 		fmt.Printf("     embedded Rekor public key. View on https://search.sigstore.dev/?logIndex=%s\n", logEntryID)
 		if logEntryID != "" && logEntryID != strconv.FormatInt(a.LogIndex, 10) {
-			fmt.Printf("     (%s is the global index across shards; %d is this entry's\n", logEntryID, a.LogIndex)
-			fmt.Printf("     position inside the current shard's tree, used by the proof.)\n")
+			fmt.Printf("     (%s is the global index across shards; %d is the position of this entry\n", logEntryID, a.LogIndex)
+			fmt.Printf("     inside the tree of the current shard, used by the proof.)\n")
 		}
 		return
 	}
@@ -1812,14 +1812,14 @@ func printLeafBinding(c LeafBindingCheck) {
 			inputs = "envelope_id, aer_hash, binding_hash and input_nonce"
 		}
 		fmt.Println("  ✓  the anchored leaf is this run's")
-		fmt.Printf("     Recomputed from this bundle's %s\n", inputs)
+		fmt.Printf("     Recomputed from the %s of this bundle\n", inputs)
 		fmt.Printf("     under %s; matches the anchored leaf hash.\n", c.Form)
 		return
 	}
 	fmt.Println("  ✗  the anchored leaf is NOT this run's")
 	fmt.Printf("     Reason: %s\n", c.Reason)
 	if c.Computed != "" {
-		fmt.Printf("     This run's inputs produce %s\n", truncate(c.Computed, 24))
+		fmt.Printf("     The inputs of this run produce %s\n", truncate(c.Computed, 24))
 		fmt.Printf("     The bundle claims the anchor is %s\n", truncate(c.Recorded, 24))
 	}
 }

@@ -138,7 +138,7 @@ func checkBuiltIn(c PolicyGateCheck) PolicyGateCheck {
 		return c
 	case artifacts.PolicySourceVerdifax:
 		if c.ActivationHash != "" {
-			return fail("the record names Verdifax's built-in policy and also a customer's policy change record %s", safePrefix(c.ActivationHash))
+			return fail("the record names the built-in Verdifax policy and also a customer policy change record %s", safePrefix(c.ActivationHash))
 		}
 		published, found := pslbuiltin.ByDocumentHash(c.DocumentHash)
 		if !found {
@@ -176,14 +176,14 @@ func checkPolicyDocument(c PolicyGateCheck, doc []byte) PolicyGateCheck {
 	digest := sha256.Sum256(doc)
 	switch documentHash := hex.EncodeToString(digest[:]); {
 	case got.PolicyHash != c.PolicyHash:
-		c.Reason = fmt.Sprintf("the document's policy hash %s is not the sealed %s", got.PolicyHash, c.PolicyHash)
+		c.Reason = fmt.Sprintf("the policy hash of the document, %s, is not the sealed %s", got.PolicyHash, c.PolicyHash)
 		return c
 	case c.identitySealed && (got.PolicyID != c.PolicyID || got.PolicyName != c.PolicyName || got.PolicyVersion != c.PolicyVersion):
 		c.Reason = fmt.Sprintf("the document is %q %q version %q, the record names %q %q version %q",
 			got.PolicyID, got.PolicyName, got.PolicyVersion, c.PolicyID, c.PolicyName, c.PolicyVersion)
 		return c
 	case c.DocumentHash != "" && documentHash != c.DocumentHash:
-		c.Reason = fmt.Sprintf("the document's exact text hashes to %s, the record seals %s", documentHash, c.DocumentHash)
+		c.Reason = fmt.Sprintf("the exact text of the document hashes to %s, the record seals %s", documentHash, c.DocumentHash)
 		return c
 	}
 	if c.inputs == nil {
@@ -250,7 +250,7 @@ func rerunRules(c *PolicyGateCheck, doc []byte) error {
 	switch c.reviewCheck {
 	case "record":
 		if mismatch != "" {
-			return fmt.Errorf("rule %q names the AI review's %s, the sealed review does not meet it, and the step was not halted", result.FiredRuleID, mismatch)
+			return fmt.Errorf("rule %q names the %s of the AI review, the sealed review does not meet it, and the step was not halted", result.FiredRuleID, mismatch)
 		}
 	case "review-setup-halt":
 		c.ReviewSetupMismatch = mismatch

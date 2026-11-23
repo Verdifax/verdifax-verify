@@ -375,7 +375,7 @@ func checkJobMap(records []jobRecord) JobReport {
 			_, found := idx.byHash[hash]
 			_, deleted := idx.deleted[hash]
 			if !found && !deleted {
-				add("deleted step %q follows a record that is not here (%s), by its tombstone's sealed links: a step is missing or was swapped", d.StepID, truncate(hash, 16))
+				add("deleted step %q follows a record that is not here (%s), by the sealed links of its tombstone: a step is missing or was swapped", d.StepID, truncate(hash, 16))
 			}
 		}
 		for _, hash := range d.JobLinks.ExternalPrevious {
@@ -462,7 +462,7 @@ func printJobReport(r JobReport) {
 	case "COMPLETE":
 		fmt.Println("VERDICT: ✓ COMPLETE, every record verifies, every link lands on a record here, and one final step leads back to every branch.")
 	case "COMPLETE_EXCEPT_DELETED":
-		fmt.Printf("VERDICT: ◐ COMPLETE EXCEPT THE DELETED STEPS %s: every record here verifies, every link lands on a record here or on a deleted step's tombstone, and one final step leads back to every branch. A deleted step is shown by its sealed tombstone, not its record.\n",
+		fmt.Printf("VERDICT: ◐ COMPLETE EXCEPT THE DELETED STEPS %s: every record here verifies, every link lands on a record here or on the tombstone of a deleted step, and one final step leads back to every branch. A deleted step is shown by its sealed tombstone, not its record.\n",
 			strings.Join(deleted, ", "))
 	case "OPEN":
 		fmt.Println("VERDICT: OPEN, every record and link verifies, but no final step closes this job, so nothing shows whether more steps were cut off.")

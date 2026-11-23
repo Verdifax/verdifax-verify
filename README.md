@@ -1044,7 +1044,7 @@ clear must carry a valid approval by the key before it, and a Verdifax clear
 breaks the chain. A change the owner decides must be signed by the owner
 key's request key current at that event, so a server that held only its own
 copy of the feed cannot sign an owner's change with another key. After a
-Verdifax clear the report says: "the owner's key chain was cleared by
+Verdifax clear the report says: "the key chain of the owner was cleared by
 Verdifax at event N; pass --owner-request-key to confirm later owner
 changes." `--owner-request-key` confirms the chain from outside the feed:
 with it, every key registered or set for the owner key must be one of the
@@ -1079,8 +1079,8 @@ Since v0.34.0 a page of `GET /signals` that reaches the feed's end ends with
 a head statement, `verdifax.feed-head.v1`: Verdifax states the feed's highest
 event and that event's hash, and anchors the statement on the public log.
 The verifier checks it against the feed given: a feed that ends below the
-head's event fails ("the feed ends at event N, and Verdifax's head statement
-of T says the feed's highest event is M"), and one that goes past it, or ends
+head's event fails ("the feed ends at event N, and the Verdifax head
+statement of T says the highest event of the feed is M"), and one that goes past it, or ends
 on another event, fails too. The report says the feed is complete as of the
 head's time on the public log, with its age, and the owner's blocks held as
 of that time. A head older than `--feed-head-max-age` (24 hours by default)

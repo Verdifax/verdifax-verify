@@ -181,7 +181,7 @@ func checkChainEntry(entry *artifacts.ReceiptAnchor, kind, hash, leaf string, at
 		return errNoLogEntry
 	}
 	if entry.Backend != "rekor" {
-		return fmt.Errorf("its entry's backend is %q, not the public log", entry.Backend)
+		return fmt.Errorf("the backend of its entry is %q, not the public log", entry.Backend)
 	}
 	if entry.ReceiptKind != kind || entry.ReceiptHash != hash || !strings.EqualFold(entry.LeafHashHex, leaf) {
 		return errors.New("its public-log entry does not bind this record")

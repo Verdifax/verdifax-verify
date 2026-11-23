@@ -80,8 +80,8 @@ func TestAResponseTimeReportIsRecounted(t *testing.T) {
 		"another target":                    {nil, func() *int64 { n := int64(30); return &n }(), time.Time{}, time.Time{}, time.Minute, "--target gives 30 seconds"},
 		"another period":                    {nil, nil, from.Add(time.Minute), to, time.Minute, "give another period"},
 		"other rules":                       {func(p *responseTimesPack) { p.CountingRules = "verdifax.period-summary-counting.v2" }, nil, time.Time{}, time.Time{}, time.Minute, "this verifier holds"},
-		"a pending result over an old head": {nil, nil, time.Time{}, time.Time{}, 48 * time.Hour, "as of the feed's head, and the head statement"},
-		"a head of another event":           {func(p *responseTimesPack) { p.HeadSequence-- }, nil, time.Time{}, time.Time{}, time.Minute, "carries is event"},
+		"a pending result over an old head": {nil, nil, time.Time{}, time.Time{}, 48 * time.Hour, "as of the head of the feed, and the head statement"},
+		"a head of another event":           {func(p *responseTimesPack) { p.HeadSequence-- }, nil, time.Time{}, time.Time{}, time.Minute, "carries is that of event"},
 		"no feed":                           {func(p *responseTimesPack) { p.Feed = nil }, nil, time.Time{}, time.Time{}, time.Minute, "pack=1"},
 	} {
 		atCheck(t, headLogged.Add(b.checkAfter))
@@ -224,9 +224,9 @@ func TestABrokenPeriodSummaryFails(t *testing.T) {
 		"a head stated before the end": {func(p *artifacts.PeriodSummary) {
 			p.To = time.Unix(h.Anchor.IntegratedTime, 0).Add(time.Minute).UTC().Format(time.RFC3339)
 		},
-			"not after the period's end"},
+			"not after the end of the period"},
 		"other counting rules": {func(p *artifacts.PeriodSummary) { p.CountingRules = "verdifax.period-summary-counting.v2" }, "this verifier holds"},
-		"another head":         {func(p *artifacts.PeriodSummary) { p.HeadStatementHash = strings.Repeat("5", 64) }, "neither the feed page's head"},
+		"another head":         {func(p *artifacts.PeriodSummary) { p.HeadStatementHash = strings.Repeat("5", 64) }, "neither the head of the feed page"},
 	} {
 		c := checkSummary(summaryOf(t, f, h, from, to, stated, b.mutate), page, nil, nil, nil, nil)
 		if c.OK || !strings.Contains(c.Reason, b.want) {
@@ -249,7 +249,7 @@ func TestABrokenPeriodSummaryFails(t *testing.T) {
 		t.Errorf("an unlogged summary: %s", c.Reason)
 	}
 	// The feed must reach the summary's head.
-	if c := checkSummary(raw, pageWithHead(t, f.events[:len(f.events)-1], f.headOver(len(f.events)-1)), nil, nil, nil, nil); c.OK || !strings.Contains(c.Reason, "before the summary's head") {
+	if c := checkSummary(raw, pageWithHead(t, f.events[:len(f.events)-1], f.headOver(len(f.events)-1)), nil, nil, nil, nil); c.OK || !strings.Contains(c.Reason, "before the head of the summary") {
 		t.Errorf("a feed short of the head: %s", c.Reason)
 	}
 }

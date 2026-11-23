@@ -173,7 +173,7 @@ func TestASignOffHistorySkipsPlacesOnlyThroughADeclaredGap(t *testing.T) {
 		t.Fatalf("the same jump with no gap must fail: %+v", c)
 	}
 	early := f.gapRecord(artifacts.GapChainSignOffs, 3, 101)
-	if c := checkSignOffHistory(encode(t, []any{first, early, after})); c.OK || !strings.Contains(c.Reason, "next place is 2") {
+	if c := checkSignOffHistory(encode(t, []any{first, early, after})); c.OK || !strings.Contains(c.Reason, "the next place of the chain is 2") {
 		t.Fatalf("a gap that does not start at the chain's next place must fail: %+v", c)
 	}
 	feedOnly := f.gapRecord(artifacts.GapChainSignals, 1, 1)

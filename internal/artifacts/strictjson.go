@@ -65,7 +65,7 @@ func DecodeBundleStrict(data []byte) (*AuditBundle, error) {
 		return nil, fmt.Errorf("%w: %v", ErrNotStrictJSON, walkErr)
 	}
 	if _, trailingErr := dec.Token(); trailingErr != io.EOF {
-		return nil, fmt.Errorf("%w: data after the bundle's closing brace", ErrNotStrictJSON)
+		return nil, fmt.Errorf("%w: data after the closing brace of the bundle", ErrNotStrictJSON)
 	}
 	var b AuditBundle
 	if unmarshalErr := json.Unmarshal(data, &b); unmarshalErr != nil {
@@ -94,7 +94,7 @@ func DecodeReceiptStrict(data []byte) (*ReceiptDocument, error) {
 		return nil, fmt.Errorf("%w: %v", ErrNotStrictJSON, walkErr)
 	}
 	if _, trailingErr := dec.Token(); trailingErr != io.EOF {
-		return nil, fmt.Errorf("%w: data after the document's closing brace", ErrNotStrictJSON)
+		return nil, fmt.Errorf("%w: data after the closing brace of the document", ErrNotStrictJSON)
 	}
 	var d ReceiptDocument
 	if unmarshalErr := json.Unmarshal(data, &d); unmarshalErr != nil {
@@ -119,7 +119,7 @@ func CheckStrict(data []byte, t reflect.Type) error {
 		return fmt.Errorf("%w: %v", ErrNotStrictJSON, walkErr)
 	}
 	if _, trailingErr := dec.Token(); trailingErr != io.EOF {
-		return fmt.Errorf("%w: data after the document's closing token", ErrNotStrictJSON)
+		return fmt.Errorf("%w: data after the closing token of the document", ErrNotStrictJSON)
 	}
 	return nil
 }

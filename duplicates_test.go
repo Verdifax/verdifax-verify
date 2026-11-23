@@ -46,6 +46,13 @@ var checkedOtherwise = []struct {
 		func(p string) bool {
 			return strings.HasSuffix(p, ".inclusion_path[]") || p == "rekor_anchor.log_id" || p == "bundle_anchor.log_id"
 		}},
+	// Round 64: a declared data use is sealed in its own field and in each
+	// policy gate's inputs; DataUseCopiesAgree (internal/artifacts
+	// policy_binding.go) requires one value, proven in round64_records_test.go.
+	{"the declared data use, which DataUseCopiesAgree checks is one value in its own field and in every policy gate's or binding's inputs",
+		func(p string) bool {
+			return strings.HasPrefix(p, "epa.data_use.") || strings.Contains(p, ".inputs.data_use.") || strings.HasPrefix(p, "receipt_context.data_use.")
+		}},
 	{"the manifest hash every seal carries, which the verifier checks is one value",
 		func(p string) bool {
 			return p == "manifest_hash" || strings.HasSuffix(p, ".seal.manifest_hash") || p == "formal_verification.manifest_hash"
@@ -80,16 +87,17 @@ func comparedPreAnchorRows(t *testing.T, file string) map[string]bool {
 // the same text, or two notes with the same wording. Each is keyed by
 // the sorted, normalized paths it joins.
 var coincidences = map[string]string{
-	"authorization_chain.approvers[].approved_request_hash|causal_graph.affected_entities[].id_hash|envelope.program_id": "the October 2026 hardware run's caller declared the program id as the approved request hash and the affected entity id; three independent declarations",
-	"authorization_chain.approvers[].actor_id|epa.attested_context.actor_id":                                             "the same person declared as approver and as the attested actor; two independent declarations",
-	"epa.attested_context.model_name|epa.attested_context.model_version":                                                 "the caller declared the model version equal to its name; two independent declarations",
-	"epa.attested_context.prompt_hash|request_substance.prompt.hash|request_substance.prompt.user_hash":                  "caller-declared hashes of the same prompt; none derives from another, and from run 239 on the complete-record entry binds all three",
-	"aivp_t4.ai_output_hash|request_substance.output.hash":                                                               "the caller's declared output hash and the AI review's input hash, equal when the same text is declared in both places; from run 239 on the complete-record entry binds both",
-	"transcript.scaffold.activated_by|zksp_binding.scaffold.activated_by":                                                "two scaffold notes with the same wording",
-	"system_provenance.environment.hostname|system_provenance.environment.instance_id":                                   "Fly names the machine by its instance id; both are the server's own observation",
-	"reproducibility_context.git_commit_sha|system_provenance.orchestrator_git_sha":                                      "the caller declared the server's commit as its own; the server's two copies are a group, the caller's is independent",
-	"epa.account_policy_gate.decision_reason_code|epa.policy_gate.decision_reason_code":                                  "two policy gates each allowed the run and each sealed its own reason code; equal when both allowed by a rule, independent decisions of two policies",
-	"envelope.timestamp|nrep.request_signature.signed_at":                                                                "the caller's own signing time, which the server accepts only within a window of its clock (orchestrator request_signature.go); equal at one-second resolution when the request is signed and sent within the second, two independent clocks",
+	"authorization_chain.approvers[].approved_request_hash|causal_graph.affected_entities[].id_hash|envelope.program_id":                          "the October 2026 hardware run's caller declared the program id as the approved request hash and the affected entity id; three independent declarations",
+	"authorization_chain.approvers[].actor_id|epa.attested_context.actor_id":                                                                      "the same person declared as approver and as the attested actor; two independent declarations",
+	"epa.attested_context.model_name|epa.attested_context.model_version":                                                                          "the caller declared the model version equal to its name; two independent declarations",
+	"epa.attested_context.prompt_hash|request_substance.prompt.hash|request_substance.prompt.user_hash":                                           "caller-declared hashes of the same prompt; none derives from another, and from run 239 on the complete-record entry binds all three",
+	"aivp_t4.ai_output_hash|request_substance.output.hash":                                                                                        "the caller's declared output hash and the AI review's input hash, equal when the same text is declared in both places; from run 239 on the complete-record entry binds both",
+	"transcript.scaffold.activated_by|zksp_binding.scaffold.activated_by":                                                                         "two scaffold notes with the same wording",
+	"system_provenance.environment.hostname|system_provenance.environment.instance_id":                                                            "Fly names the machine by its instance id; both are the server's own observation",
+	"reproducibility_context.git_commit_sha|system_provenance.orchestrator_git_sha":                                                               "the caller declared the server's commit as its own; the server's two copies are a group, the caller's is independent",
+	"epa.account_policy_gate.decision_reason_code|epa.policy_gate.decision_reason_code":                                                           "two policy gates each allowed the run and each sealed its own reason code; equal when both allowed by a rule, independent decisions of two policies",
+	"epa.account_policy_gate.inputs.subject_id|epa.account_policy_gate.policy_id|epa.attested_context.actor_id|epa.policy_gate.inputs.subject_id": "the account's owner named its policy and the member's agent declared its actor with the same text (readiness-mcp, run 5201); the owner's choice and the caller's declaration, independent of each other; the two subject ids are the actor's copies in each gate's inputs",
+	"envelope.timestamp|nrep.request_signature.signed_at":                                                                                         "the caller's own signing time, which the server accepts only within a window of its clock (orchestrator request_signature.go); equal at one-second resolution when the request is signed and sent within the second, two independent clocks",
 }
 
 var listIndex = regexp.MustCompile(`\[\d+\]`)

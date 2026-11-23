@@ -224,7 +224,7 @@ func TestR9TrailingDataOnReceiptIsRefusedAsReceipt(t *testing.T) {
 		t.Fatal("a receipt document followed by trailing data must still route as a receipt")
 	}
 	_, decodeErr := artifacts.DecodeReceiptStrict(edited)
-	if !errors.Is(decodeErr, artifacts.ErrNotStrictJSON) || !strings.Contains(decodeErr.Error(), "after the document's closing brace") {
+	if !errors.Is(decodeErr, artifacts.ErrNotStrictJSON) || !strings.Contains(decodeErr.Error(), "after the closing brace of the document") {
 		t.Fatalf("trailing data must be refused and named, got %v", decodeErr)
 	}
 }

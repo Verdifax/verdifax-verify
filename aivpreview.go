@@ -67,7 +67,7 @@ func reviewInconsistency(r *artifacts.AivpReview, released bool) string {
 	case r.CheckerID != aivpcheck.CheckerKeywordV1:
 		return fmt.Sprintf("the AI review names checker %q, which this release cannot re-run", r.CheckerID)
 	case !psleval.KnownContradictionMode(psleval.ContradictionMode(r.ContradictionMode)):
-		return fmt.Sprintf("the AI review's contradiction mode %q is neither halt nor record", r.ContradictionMode)
+		return fmt.Sprintf("the contradiction mode of the AI review, %q, is neither halt nor record", r.ContradictionMode)
 	case len(r.TraceHash) != 64:
 		return "the AI review's trace hash is not a SHA-256"
 	case r.PromptID == "" || r.Model == "":
@@ -78,7 +78,7 @@ func reviewInconsistency(r *artifacts.AivpReview, released bool) string {
 		want = map[string]string{"halt": "halted", "record": "recorded"}[r.ContradictionMode]
 	}
 	if r.ContradictionOutcome != want {
-		return fmt.Sprintf("the AI review's outcome is %q, but its finding and mode make it %q", r.ContradictionOutcome, want)
+		return fmt.Sprintf("the outcome of the AI review is %q, but its finding and mode make it %q", r.ContradictionOutcome, want)
 	}
 	if released && want == "halted" {
 		return "the AI review halted the step, yet the record says the step was released"
@@ -150,7 +150,7 @@ func applyAIReviewMode(c *AIReviewCheck, doc []byte, gate *PolicyGateCheck) *AIR
 		if sealed == "" {
 			sealed = "no contradiction choice"
 		}
-		c.Reason = fmt.Sprintf("the account policy's rule %q makes a contradiction %s, but the record seals %s", gate.FiredRuleID, want, sealed)
+		c.Reason = fmt.Sprintf("rule %q of the account policy makes a contradiction %s, but the record seals %s", gate.FiredRuleID, want, sealed)
 		return c
 	}
 	c.ModeMatch = true

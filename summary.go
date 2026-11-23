@@ -114,7 +114,7 @@ func checkSummary(summaryData, feedData []byte, given *artifacts.FeedHead, after
 		return fail("the feed: %s", c.Feed.Reason)
 	}
 	if c.Feed.Account != p.Account {
-		return fail("the summary is %s's, and the feed given is %s's", p.Account, c.Feed.Account)
+		return fail("the summary belongs to %s, and the feed given belongs to %s", p.Account, c.Feed.Account)
 	}
 	if why := summaryHeadInFeed(&p, &c.Feed, after); why != "" {
 		return fail("%s", why)
@@ -124,7 +124,7 @@ func checkSummary(summaryData, feedData []byte, given *artifacts.FeedHead, after
 		head = h
 	}
 	if head == nil {
-		return fail("the summary's head statement (%s) is neither the feed page's head nor given with --summary-head, so the time it was stated cannot be shown; "+
+		return fail("the head statement of the summary (%s) is neither the head of the feed page nor given with --summary-head, so the time it was stated cannot be shown; "+
 			"fetch the feed when nothing new is in it, or give the head statement saved with the summary (GET /account/summaries/{id}/head) with --summary-head", truncate(p.HeadStatementHash, 16))
 	}
 	if head != c.Feed.head {
@@ -138,11 +138,11 @@ func checkSummary(summaryData, feedData []byte, given *artifacts.FeedHead, after
 	case head.HeadStatementHash != p.HeadStatementHash:
 		return fail("the head statement given is %s, and the summary names %s", truncate(head.HeadStatementHash, 16), truncate(p.HeadStatementHash, 16))
 	case head.Account != p.Account || head.Sequence != p.HeadSequence || head.HeadHash != p.HeadHash:
-		return fail("the summary's head statement names %s's event %d, and the summary names %s's event %d", head.Account, head.Sequence, p.Account, p.HeadSequence)
+		return fail("the head statement of the summary names event %d of %s, and the summary names event %d of %s", head.Sequence, head.Account, p.HeadSequence, p.Account)
 	case !headAt.After(to):
-		return fail("the summary's head was stated at %s, not after the period's end, %s, so an event of the period could be missing from what it counted", head.StatedAt, p.To)
+		return fail("the head of the summary was stated at %s, not after the end of the period, %s, so an event of the period could be missing from what it counted", head.StatedAt, p.To)
 	case head.Anchor == nil || head.Anchor.IntegratedTime < to.Unix():
-		return fail("the summary's head is on the public log at %s, before the period's end, %s", logTimeText(headLogged(head)), p.To)
+		return fail("the head of the summary is on the public log at %s, before the end of the period, %s", logTimeText(headLogged(head)), p.To)
 	}
 	c.HeadStatedAt, c.HeadOnLog = head.StatedAt, logTimeText(head.Anchor.IntegratedTime)
 	if why := eventsAfterHead(&p, &c.Feed, to); why != "" {
@@ -212,23 +212,23 @@ func figureDigest(f feedcount.Figure) string {
 // summaryHeadInFeed holds the summary's head event to the feed given.
 func summaryHeadInFeed(p *artifacts.PeriodSummary, feed *SignalFeedCheck, after *signalPoint) string {
 	if p.HeadSequence > feed.Last {
-		return fmt.Sprintf("the feed given ends at event %d, before the summary's head, event %d", feed.Last, p.HeadSequence)
+		return fmt.Sprintf("the feed given ends at event %d, before the head of the summary, event %d", feed.Last, p.HeadSequence)
 	}
 	if p.HeadSequence < feed.First {
 		if after != nil && after.sequence == p.HeadSequence && after.hash == p.HeadHash {
 			return ""
 		}
-		return fmt.Sprintf("the feed given starts at event %d, after the summary's head, event %d; give it from before the period", feed.First, p.HeadSequence)
+		return fmt.Sprintf("the feed given starts at event %d, after the head of the summary, event %d; give it from before the period", feed.First, p.HeadSequence)
 	}
 	for i := range feed.events {
 		if d := &feed.events[i].Data; d.Sequence == p.HeadSequence {
 			if d.EventHash != p.HeadHash {
-				return fmt.Sprintf("the summary's head names event %d with hash %s, and the feed's event %d is %s", p.HeadSequence, truncate(p.HeadHash, 16), d.Sequence, truncate(d.EventHash, 16))
+				return fmt.Sprintf("the head of the summary names event %d with hash %s, and event %d of the feed is %s", p.HeadSequence, truncate(p.HeadHash, 16), d.Sequence, truncate(d.EventHash, 16))
 			}
 			return ""
 		}
 	}
-	return fmt.Sprintf("the feed given does not hold event %d, the summary's head", p.HeadSequence)
+	return fmt.Sprintf("the feed given does not hold event %d, the head of the summary", p.HeadSequence)
 }
 
 // eventsAfterHead fails an event after the summary's head that the counting
@@ -252,7 +252,7 @@ func eventsAfterHead(p *artifacts.PeriodSummary, feed *SignalFeedCheck, to time.
 	}
 	figs, countErr := feedcount.Summarize(later, time.Time{}, to, feedcount.Head{Sequence: last})
 	if countErr != nil {
-		return fmt.Sprintf("the events after the summary's head cannot be counted: %v", countErr)
+		return fmt.Sprintf("the events after the head of the summary cannot be counted: %v", countErr)
 	}
 	placed := map[int64]bool{}
 	for _, f := range figs {
@@ -270,7 +270,7 @@ func eventsAfterHead(p *artifacts.PeriodSummary, feed *SignalFeedCheck, to time.
 	sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
 	if len(seqs) > 0 {
 		s := seqs[0]
-		return fmt.Sprintf("event %d, after the summary's head (event %d), was sealed at %s, before the period's end, %s, so the summary did not count it", s, p.HeadSequence, at[s], p.To)
+		return fmt.Sprintf("event %d, after the head of the summary (event %d), was sealed at %s, before the end of the period, %s, so the summary did not count it", s, p.HeadSequence, at[s], p.To)
 	}
 	return ""
 }

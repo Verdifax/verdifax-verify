@@ -197,7 +197,7 @@ func verifyCompleteRecordRequirement(b *artifacts.AuditBundle, ba BundleAnchorCh
 		out.Reason = "the record's own anchored values require a complete-record anchor, " +
 			"and the one it carries does not hold: " + ba.Reason
 	case b.RekorAnchor.Backend == "rekor" && !ba.Performed:
-		out.Reason = fmt.Sprintf("the record's own anchored values require a complete-record "+
+		out.Reason = fmt.Sprintf("the anchored values of the record itself require a complete-record "+
 			"anchor on the public log that anchors this run, and its bundle_anchor is on "+
 			"backend %q instead", ba.Backend)
 	default:
@@ -254,7 +254,7 @@ func printBundleAnchor(c BundleAnchorCheck) {
 		fmt.Printf("  ✗  complete-record anchor FAILED\n")
 		fmt.Printf("     Reason: %s\n", c.Reason)
 		if c.ComputedDigest != "" && c.ComputedDigest != c.RecordedDigest {
-			fmt.Printf("     This record's contents produce %s\n", truncate(c.ComputedDigest, 24))
+			fmt.Printf("     The contents of this record produce %s\n", truncate(c.ComputedDigest, 24))
 			fmt.Printf("     The anchored record digest is %s\n", truncate(c.RecordedDigest, 24))
 		}
 	case !c.Performed:

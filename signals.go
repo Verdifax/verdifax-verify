@@ -515,7 +515,7 @@ func checkSignalEntry(ce *signalCloudEvent) (checkedEntry, error) {
 			return checkedEntry{}, fmt.Errorf("it is a %s event, and its entry is a %s, which is a %s", e.Kind, rep.ReceiptKind, got)
 		}
 		if e.RunID != doc.RunID {
-			return checkedEntry{}, fmt.Errorf("it names run %d, and its receipt is run %d's", e.RunID, doc.RunID)
+			return checkedEntry{}, fmt.Errorf("it names run %d, and its receipt belongs to run %d", e.RunID, doc.RunID)
 		}
 		ctx := doc.ReceiptContext
 		if ctx == nil || ctx.Signal == nil {
@@ -603,7 +603,7 @@ func checkSignalEntry(ce *signalCloudEvent) (checkedEntry, error) {
 			return checkedEntry{}, fmt.Errorf("its run deletion: %w", checkErr)
 		}
 		if e.RunID != d.RunID {
-			return checkedEntry{}, fmt.Errorf("it names run %d, and its deletion is run %d's", e.RunID, d.RunID)
+			return checkedEntry{}, fmt.Errorf("it names run %d, and its deletion belongs to run %d", e.RunID, d.RunID)
 		}
 		link := d.Signal
 		return checkedEntry{hash: d.DeletionHash, at: d.ChangedAt, logEntry: logEntryOf(d.Anchor), link: &link, runID: d.RunID,
@@ -621,7 +621,7 @@ func checkSignalEntry(ce *signalCloudEvent) (checkedEntry, error) {
 			return checkedEntry{}, fmt.Errorf("it is a %s event, and its publication is a %s", e.Kind, p.Action)
 		}
 		if e.RunID != p.RunID {
-			return checkedEntry{}, fmt.Errorf("it names run %d, and its publication is run %d's", e.RunID, p.RunID)
+			return checkedEntry{}, fmt.Errorf("it names run %d, and its publication belongs to run %d", e.RunID, p.RunID)
 		}
 		link := p.Signal
 		return checkedEntry{hash: p.PublicationHash, at: p.ChangedAt, logEntry: logEntryOf(p.Anchor), link: &link, runID: p.RunID,
@@ -637,7 +637,7 @@ func checkSignalEntry(ce *signalCloudEvent) (checkedEntry, error) {
 			return checkedEntry{}, fmt.Errorf("its run-sealed record: %w", checkErr)
 		}
 		if e.RunID != rs.RunID {
-			return checkedEntry{}, fmt.Errorf("it names run %d, and its record is run %d's", e.RunID, rs.RunID)
+			return checkedEntry{}, fmt.Errorf("it names run %d, and its record belongs to run %d", e.RunID, rs.RunID)
 		}
 		link := rs.Signal
 		got := checkedEntry{hash: rs.RunSealedHash, at: rs.SealedAt, logEntry: logEntryOf(rs.Anchor), link: &link, runID: rs.RunID, unlogged: unlogged,
@@ -658,7 +658,7 @@ func checkSignalEntry(ce *signalCloudEvent) (checkedEntry, error) {
 			return checkedEntry{}, fmt.Errorf("its setup change: %w", checkErr)
 		}
 		if e.RunID != c.RunID {
-			return checkedEntry{}, fmt.Errorf("it names run %d, and its setup change is run %d's", e.RunID, c.RunID)
+			return checkedEntry{}, fmt.Errorf("it names run %d, and its setup change belongs to run %d", e.RunID, c.RunID)
 		}
 		link := c.Signal
 		return checkedEntry{hash: c.SetupChangeHash, at: c.ChangedAt, logEntry: logEntryOf(c.Anchor), link: &link, runID: c.RunID, unlogged: unlogged,
@@ -897,7 +897,7 @@ func checkSignalFeedPinned(data []byte, after *signalPoint, ownerKeys []string, 
 			case feedGap && i == 0 && after != nil && after.sequence >= got.gap.LostFrom && after.sequence <= got.gap.LostTo:
 				// The reader holds events the server lost in a restore.
 				return fail("your point, event %d, is inside a restore gap that skips places %d to %d: a restore from backup lost events you already read. "+
-					"Keep your copies of them; they and this gap's entry are the evidence of the loss. Check the feed from its start, or from event %d, to continue",
+					"Keep your copies of them; they and the entry of this gap are the evidence of the loss. Check the feed from its start, or from event %d, to continue",
 					after.sequence, got.gap.LostFrom, got.gap.LostTo, got.gap.LostFrom-1)
 			case feedGap && (got.gap.LostFrom != previousSeq+1 || d.Sequence != got.gap.LostTo+1):
 				return fail("its restore gap names places %d to %d, which are not the places between event %d and it",
@@ -1100,17 +1100,17 @@ func webhooksOf(entries []SignalFeedEntry, fromStart bool, notes []string) (int,
 func checkFeedHead(h *artifacts.FeedHead, account string, last int64, lastHash string) error {
 	if err := checkSealedEntry(h.Validate(), h.ComputeHash(), h.HeadStatementHash, h.StatedAt, "stated_at",
 		h.Anchor, artifacts.FeedHeadKind, h.LeafHash()); err != nil {
-		return fmt.Errorf("the feed's head statement: %w", err)
+		return fmt.Errorf("the head statement of the feed: %w", err)
 	}
 	switch {
 	case h.Account != account:
-		return fmt.Errorf("the feed's head statement is %s's, not %s's", h.Account, account)
+		return fmt.Errorf("the head statement of the feed belongs to %s, not to %s", h.Account, account)
 	case last < h.Sequence:
-		return fmt.Errorf("the feed ends at event %d, and Verdifax's head statement of %s says the feed's highest event is %d, so events were left out of the end", last, h.StatedAt, h.Sequence)
+		return fmt.Errorf("the feed ends at event %d, and the Verdifax head statement of %s says the highest event of the feed is %d, so events were left out of the end", last, h.StatedAt, h.Sequence)
 	case last > h.Sequence:
-		return fmt.Errorf("the feed goes on to event %d, and the head statement given with it, of %s, says the feed's highest event is %d, so the head is not this feed's", last, h.StatedAt, h.Sequence)
+		return fmt.Errorf("the feed goes on to event %d, and the head statement given with it, of %s, says the highest event of the feed is %d, so the head does not belong to this feed", last, h.StatedAt, h.Sequence)
 	case lastHash != h.HeadHash:
-		return fmt.Errorf("the feed's event %d is not the event Verdifax's head statement of %s names, so the feed's end was rewritten", last, h.StatedAt)
+		return fmt.Errorf("event %d of the feed is not the event the Verdifax head statement of %s names, so the end of the feed was rewritten", last, h.StatedAt)
 	}
 	return nil
 }
@@ -1126,7 +1126,7 @@ func checkDeletedRecordEvent(ce *signalCloudEvent) (checkedEntry, error) {
 	switch e.Kind {
 	case artifacts.SignalRunRefused, artifacts.SignalRunHalted, artifacts.SignalRunFailed:
 	default:
-		return checkedEntry{}, fmt.Errorf("it is a %s event and carries a deletion tombstone; only a stopped run's event stands for a record", e.Kind)
+		return checkedEntry{}, fmt.Errorf("it is a %s event and carries a deletion tombstone; only the event of a stopped run stands for a record", e.Kind)
 	}
 	if trimmed := bytes.TrimSpace(e.Entry); len(trimmed) != 0 && string(trimmed) != "null" {
 		return checkedEntry{}, errors.New("it carries both an entry and a deletion tombstone")
@@ -1140,7 +1140,7 @@ func checkDeletedRecordEvent(ce *signalCloudEvent) (checkedEntry, error) {
 	case d.Signal.Account != e.Account:
 		return checkedEntry{}, fmt.Errorf("the tombstone served for its deleted record belongs to %s, not %s", d.Signal.Account, e.Account)
 	case d.RunID != e.RunID:
-		return checkedEntry{}, fmt.Errorf("it names run %d, and the tombstone served for its record is run %d's", e.RunID, d.RunID)
+		return checkedEntry{}, fmt.Errorf("it names run %d, and the tombstone served for its record belongs to run %d", e.RunID, d.RunID)
 	case d.Signal.Sequence <= e.Sequence:
 		return checkedEntry{}, errors.New("the tombstone served for its deleted record is not later in the feed than the event")
 	}
@@ -1199,7 +1199,7 @@ func checkOwnerBlocks(blocked map[string]bool, pending map[string]UnconfirmedOwn
 	verdifax := got.decidedBy == artifacts.DecidedByVerdifax
 	held := func(action, what string) string {
 		if p, waiting := pending[action]; waiting {
-			return fmt.Sprintf("Verdifax %s while the owner's %s block held: the allow at event %d is signed by a key registered after %s at event %d, so it counts only with --owner-request-key",
+			return fmt.Sprintf("Verdifax %s while the %s block of the owner held: the allow at event %d is signed by a key registered after %s at event %d, so it counts only with --owner-request-key",
 				what, settingName(action), p.Sequence, p.FreshStart, p.FreshStartAt)
 		}
 		return ""
@@ -1365,7 +1365,7 @@ func printSignalFeed(c *SignalFeedCheck) {
 		fmt.Printf("    %d. %s  %s%s%s%s\n", e.Sequence, e.At, e.Kind, run, by, late)
 	}
 	if c.SetupChanges > 0 {
-		fmt.Printf("  %-18s%d setup change(s), each followed by the run it names, each scope's fingerprints linked; what the request declared and what Verdifax's AI review stated, never which model ran\n", "Setup changes:", c.SetupChanges)
+		fmt.Printf("  %-18s%d setup change(s), each followed by the run it names, the fingerprints of each scope linked; what the request declared and what the AI review by Verdifax stated, never which model ran\n", "Setup changes:", c.SetupChanges)
 	}
 	if c.ReviewsDue > 0 {
 		fmt.Printf("  %-18s%d review date(s) passed, each logged at or after its due date while its policy change was in force\n", "Review dates:", c.ReviewsDue)
@@ -1374,16 +1374,16 @@ func printSignalFeed(c *SignalFeedCheck) {
 		fmt.Printf("  %-18s%s\n", "Stopped:", stopPeriodLine(&c.StoppedPeriods[i], c.CompleteAsOf))
 	}
 	if c.SignOffsRefused > 0 {
-		fmt.Printf("  %-18s%d sign-off(s) refused during a stop, each placed inside a standing stop that refuses sign-offs; the approver's signed attempt is kept whole\n", "Refused sign-offs:", c.SignOffsRefused)
+		fmt.Printf("  %-18s%d sign-off(s) refused during a stop, each placed inside a standing stop that refuses sign-offs; the signed attempt of the approver is kept whole\n", "Refused sign-offs:", c.SignOffsRefused)
 	}
 	if c.TargetsPassed > 0 {
-		fmt.Printf("  %-18s%d response target(s) passed, each logged at or after its deadline with no sign-off of the compared kind logged by then; the target is the customer's own\n", "Targets passed:", c.TargetsPassed)
+		fmt.Printf("  %-18s%d response target(s) passed, each logged at or after its deadline with no sign-off of the compared kind logged by then; the target is one the customer set\n", "Targets passed:", c.TargetsPassed)
 	}
 	if c.DeclaredGaps > 0 {
 		fmt.Printf("  %-18s%d declared restore gap(s): each is sealed and on the public log, and names the places it skips\n", "Restore gaps:", c.DeclaredGaps)
 	}
 	if c.CompleteAsOf != "" {
-		fmt.Printf("  %-18sthe feed is complete as of %s, %s, by Verdifax's head statement on the public log\n", "Complete:", c.CompleteAsOf, c.CompleteAge)
+		fmt.Printf("  %-18sthe feed is complete as of %s, %s, by the Verdifax head statement on the public log\n", "Complete:", c.CompleteAsOf, c.CompleteAge)
 	} else {
 		fmt.Printf("  %-18sthe feed given ends with no head statement, so a later event may exist\n", "Complete:")
 	}
@@ -1395,9 +1395,9 @@ func printSignalFeed(c *SignalFeedCheck) {
 			}
 		}
 		if c.BlocksHeldAsOf != "" {
-			fmt.Printf("  %-18sthe owner's blocks held as of %s (%s)\n", "Owner's blocks:", c.BlocksHeldAsOf, strings.Join(blocks, ", "))
+			fmt.Printf("  %-18sthe blocks of the owner held as of %s (%s)\n", "Owner's blocks:", c.BlocksHeldAsOf, strings.Join(blocks, ", "))
 		} else {
-			fmt.Printf("  %-18sthe owner's blocks held through event %d (%s); with no head statement a later event may exist\n", "Owner's blocks:", c.Last, strings.Join(blocks, ", "))
+			fmt.Printf("  %-18sthe blocks of the owner held through event %d (%s); with no head statement a later event may exist\n", "Owner's blocks:", c.Last, strings.Join(blocks, ", "))
 		}
 	}
 	if c.WebhookChanges > 0 {
@@ -1415,7 +1415,7 @@ func printSignalFeed(c *SignalFeedCheck) {
 		if u.Action != "" {
 			what = u.Action + " " + u.Value
 		}
-		fmt.Printf("  %-18sevent %d, %s, signed by %s, a key registered after %s at event %d; not counted as the owner's without --owner-request-key\n",
+		fmt.Printf("  %-18sevent %d, %s, signed by %s, a key registered after %s at event %d; not counted as made by the owner without --owner-request-key\n",
 			"Unconfirmed:", u.Sequence, what, truncate(u.SignedBy, 12), u.FreshStart, u.FreshStartAt)
 	}
 	for _, ch := range c.RequestKeyChains {

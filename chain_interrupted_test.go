@@ -36,7 +36,7 @@ func TestASignOffHistorySkipsAPlaceOnlyThroughAnInterruptedRecord(t *testing.T) 
 		t.Fatalf("the same skip with no record must fail: %+v", c)
 	}
 	wrongPlace := f.interruptedRecord(artifacts.GapChainSignOffs, artifacts.SignOffKind, 3)
-	if c := checkSignOffHistory(encode(t, []any{first, wrongPlace, after})); c.OK || !strings.Contains(c.Reason, "next place is 2") {
+	if c := checkSignOffHistory(encode(t, []any{first, wrongPlace, after})); c.OK || !strings.Contains(c.Reason, "the next place of the chain is 2") {
 		t.Fatalf("a record closing another place must fail: %+v", c)
 	}
 	unanchored := closed

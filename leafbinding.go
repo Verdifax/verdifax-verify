@@ -147,7 +147,7 @@ func verifyLeafBinding(b *artifacts.AuditBundle) LeafBindingCheck {
 			Recorded:  a.LeafHashHex,
 			Reason: fmt.Sprintf(
 				"this bundle claims a Rekor anchor but does not carry the inputs "+
-					"needed to confirm the anchored leaf is this run's: %s",
+					"needed to confirm the anchored leaf belongs to this run: %s",
 				strings.Join(missing, ", ")),
 		}
 	}

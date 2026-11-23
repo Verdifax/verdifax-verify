@@ -47,8 +47,8 @@ func verifyRecordIdentity(b *artifacts.AuditBundle, leaf LeafBindingCheck) Recor
 	}
 	if !runEnvelopeID.MatchString(b.Envelope.EnvelopeID) {
 		return RecordIdentityCheck{Performed: true, Reason: fmt.Sprintf(
-			"envelope identifier %q is not a run envelope identifier (env- and the first sixteen hex characters of the payload's admission hash); "+
-				"public-log entries the /attest endpoint signs carry attest: identifiers and are never a record's entries",
+			"envelope identifier %q is not a run envelope identifier (env- and the first sixteen hex characters of the admission hash of the payload); "+
+				"public-log entries the /attest endpoint signs carry attest: identifiers and are never entries of a record",
 			safePrefix(b.Envelope.EnvelopeID))}
 	}
 	switch leaf.Form {

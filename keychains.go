@@ -70,7 +70,7 @@ func (r *requestKeyChains) startOwnerAfresh(sequence int64, route string, keyID 
 	r.freshStart = &ownerFreshStart{Sequence: sequence, Route: route}
 	r.unconfirmed[keyID] = true
 	if len(pinned) == 0 && route != freshStartVerdifaxClear {
-		r.note(fmt.Sprintf("%s at event %d, so the owner's chain starts afresh there; pass --owner-request-key to confirm later owner changes.", route, sequence))
+		r.note(fmt.Sprintf("%s at event %d, so the chain of the owner starts afresh there; pass --owner-request-key to confirm later owner changes.", route, sequence))
 	}
 }
 
@@ -162,7 +162,7 @@ func (r *requestKeyChains) applyChange(sequence int64, c *artifacts.AccountChang
 		ch.Current, ch.ClearedByVerdifax = "", sequence
 		if owner {
 			if len(pinned) == 0 {
-				r.note(fmt.Sprintf("the owner's key chain was cleared by Verdifax at event %d; pass --owner-request-key to confirm later owner changes.", sequence))
+				r.note(fmt.Sprintf("the key chain of the owner was cleared by Verdifax at event %d; pass --owner-request-key to confirm later owner changes.", sequence))
 			}
 			r.startOwnerAfresh(sequence, freshStartVerdifaxClear, c.KeyID, pinned)
 		}
@@ -175,12 +175,12 @@ func (r *requestKeyChains) applyChange(sequence int64, c *artifacts.AccountChang
 		if !rooted {
 			ch.Unrooted = true
 		} else if approver != ch.Current {
-			return fmt.Sprintf("it changes key %d's request key with the approval of %s, and the key's request key at this event %s",
+			return fmt.Sprintf("it changes the request key of key %d with the approval of %s, and the request key of the key at this event %s",
 				c.KeyID, truncate(approver, 12), held())
 		}
 	}
 	if c.Value != "" && owner && len(pinned) > 0 && !pinned[c.Value] {
-		return fmt.Sprintf("the owner key's request key set here, %s, is not one given with --owner-request-key", truncate(c.Value, 12))
+		return fmt.Sprintf("the request key of the owner key set here, %s, is not one given with --owner-request-key", truncate(c.Value, 12))
 	}
 	// The holder's own clear starts the owner's chain afresh; a replacement
 	// approved by the key before it keeps that key's standing (round 62, N28).
@@ -210,7 +210,7 @@ func (r *requestKeyChains) checkOwnerSigner(sequence int64, signer string) strin
 	case ch.Current == "":
 		return fmt.Sprintf("a change the owner decided is signed by request key %s, and the owner key holds no request key at this event", truncate(signer, 12))
 	case ch.Current != signer:
-		return fmt.Sprintf("a change the owner decided is signed by request key %s, and the owner key's request key at this event is %s",
+		return fmt.Sprintf("a change the owner decided is signed by request key %s, and the request key of the owner key at this event is %s",
 			truncate(signer, 12), truncate(ch.Current, 12))
 	}
 	return ""

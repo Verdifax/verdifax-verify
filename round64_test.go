@@ -51,7 +51,7 @@ func TestRound64ConditionsRunAgain(t *testing.T) {
 	}
 	want := []string{
 		`model_name: the request declared "claims-model-2"; the policy names in [claims-model-2]`,
-		`review_prompt_id: Verdifax's AI review stated "statements-v1"; the policy names exact "statements-v1"`,
+		`review_prompt_id: the AI review by Verdifax stated "statements-v1"; the policy names exact "statements-v1"`,
 	}
 	if strings.Join(c.SetupFacts, "|") != strings.Join(want, "|") {
 		t.Fatalf("setup lines %q", c.SetupFacts)

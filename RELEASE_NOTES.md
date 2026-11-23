@@ -2,6 +2,23 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.38.1 (November 22, 2026): message wording and two production test records
+
+- The wording of the failure and report messages that formatted a value
+  beside an apostrophe changed, so no message places a value next to a quote
+  character: "the refusal's clock" now reads "the clock of the refusal", "run
+  7's record" reads "the record of run 7", and so on. Three of them were
+  flagged by code scanning as `go/unsafe-quoting`; the verifier runs no shell
+  or SQL, and every such message is reworded, not only those three.
+- A new test (R365) parses every Go file of the verifier and fails if any
+  message format holds both a single quote and a formatted value.
+- Two genuine production records of November 22, 2026 join the test
+  records: one sealed through the MCP server, which carries the declared
+  client name and version, and one that declares a data use, so the copy,
+  coincidence and forger tests run on real records holding the fields v0.38.0
+  added. Each has no value a forger can rewrite.
+- No check, exit code or verdict changed.
+
 ### v0.38.0: setup facts, the declared data-use basis, review dates, the rule in force, account stops, response times and period summaries
 
 - A record or receipt from an account that turned on a round 64 feature may

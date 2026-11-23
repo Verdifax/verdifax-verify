@@ -31,14 +31,14 @@ func checkGapPolicyDocument(gap *artifacts.AttestationGapReceipt, doc []byte, fl
 	}
 	docRequired, requiredErr := policyhash.RequiredAttestedFields(doc)
 	if requiredErr != nil {
-		c.Reason = fmt.Sprintf("the %s document's required fields could not be read: %v", flag, requiredErr)
+		c.Reason = fmt.Sprintf("the required fields of the %s document could not be read: %v", flag, requiredErr)
 		return c
 	}
 	required := append([]string(nil), gap.RequiredFields...)
 	sort.Strings(required)
 	switch {
 	case got.PolicyHash != gap.PolicyHash:
-		c.Reason = fmt.Sprintf("the %s document's policy hash %s is not %s, the policy this refusal for missing fields names", flag, got.PolicyHash, gap.PolicyHash)
+		c.Reason = fmt.Sprintf("the policy hash of the %s document, %s, is not %s, the policy this refusal for missing fields names", flag, got.PolicyHash, gap.PolicyHash)
 	case got.PolicyID != gap.PolicyID || got.PolicyName != gap.PolicyName:
 		c.Reason = fmt.Sprintf("the %s document is %q %q, the refusal names %q %q", flag, got.PolicyID, got.PolicyName, gap.PolicyID, gap.PolicyName)
 	case len(docRequired) == 0:
@@ -122,15 +122,15 @@ func checkRuleInForce(c *PolicyHistoryCheck, gap *artifacts.AttestationGapReceip
 	}
 	switch {
 	case inForce == nil:
-		c.OK, c.Reason = false, fmt.Sprintf("no change in this history was in force at the refusal's clock, %s", gap.GapClock)
+		c.OK, c.Reason = false, fmt.Sprintf("no change in this history was in force at the clock of the refusal, %s", gap.GapClock)
 	case inForce.ActivationHash != activation:
 		c.OK, c.Reason = false, fmt.Sprintf("the refusal was made under policy change %s, and change %d (%s) was the one in force at its clock, %s",
 			truncate(activation, 16), inForce.Sequence, truncate(inForce.ActivationHash, 16), gap.GapClock)
 	case inForce.PolicyHash != gap.PolicyHash:
-		c.OK, c.Reason = false, fmt.Sprintf("change %d, in force at the refusal's clock, put policy %s in force, and the refusal names policy %s",
+		c.OK, c.Reason = false, fmt.Sprintf("change %d, in force at the clock of the refusal, put policy %s in force, and the refusal names policy %s",
 			inForce.Sequence, truncate(inForce.PolicyHash, 16), truncate(gap.PolicyHash, 16))
 	default:
-		c.RuleInForce = fmt.Sprintf("decided under change %d of %s, activated at %s, the change in force at the refusal's clock (%s); rule: the policy's required attested fields",
+		c.RuleInForce = fmt.Sprintf("decided under change %d of %s, activated at %s, the change in force at the clock of the refusal (%s); rule: the required attested fields of the policy",
 			inForce.Sequence, inForce.ChainID, inForce.ActivatedAt, gap.GapClock)
 	}
 }

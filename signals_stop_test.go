@@ -323,7 +323,7 @@ func TestABrokenStopFeedFails(t *testing.T) {
 		}, nil, "seals no account_stop grant"},
 		"a signed member key stop": {grantedStop, func(f *feedBuilder) {
 			f.stopAccount("owner", stopMemberKeyID, artifacts.StopSignoffsAccept, 0, true, nil)
-		}, nil, "a member key's stop is sealed unsigned"},
+		}, nil, "the stop of a member key is sealed unsigned"},
 		"a member key resume": {grantedStop, func(f *feedBuilder) {
 			s := f.stopAccount("owner", stopMemberKeyID, artifacts.StopSignoffsAccept, 0, false, nil)
 			f.resumeAccount("owner", stopMemberKeyID, s, nil)
@@ -443,7 +443,7 @@ func TestAPassedTargetIsHeldToItsResult(t *testing.T) {
 		f.recordSignOff(f.runID-1, artifacts.SignOffApprove)
 		return checkStopFeed(t, f, nil)
 	}
-	if c := build(t, nil, 20*time.Second, false, false); !c.OK || c.TargetsPassed != 1 || !strings.Contains(c.Entries[len(c.Entries)-2].TargetPassed, "customer's signoff.within target of 60 seconds") {
+	if c := build(t, nil, 20*time.Second, false, false); !c.OK || c.TargetsPassed != 1 || !strings.Contains(c.Entries[len(c.Entries)-2].TargetPassed, "signoff.within target of 60 seconds, set by the customer") {
 		t.Fatalf("a sound passed target fails: %s %d", c.Reason, c.TargetsPassed)
 	}
 	for name, b := range map[string]struct {
@@ -455,7 +455,7 @@ func TestAPassedTargetIsHeldToItsResult(t *testing.T) {
 	}{
 		"logged before its deadline":     {nil, -80 * time.Second, false, false, "before that deadline"},
 		"a sign-off logged by then":      {nil, 20 * time.Second, true, false, "a sign-off on that result"},
-		"a start that is not the result": {func(r *artifacts.SignOffTargetPassed) { r.Start = "2026-11-08T12:05:00Z" }, 20 * time.Second, false, false, "its result's entry is on the public log"},
+		"a start that is not the result": {func(r *artifacts.SignOffTargetPassed) { r.Start = "2026-11-08T12:05:00Z" }, 20 * time.Second, false, false, "the entry of its result is on the public log"},
 		"another result's hash":          {func(r *artifacts.SignOffTargetPassed) { r.ResultHash = strings.Repeat("8", 64) }, 20 * time.Second, false, false, "is run"},
 		"a target its result did not seal": {func(r *artifacts.SignOffTargetPassed) {
 			r.Within = 30

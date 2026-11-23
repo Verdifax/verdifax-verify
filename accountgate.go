@@ -66,11 +66,11 @@ func checkAccountGate(c PolicyGateCheck, accountID string) PolicyGateCheck {
 	case accountID == "":
 		return fail("the record seals an account policy decision but names no account")
 	case c.Source != artifacts.PolicySourceCustomer:
-		return fail("an account policy is the customer's own, and the record names author %q", c.Source)
+		return fail("an account policy belongs to the customer, and the record names author %q", c.Source)
 	case c.ActivationHash == "":
 		return fail("the record's account policy decision names no change in the account's policy history")
 	case c.Outcome != "" && c.Outcome != string(psleval.EffectAllow) && c.Outcome != string(psleval.EffectDeny):
-		return fail("the account policy decision's outcome %q is neither allow nor deny", safePrefix(c.Outcome))
+		return fail("the outcome of the account policy decision, %q, is neither allow nor deny", safePrefix(c.Outcome))
 	}
 	return c
 }
@@ -154,7 +154,7 @@ func loadAccountPolicyHistory(path, accountID string, gate *PolicyGateCheck) *Po
 	}
 	c = checkAccountChain(c)
 	if c.OK && c.Entries[0].ChainID != accountID {
-		c.OK, c.Reason = false, fmt.Sprintf("this history belongs to %s, not to the record's account %s", c.Entries[0].ChainID, accountID)
+		c.OK, c.Reason = false, fmt.Sprintf("this history belongs to %s, not to the account of the record, %s", c.Entries[0].ChainID, accountID)
 	}
 	activation := ""
 	if gate != nil {
@@ -265,7 +265,7 @@ func checkAccountChain(c PolicyHistoryCheck) PolicyHistoryCheck {
 	}
 	account := c.Entries[0].ChainID
 	if !accountIDForm.MatchString(account) {
-		c.OK, c.Reason = false, fmt.Sprintf("change 1 belongs to %q, which is not an account's policy history (account-N)", safePrefix(account))
+		c.OK, c.Reason = false, fmt.Sprintf("change 1 belongs to %q, which is not the policy history of an account (account-N)", safePrefix(account))
 		return c
 	}
 	for _, e := range c.Entries {

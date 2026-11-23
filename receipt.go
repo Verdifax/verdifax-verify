@@ -310,7 +310,7 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		return fail("the document's ok flag is false; the Verdifax API serves a receipt document only with ok true, so this is not a document it served")
 	}
 	if f.hashErr != nil {
-		return failInternal("the receipt's hash does not recompute from its own fields: %v", f.hashErr)
+		return failInternal("the hash of the receipt does not recompute from its own fields: %v", f.hashErr)
 	}
 	rep.HashOK = true
 	required := anchorRequiredOf(d)
@@ -319,13 +319,13 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 	if !opts.selfHosted {
 		expected, expectedErr := issuedAtOrAfter(f.clock, receiptAnchorExpectedSince)
 		if expectedErr != nil {
-			return fail("the receipt's clock %q is not an RFC 3339 time", safePrefix(f.clock))
+			return fail("the clock of the receipt, %q, is not an RFC 3339 time", safePrefix(f.clock))
 		}
 		anchorExpected = expected
 	}
 	if !required && !opts.selfHosted {
 		if afterCutover, cutoverErr := issuedAtOrAfter(f.clock, receiptAnchorRequiredSince); cutoverErr != nil {
-			return fail("the receipt's clock %q is not an RFC 3339 time", safePrefix(f.clock))
+			return fail("the clock of the receipt, %q, is not an RFC 3339 time", safePrefix(f.clock))
 		} else if afterCutover {
 			return fail("this receipt is dated %s, at or after %s, since when the Verdifax API seals "+
 				"anchor_required into every receipt it issues, and it lacks the field: it was rewritten or "+
@@ -370,7 +370,7 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 	case a.ReceiptKind != f.kind:
 		return failEntry("receipt_anchor names a %s, but this document carries a %s", a.ReceiptKind, f.kind)
 	case a.ReceiptHash != f.hash:
-		return failEntry("receipt_anchor names receipt hash %s, not this receipt's %s",
+		return failEntry("receipt_anchor names receipt hash %s, not the hash of this receipt, %s",
 			truncate(a.ReceiptHash, 16), truncate(f.hash, 16))
 	}
 	leafErr := artifacts.ValidateReceiptLeafFields(f.kind, f.envelopeID, f.hash)
@@ -418,7 +418,7 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		keyGate.reviewCheck, keyGate.review = reviewCheck, haltReview
 		rep.PolicyGate = checkBuiltIn(keyGate)
 		if policyFailed(rep.PolicyGate) {
-			return failEntry("the receipt's policy decision fails: %s", rep.PolicyGate.Reason)
+			return failEntry("the policy decision of the receipt fails: %s", rep.PolicyGate.Reason)
 		}
 		rep.AccountID = d.ReceiptContext.AccountID
 		if idErr := checkAccountID(rep.AccountID); idErr != nil {
@@ -426,16 +426,16 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		}
 		if sig := d.ReceiptContext.Signal; sig != nil {
 			if linkErr := sig.Validate(); linkErr != nil {
-				return failEntry("the receipt's place in the signal feed: %v", linkErr)
+				return failEntry("the place of the receipt in the signal feed: %v", linkErr)
 			}
 			if sig.Account != rep.AccountID {
-				return failEntry("the receipt's place in the signal feed names %s, and the receipt seals account %q", sig.Account, rep.AccountID)
+				return failEntry("the place of the receipt in the signal feed names %s, and the receipt seals account %q", sig.Account, rep.AccountID)
 			}
 			rep.SignalSequence = sig.Sequence
 		}
 		rep.AccountPolicyGate = accountGateOfReceipt(d.ReceiptContext, reviewCheck, haltReview)
 		if accountFailed(rep.AccountPolicyGate, nil) {
-			return failEntry("the receipt's account policy decision fails: %s", rep.AccountPolicyGate.Reason)
+			return failEntry("the account policy decision of the receipt fails: %s", rep.AccountPolicyGate.Reason)
 		}
 		if admitErr := admittedDecisionError(f.kind, "policy", rep.PolicyGate); admitErr != nil {
 			return failEntry("%v", admitErr)
@@ -448,7 +448,7 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		if c := d.ReceiptContext; c.RequestSignature != nil {
 			rep.RequestSignature = checkRequestSignature(c.RequestSignature, c.Request, c.Job)
 			if !rep.RequestSignature.Match {
-				return failEntry("the receipt's request signature fails: %s", rep.RequestSignature.Reason)
+				return failEntry("the request signature of the receipt fails: %s", rep.RequestSignature.Reason)
 			}
 		}
 	}
@@ -456,7 +456,7 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 		return failEntry("%v", leafErr)
 	}
 	if !strings.EqualFold(a.LeafHashHex, want) {
-		return failEntry("the receipt leaf rebuilt from this document's %s is %s, not the anchored %s",
+		return failEntry("the receipt leaf rebuilt from the %s of this document is %s, not the anchored %s",
 			bound, truncate(want, 16), truncate(a.LeafHashHex, 16))
 	}
 	if a.Backend != "rekor" {
@@ -485,36 +485,36 @@ func verifyReceiptDocumentWith(d *artifacts.ReceiptDocument, opts receiptOptions
 	if anchorErr != nil {
 		if stale, isStale := staleIndexReason(anchorErr, a.LogEntryID, a.LogIndex); isStale {
 			rep.StaleEntryNumber = true
-			return failEntry("the receipt's public-log entry: %s", stale)
+			return failEntry("the public-log entry of the receipt: %s", stale)
 		}
-		return failEntry("the receipt's public-log entry does not verify: %v", anchorErr)
+		return failEntry("the public-log entry of the receipt does not verify: %v", anchorErr)
 	}
 	signer, signerErr := entrySignerOf(a.EntryBody)
 	if signerErr != nil {
-		return failSigner("the receipt's public-log entry has no valid signer: %v", signerErr)
+		return failSigner("the public-log entry of the receipt has no valid signer: %v", signerErr)
 	}
 	rep.SignerFP = signer
 	key, pinned := pinnedEntrySigners[signer]
 	if !pinned {
-		return failSigner("the receipt's public-log entry was logged by key %s, which is not a published "+
+		return failSigner("the public-log entry of the receipt was logged by key %s, which is not a published "+
 			"Verdifax log-signing key: anyone can add entries to the public log", truncate(signer, 16))
 	}
 	rep.SignerName = key.Name
 	rep.AnchoredAt = utc(a.IntegratedTime)
 	if !signerAcceptsAt(key, a.IntegratedTime) {
-		return failSigner("the receipt's entry was logged at %s, outside the period in which %s is accepted",
+		return failSigner("the entry of the receipt was logged at %s, outside the period in which %s is accepted",
 			rep.AnchoredAt, key.Name)
 	}
 	clock, clockErr := time.Parse(time.RFC3339Nano, f.clock)
 	if clockErr != nil {
-		return fail("the receipt's clock %q is not an RFC 3339 time", safePrefix(f.clock))
+		return fail("the clock of the receipt, %q, is not an RFC 3339 time", safePrefix(f.clock))
 	}
 	gap := int64(float64(a.IntegratedTime) - float64(clock.UnixNano())/1e9)
 	rep.GapSeconds = &gap
 	rep.WindowSeconds = artifacts.ReceiptAnchoringWindowSeconds
 	if float64(gap) < -anchoringClockSkew.Seconds() || gap > artifacts.ReceiptAnchoringWindowSeconds {
-		return failSigner("the receipt's entry was logged at %s, outside the %d-second window after the "+
-			"receipt's clock (%s): the entry was made later than the receipt claims",
+		return failSigner("the entry of the receipt was logged at %s, outside the %d-second window after the "+
+			"clock of the receipt (%s): the entry was made later than the receipt claims",
 			rep.AnchoredAt, artifacts.ReceiptAnchoringWindowSeconds, f.clock)
 	}
 	rep.Anchored, rep.AllPassed, rep.VerdictTier = true, true, "VERIFIED_ANCHORED"
@@ -593,7 +593,7 @@ func printReceiptReport(r *ReceiptReport) {
 	fmt.Printf("  Run:              %d (%s)\n", r.RunID, runNote)
 	fmt.Printf("  Receipt clock:    %s\n", r.ReceiptClock)
 	if r.HashOK {
-		fmt.Printf("  Receipt hash:     ✓ recomputes from the receipt's own fields (%s)\n", truncate(r.ReceiptHash, 16))
+		fmt.Printf("  Receipt hash:     ✓ recomputes from the fields of the receipt itself (%s)\n", truncate(r.ReceiptHash, 16))
 	}
 	if len(r.Summary) > 0 {
 		fmt.Println("  Receipt says (the values checked; any viewer must show the same):")
@@ -604,7 +604,7 @@ func printReceiptReport(r *ReceiptReport) {
 	if r.Anchored {
 		fmt.Printf("  Public-log entry: ✓ %s, verified offline\n", r.AnchorLogEntry)
 		fmt.Printf("  Logged by:        %s (%s)\n", r.SignerName, truncate(r.SignerFP, 16))
-		fmt.Printf("  Logged at:        %s, %ds after the receipt's clock\n", r.AnchoredAt, *r.GapSeconds)
+		fmt.Printf("  Logged at:        %s, %ds after the clock of the receipt\n", r.AnchoredAt, *r.GapSeconds)
 		fmt.Printf("  Anchoring window: %ds and met; a later re-log would fail\n", r.WindowSeconds)
 		fmt.Printf("     View on https://search.sigstore.dev/?logIndex=%s\n", r.AnchorLogEntry)
 	}

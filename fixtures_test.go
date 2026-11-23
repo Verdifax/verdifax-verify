@@ -42,6 +42,13 @@ var fixtureVerdicts = []fixtureVerdict{
 	// names the account and both policies; production records of November 12.
 	{"testdata/round59/run-3223-key-policy.json", "genuine", "VERIFIED_ANCHORED", 0},
 	{"testdata/round59/run-3236-account-refusal-receipt.json", "genuine", "VERIFIED_ANCHORED", 0},
+	// Round 64 (R226): production records of November 22, 2026 that carry the
+	// fields verifier v0.38.0 added. Run 5201 was sealed through the MCP
+	// server, so its attested context declares client_name and
+	// client_version; its rule requires a sign-off, so alone it reads
+	// SIGN-OFF NOT SHOWN. Run 5208 seals a declared data use.
+	{"testdata/round64/run-5201-mcp-client.json", "genuine", "ANCHORED_SIGNOFF_NOT_SHOWN", 4},
+	{"testdata/round64/run-5208-data-use.json", "genuine", "VERIFIED_ANCHORED", 0},
 	{"testdata/policy-gate/builtin-allowed.json", "synthetic", "SELF_CONSISTENT_NOT_ANCHORED", 1},
 	// A test server's refusal, issued after receipts began sealing
 	// anchor_required, carries no anchor, so the verifier fails it.
@@ -250,6 +257,8 @@ var genuineForgerRewritable = map[string]forgerPin{
 	"testdata/round8/run-239-intact.json":                    {0, noPaths},
 	"testdata/round59/run-3235-signoff-required.json":        {0, noPaths},
 	"testdata/round59/run-3223-key-policy.json":              {0, noPaths},
+	"testdata/round64/run-5201-mcp-client.json":              {0, noPaths},
+	"testdata/round64/run-5208-data-use.json":                {0, noPaths},
 }
 
 func TestEveryGenuineFixtureKeepsItsForgerResult(t *testing.T) {

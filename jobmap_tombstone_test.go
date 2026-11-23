@@ -206,7 +206,7 @@ func TestADeletedStepsSealedLinksKeepTheJobCheckable(t *testing.T) {
 	}
 	stray := linkedTombstoneRecord(t, f, "credit", hashOf("b"), &artifacts.DeletedJobLinks{PreviousRecordHashes: []string{hashOf("e")}})
 	if r := checkJobMap([]jobRecord{read, stray, income, step(hashOf("d"), "decide", true, hashOf("b"), hashOf("c"))}); r.Verdict != "FAILED" ||
-		!strings.Contains(strings.Join(r.Problems, " "), "by its tombstone's sealed links") {
+		!strings.Contains(strings.Join(r.Problems, " "), "by the sealed links of its tombstone") {
 		t.Fatalf("a deleted step following a record not here fails: %+v", r)
 	}
 	finalDeleted := linkedTombstoneRecord(t, f, "decide", hashOf("d"), &artifacts.DeletedJobLinks{PreviousRecordHashes: []string{hashOf("b"), hashOf("c")}, Final: true})

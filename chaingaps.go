@@ -128,7 +128,7 @@ func checkChainGap(g *artifacts.RestoreGap, chain string, keyID, next int64) (in
 		return 0, fmt.Errorf("it is a restore gap of the %s chain, not of this one", g.Chain)
 	}
 	if g.LostFrom != next {
-		return 0, fmt.Errorf("its restore gap names places %d to %d, and the chain's next place is %d", g.LostFrom, g.LostTo, next)
+		return 0, fmt.Errorf("its restore gap names places %d to %d, and the next place of the chain is %d", g.LostFrom, g.LostTo, next)
 	}
 	if err := checkSealedEntry(g.Validate(), g.ComputeHash(), g.RestoreGapHash, g.RecordedAt, "recorded_at",
 		g.Anchor, artifacts.RestoreGapKind, g.LeafHash()); err != nil {
@@ -151,7 +151,7 @@ func checkChainInterrupted(c *artifacts.ChainInterrupted, chain string, keyID, n
 		return 0, fmt.Errorf("it is an interrupted record of the %s chain, not of this one", c.Chain)
 	}
 	if c.Place != next {
-		return 0, fmt.Errorf("its interrupted record closes place %d, and the chain's next place is %d", c.Place, next)
+		return 0, fmt.Errorf("its interrupted record closes place %d, and the next place of the chain is %d", c.Place, next)
 	}
 	if err := checkSealedEntry(c.Validate(), c.ComputeHash(), c.InterruptedHash, c.RecordedAt, "recorded_at",
 		c.Anchor, artifacts.ChainInterruptedKind, c.LeafHash()); err != nil {

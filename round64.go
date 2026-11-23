@@ -193,11 +193,11 @@ func checkInputsSetup(where string, in *artifacts.PolicyInputs, declared *artifa
 	s := in.Setup
 	switch {
 	case s.AttestedByVerdifax != nil:
-		return fmt.Errorf("%s seals setup facts stated by Verdifax's AI review, which no decision reads: the review states them only after the rules ran", where)
+		return fmt.Errorf("%s seals setup facts stated by the AI review by Verdifax, which no decision reads: the review states them only after the rules ran", where)
 	case s.DeclaredByCaller == nil:
 		return fmt.Errorf("%s seals an empty setup, which the server never seals", where)
 	case haveDeclared && !reflect.DeepEqual(s.DeclaredByCaller, declared):
-		return fmt.Errorf("%s seals setup facts that differ from what the record's attested context declares: the record stores the declaration twice and its copies disagree", where)
+		return fmt.Errorf("%s seals setup facts that differ from what the attested context of the record declares: the record stores the declaration twice and its copies disagree", where)
 	}
 	return nil
 }
@@ -240,7 +240,7 @@ func round64ReceiptProblem(c *artifacts.ReceiptContext) error {
 		return errors.New("the receipt's data_use does not equal the data_use its policy decision's inputs seal: the receipt stores the data-use declaration more than once and its copies disagree")
 	}
 	if formErr := checkDataUseForm(c.DataUse); formErr != nil {
-		return fmt.Errorf("the receipt's data-use declaration: %w", formErr)
+		return fmt.Errorf("the data-use declaration of the receipt: %w", formErr)
 	}
 	if c.SetupHash != "" && !setupHashForm.MatchString(c.SetupHash) {
 		return errors.New("the receipt's setup_hash is not 64 lowercase hex characters")
@@ -271,7 +271,7 @@ func printDeclared(d *DeclaredReport) {
 		fmt.Printf("  %-18s%s\n", "AI assistant:", d.ClientStatement)
 	}
 	if d.SetupHash != "" {
-		fmt.Printf("  %-18s%s, the run's setup fingerprint under its policy's setup watch\n", "Setup:", truncate(d.SetupHash, 16))
+		fmt.Printf("  %-18s%s, the setup fingerprint of the run under the setup watch of its policy\n", "Setup:", truncate(d.SetupHash, 16))
 	}
 }
 
@@ -315,9 +315,9 @@ func setupFactLines(fired *psleval.Rule, inputs *psleval.Inputs, review *artifac
 				case review == nil:
 					value = "no review was sealed"
 				case !stated:
-					value = "Verdifax's AI review stated nothing"
+					value = "the AI review by Verdifax stated nothing"
 				default:
-					value = fmt.Sprintf("Verdifax's AI review stated %q", value)
+					value = fmt.Sprintf("the AI review by Verdifax stated %q", value)
 				}
 				lines = append(lines, fmt.Sprintf("%s: %s; the policy names %s", f.Fact, value, matcherText(f.Match)))
 			}
@@ -371,7 +371,7 @@ func applyReviewSetupHalt(r *ReceiptReport) {
 			continue
 		}
 		if g.ReviewSetupMismatch != "" {
-			r.ReviewSetupHalt = fmt.Sprintf("confirmed: rule %q names the AI review's %s, and the sealed review did not meet it", g.FiredRuleID, g.ReviewSetupMismatch)
+			r.ReviewSetupHalt = fmt.Sprintf("confirmed: rule %q names the %s of the AI review, and the sealed review did not meet it", g.FiredRuleID, g.ReviewSetupMismatch)
 			return
 		}
 	}

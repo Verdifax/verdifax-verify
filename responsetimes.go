@@ -151,7 +151,7 @@ func headClaims(results []feedcount.ResultTime) []string {
 	for _, r := range results {
 		switch r.Standing {
 		case feedcount.StandingUnsignedWithinAsOfHead, feedcount.StandingUnsignedLongerAsOfHead, feedcount.StandingUnsignedNoTargetAsOfHead:
-			out = append(out, fmt.Sprintf("run %d's %s", r.RunID, r.ResultKind))
+			out = append(out, fmt.Sprintf("the %s of run %d", r.ResultKind, r.RunID))
 		}
 	}
 	return out
@@ -182,13 +182,13 @@ func checkResponseTimes(data []byte, after *signalPoint, ownerKeys []string, doc
 		case len(p.Feed) == 0:
 			return fail("the report carries no feed to recount it from; ask for it with pack=1")
 		case p.HeadSequence != p.Head.Sequence:
-			return fail("the report says it was counted up to event %d, and the head it carries is event %d's", p.HeadSequence, p.Head.Sequence)
+			return fail("the report says it was counted up to event %d, and the head it carries is that of event %d", p.HeadSequence, p.Head.Sequence)
 		}
 		statedFrom, fromErr := time.Parse(time.RFC3339Nano, p.From)
 		statedTo, toErr := time.Parse(time.RFC3339Nano, p.To)
 		switch {
 		case fromErr != nil || toErr != nil:
-			return fail("the report's period (%q to %q) is not two RFC 3339 times", safePrefix(p.From), safePrefix(p.To))
+			return fail("the period of the report (%q to %q) is not two RFC 3339 times", safePrefix(p.From), safePrefix(p.To))
 		case !from.IsZero() && !from.Equal(statedFrom), !to.IsZero() && !to.Equal(statedTo):
 			return fail("the report covers %s to %s, and --from and --to give another period", p.From, p.To)
 		case request != nil && (p.RequestTarget == nil || *p.RequestTarget != *request):
@@ -213,7 +213,7 @@ func checkResponseTimes(data []byte, after *signalPoint, ownerKeys []string, doc
 		return fail("the feed ends with no head statement, so no result can be shown unsigned as of a head; fetch the feed to its end")
 	}
 	if stated != nil && stated.Account != c.Feed.Account {
-		return fail("the report is %s's, and its feed is %s's", stated.Account, c.Feed.Account)
+		return fail("the report belongs to %s, and its feed belongs to %s", stated.Account, c.Feed.Account)
 	}
 	c.Account, c.From, c.To, c.RequestTarget = c.Feed.Account, from.UTC().Format(time.RFC3339Nano), to.UTC().Format(time.RFC3339Nano), request
 	c.HeadSequence, c.CompleteAsOf, c.CompleteAge = head.Sequence, c.Feed.CompleteAsOf, c.Feed.CompleteAge
@@ -234,7 +234,7 @@ func checkResponseTimes(data []byte, after *signalPoint, ownerKeys []string, doc
 		}
 	}
 	if claims := headClaims(rep.Results); len(claims) > 0 && c.Feed.headAgeErr != nil {
-		return fail("the report states %s as of the feed's head, and the head statement: %v", strings.Join(claims, ", "), c.Feed.headAgeErr)
+		return fail("the report states %s as of the head of the feed, and the head statement: %v", strings.Join(claims, ", "), c.Feed.headAgeErr)
 	}
 	c.OK = true
 	return c

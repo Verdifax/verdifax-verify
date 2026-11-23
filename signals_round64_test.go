@@ -198,7 +198,7 @@ func TestABrokenRound64FeedFails(t *testing.T) {
 		"review date missing":       {feedRound64Options{noReviewDue: true}, "holds no review.due for it"},
 		"review date sealed twice":  {feedRound64Options{secondReviewDue: true}, "second review.due"},
 		"previous fingerprint":      {feedRound64Options{wrongPrevious: true}, "names previous fingerprint"},
-		"run seals another setup":   {feedRound64Options{runDiffers: true}, "the run's own entry seals"},
+		"run seals another setup":   {feedRound64Options{runDiffers: true}, "the entry of the run itself seals"},
 		"run's setup never sealed":  {feedRound64Options{unknownRun: true}, "no setup change in the feed set it"},
 		"logged before its due":     {feedRound64Options{earlyAnchor: true}, "before the due date"},
 		"replaced activation named": {feedRound64Options{replaced: true}, "had already replaced it"},

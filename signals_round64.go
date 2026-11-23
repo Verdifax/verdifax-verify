@@ -204,7 +204,7 @@ func (f *round64Feed) setupChange(seq int64, c *artifacts.SetupChange) string {
 	last, seen := f.setup[c.Scope]
 	switch {
 	case seen && c.PreviousSetupHash != last:
-		return fmt.Sprintf("its setup change in scope %s names previous fingerprint %s, and the scope's change before it set %s", c.Scope, orNone(truncate(c.PreviousSetupHash, 16)), truncate(last, 16))
+		return fmt.Sprintf("its setup change in scope %s names previous fingerprint %s, and the change before it in the scope set %s", c.Scope, orNone(truncate(c.PreviousSetupHash, 16)), truncate(last, 16))
 	case !seen && f.fromStart && c.PreviousSetupHash != "":
 		return fmt.Sprintf("its setup change is the first in scope %s in a feed read from its start, and names previous fingerprint %s, which no change in the feed set", c.Scope, truncate(c.PreviousSetupHash, 16))
 	}
@@ -224,11 +224,11 @@ func setupChangeFollowedBy(c *artifacts.SetupChange, kind string, got *checkedEn
 	}
 	switch {
 	case kind != wantKind || got.runID != c.RunID || got.recordHash != c.RecordHash:
-		return fmt.Sprintf("the setup change before it names run %d's %s, and this event is not that run's event", c.RunID, c.RecordKind)
+		return fmt.Sprintf("the setup change before it names the %s of run %d, and this event is not the event of that run", c.RecordKind, c.RunID)
 	case c.RecordKind != artifacts.SetupRecordKindRecord && got.receiptKind != c.RecordKind:
-		return fmt.Sprintf("the setup change before it names a %s, and this event's receipt is a %s", c.RecordKind, got.receiptKind)
+		return fmt.Sprintf("the setup change before it names a %s, and the receipt of this event is a %s", c.RecordKind, got.receiptKind)
 	case got.setupHash != c.SetupHash:
-		return fmt.Sprintf("the setup change before it sets fingerprint %s, and the run's own entry seals %s", truncate(c.SetupHash, 16), orNone(truncate(got.setupHash, 16)))
+		return fmt.Sprintf("the setup change before it sets fingerprint %s, and the entry of the run itself seals %s", truncate(c.SetupHash, 16), orNone(truncate(got.setupHash, 16)))
 	}
 	return ""
 }
@@ -303,9 +303,9 @@ func (f *round64Feed) activationAt(seq int64) int64 {
 func (f *round64Feed) finish(headAt int64, haveHead bool) string {
 	if f.pending != nil {
 		if haveHead {
-			return fmt.Sprintf("the feed ends with a setup change for run %d, and Verdifax's head statement says it is complete, so the run's own event is missing", f.pending.RunID)
+			return fmt.Sprintf("the feed ends with a setup change for run %d, and the Verdifax head statement says it is complete, so the event of the run itself is missing", f.pending.RunID)
 		}
-		f.notes = append(f.notes, fmt.Sprintf("the feed ends with a setup change for run %d; the run's own event follows it in the next page.", f.pending.RunID))
+		f.notes = append(f.notes, fmt.Sprintf("the feed ends with a setup change for run %d; the event of the run itself follows it in the next page.", f.pending.RunID))
 	}
 	for _, fa := range f.order {
 		if fa.dueAt.IsZero() || fa.reviewDue != 0 {

@@ -270,11 +270,11 @@ func (f *stopFeed) placed(seq int64, got *checkedEntry, isOwnerKey func(int64) b
 		key, shown := f.keys[s.KeyID]
 		switch {
 		case !shown:
-			f.notes = append(f.notes, fmt.Sprintf("key %d placed the owner's stop at event %d; its creation is not in this part of the feed, so whether it is the owner key or a member key granted the stop is not shown.", s.KeyID, seq))
+			f.notes = append(f.notes, fmt.Sprintf("key %d placed the owner stop at event %d; its creation is not in this part of the feed, so whether it is the owner key or a member key granted the stop is not shown.", s.KeyID, seq))
 		case key.scope != artifacts.KeyScopeRun || !containsString(key.tools, artifacts.AgentStopPermission):
-			return fmt.Sprintf("key %d placed the owner's stop, and it is not the owner key; its key.created record (event %d) seals no %s grant in its tool allowlist", s.KeyID, key.sequence, artifacts.AgentStopPermission)
+			return fmt.Sprintf("key %d placed the owner stop, and it is not the owner key; its key.created record (event %d) seals no %s grant in its tool allowlist", s.KeyID, key.sequence, artifacts.AgentStopPermission)
 		case s.OwnerSignature != nil:
-			return fmt.Sprintf("member key %d placed the owner's stop with a request-key signature; a member key's stop is sealed unsigned, and only the owner key's request key signs a stop", s.KeyID)
+			return fmt.Sprintf("member key %d placed the owner stop with a request-key signature; the stop of a member key is sealed unsigned, and only the request key of the owner key signs a stop", s.KeyID)
 		default:
 			p.ByMemberKey = true
 		}
@@ -294,7 +294,7 @@ func (f *stopFeed) lifted(seq int64, got *checkedEntry, isOwnerKey func(int64) b
 	holder := s.Holder()
 	if holder == "owner" {
 		if key, shown := f.keys[s.KeyID]; shown && !isOwnerKey(s.KeyID) {
-			return fmt.Sprintf("key %d lifted the owner's stop, and it is a member key (created at event %d); a member key can never resume the account", s.KeyID, key.sequence)
+			return fmt.Sprintf("key %d lifted the owner stop, and it is a member key (created at event %d); a member key can never resume the account", s.KeyID, key.sequence)
 		}
 	}
 	p := f.stopAt[s.LiftsSequence]
@@ -306,7 +306,7 @@ func (f *stopFeed) lifted(seq int64, got *checkedEntry, isOwnerKey func(int64) b
 		if f.known {
 			return fmt.Sprintf("it lifts a stop at event %d, which the feed does not show", s.LiftsSequence)
 		}
-		f.notes = append(f.notes, fmt.Sprintf("event %d lifts the %s stop at event %d, which is not in this part of the feed; check from the feed's start to see it.", seq, holderName(holder), s.LiftsSequence))
+		f.notes = append(f.notes, fmt.Sprintf("event %d lifts the %s stop at event %d, which is not in this part of the feed; check from the start of the feed to see it.", seq, holderName(holder), s.LiftsSequence))
 		delete(f.holds, holder)
 	case p.Holder != holder:
 		return fmt.Sprintf("%s lifts the %s stop placed at event %d; each holder lifts only its own stop", holderName(holder), holderName(p.Holder), p.StopSequence)
@@ -370,7 +370,7 @@ func (f *stopFeed) runRefusedForStop(seq int64, got *checkedEntry) string {
 		return ""
 	}
 	if f.known {
-		return fmt.Sprintf("run %d was refused because the account was stopped (%s), and no stop stood on the account then; if the customer's own policy has a rule named %s, give it with --signals-policy",
+		return fmt.Sprintf("run %d was refused because the account was stopped (%s), and no stop stood on the account then; if the policy of the customer itself has a rule named %s, give it with --signals-policy",
 			got.runID, artifacts.StopReasonCode, artifacts.StopRuleID)
 	}
 	f.notes = append(f.notes, fmt.Sprintf("event %d is run %d refused because the account was stopped; no stop stands in this part of the feed before it, so the stop it fell under is earlier than the point checked.", seq, got.runID))
@@ -500,8 +500,8 @@ func refusalEntryText(r *artifacts.SignOffRefusal) string {
 	if r == nil {
 		return ""
 	}
-	return fmt.Sprintf("a registered approver key (approver %d) signed %s on run %d's %s, refused under the stop at event %d (%s)",
-		r.ApproverID, r.Decision, r.Target.RunID, r.Target.Kind, r.StopSequence, r.ReasonCode)
+	return fmt.Sprintf("a registered approver key (approver %d) signed %s on the %s of run %d, refused under the stop at event %d (%s)",
+		r.ApproverID, r.Decision, r.Target.Kind, r.Target.RunID, r.StopSequence, r.ReasonCode)
 }
 
 // targetEntryText says a passed response target on its event's line.
@@ -509,6 +509,6 @@ func targetEntryText(r *artifacts.SignOffTargetPassed) string {
 	if r == nil {
 		return ""
 	}
-	return fmt.Sprintf("the customer's %s target of %d seconds on run %d's %s (event %d), counted from %s (%s), passed at %s with no %s sign-off on the public log by then",
-		r.Source, r.Within, r.RunID, r.ResultKind, r.ResultSequence, r.Start, r.StartBasis, r.Deadline, r.Compare)
+	return fmt.Sprintf("the %s target of %d seconds, set by the customer, on the %s of run %d (event %d), counted from %s (%s), passed at %s with no %s sign-off on the public log by then",
+		r.Source, r.Within, r.ResultKind, r.RunID, r.ResultSequence, r.Start, r.StartBasis, r.Deadline, r.Compare)
 }

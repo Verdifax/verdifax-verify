@@ -119,16 +119,16 @@ func (f *targetFeed) check(seq int64, got *checkedEntry) string {
 	}
 	key := r.ResultKind + ":" + strconv.FormatInt(r.RunID, 10)
 	if earlier, twice := f.passed[key]; twice {
-		return fmt.Sprintf("it is a second passed target for run %d's %s, after event %d; one is sealed per result", r.RunID, r.ResultKind, earlier)
+		return fmt.Sprintf("it is a second passed target for the %s of run %d, after event %d; one is sealed per result", r.ResultKind, r.RunID, earlier)
 	}
 	f.passed[key] = seq
 	switch {
 	case resultKindOf(res.kind) != r.ResultKind:
 		return fmt.Sprintf("its target names a %s, and event %d is a %s", r.ResultKind, r.ResultSequence, res.kind)
 	case res.runID != r.RunID || res.hash != r.ResultHash:
-		return fmt.Sprintf("its target names run %d's result %s, and event %d is run %d's %s", r.RunID, truncate(r.ResultHash, 16), r.ResultSequence, res.runID, truncate(res.hash, 16))
+		return fmt.Sprintf("its target names run %d, result %s, and event %d is run %d, result %s", r.RunID, truncate(r.ResultHash, 16), r.ResultSequence, res.runID, truncate(res.hash, 16))
 	case r.Source != targetSource(res.kind):
-		return fmt.Sprintf("its target comes from %s, and a %s result's target comes from %s", r.Source, res.kind, targetSource(res.kind))
+		return fmt.Sprintf("its target comes from %s, and the target of a %s result comes from %s", r.Source, res.kind, targetSource(res.kind))
 	case res.target != nil && (res.target.Within != r.Within || res.target.Compare != r.Compare || res.target.Notice != r.Notice):
 		return fmt.Sprintf("its target (%d seconds, %s, %s) is not the one its result sealed (%d seconds, %s, %s)",
 			r.Within, r.Compare, r.Notice, res.target.Within, res.target.Compare, res.target.Notice)
@@ -167,13 +167,13 @@ func targetStartMatches(r *artifacts.SignOffTargetPassed, res *feedResult) strin
 	if res.logged > 0 {
 		want := time.Unix(res.logged, 0).UTC().Format(time.RFC3339Nano)
 		if r.StartBasis != artifacts.TargetStartPublicLog || r.Start != want {
-			return fmt.Sprintf("its start is %s (%s), and its result's entry is on the public log at %s", r.Start, r.StartBasis, want)
+			return fmt.Sprintf("its start is %s (%s), and the entry of its result is on the public log at %s", r.Start, r.StartBasis, want)
 		}
 		return ""
 	}
 	clock, parseErr := time.Parse(time.RFC3339Nano, res.recordClock)
 	if parseErr != nil {
-		return fmt.Sprintf("its result's record time %q is not an RFC 3339 time", safePrefix(res.recordClock))
+		return fmt.Sprintf("the record time of its result, %q, is not an RFC 3339 time", safePrefix(res.recordClock))
 	}
 	if want := clock.UTC().Format(time.RFC3339Nano); r.StartBasis != artifacts.TargetStartRecordTime || r.Start != want {
 		return fmt.Sprintf("its start is %s (%s), and its result, which has no public-log entry of its own, was sealed at %s", r.Start, r.StartBasis, want)

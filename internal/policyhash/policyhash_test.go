@@ -149,7 +149,7 @@ var strictRefusals = map[string]struct {
 	"synthetic_lone_surrogate.json":                {artifacts.ErrNotStrictJSON, "unpaired high surrogate"},
 	"integer_valued_float_priority.json":           {artifacts.ErrNotStrictJSON, `$.rules[0].priority is written "1.0"`},
 	"exponent_seconds.json":                        {artifacts.ErrNotStrictJSON, `$.rules[0].conditions[0].seconds is written "1e3"`},
-	"trailing_data.json":                           {artifacts.ErrNotStrictJSON, "data after the document's closing token"},
+	"trailing_data.json":                           {artifacts.ErrNotStrictJSON, "data after the closing token of the document"},
 }
 
 // The server's psl.Parse refuses every document in testdata/refused/
