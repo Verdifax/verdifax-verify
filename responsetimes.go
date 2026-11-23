@@ -175,8 +175,10 @@ func checkResponseTimes(data []byte, after *signalPoint, ownerKeys []string, doc
 		}
 		stated, c.Recounted = &p, true
 		switch {
-		case p.CountingRules != feedcount.CountingRules:
-			return fail("the report was counted by rules %q, and this verifier holds %s", safePrefix(p.CountingRules), feedcount.CountingRules)
+		case !feedcount.KnownCountingRules(p.CountingRules):
+			// v1 and v2 measure response times the same way; v2 changed only
+			// the owner-stop figures of a summary (R376).
+			return fail("the report was counted by rules %q, and this verifier holds %s and %s", safePrefix(p.CountingRules), feedcount.CountingRules, feedcount.CountingRulesV1)
 		case p.Head == nil:
 			return fail("the report carries no feed head, so nothing it states about a result unsigned as of a head can be checked; the account's feed had no event when it was made")
 		case len(p.Feed) == 0:

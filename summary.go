@@ -104,8 +104,10 @@ func checkSummary(summaryData, feedData []byte, given *artifacts.FeedHead, after
 		return fail("the summary: %v", entryErr)
 	}
 	c.OnPublicLog, c.LogEntry = logTimeText(p.Anchor.IntegratedTime), p.Anchor.LogEntryID
-	if p.CountingRules != feedcount.CountingRules {
-		return fail("the summary was counted by rules %q, and this verifier holds %s", safePrefix(p.CountingRules), feedcount.CountingRules)
+	// v2 (R376) adds the signed and unsigned owner-stop figures; a summary
+	// stated by v1 is recounted by v1, so every published summary verifies.
+	if !feedcount.KnownCountingRules(p.CountingRules) {
+		return fail("the summary was counted by rules %q, and this verifier holds %s and %s", safePrefix(p.CountingRules), feedcount.CountingRules, feedcount.CountingRulesV1)
 	}
 	from, _ := time.Parse(time.RFC3339, p.From)
 	to, _ := time.Parse(time.RFC3339, p.To)
@@ -148,7 +150,7 @@ func checkSummary(summaryData, feedData []byte, given *artifacts.FeedHead, after
 	if why := eventsAfterHead(&p, &c.Feed, to); why != "" {
 		return fail("%s", why)
 	}
-	counted, countErr := feedcount.Summarize(countedEvents(c.Feed.events, p.HeadSequence), from, to, countHead(head))
+	counted, countErr := feedcount.SummarizeByRules(p.CountingRules, countedEvents(c.Feed.events, p.HeadSequence), from, to, countHead(head))
 	if countErr != nil {
 		return fail("the feed cannot be counted: %v", countErr)
 	}
@@ -158,7 +160,7 @@ func checkSummary(summaryData, feedData []byte, given *artifacts.FeedHead, after
 	}
 	differ := 0
 	for _, f := range p.Figures {
-		fc := SummaryFigureCheck{Name: f.Name, Words: figureWords(f.Name), Stated: f.Value}
+		fc := SummaryFigureCheck{Name: f.Name, Words: feedcount.FigureWords(f.Name), Stated: f.Value}
 		r, found := recounted[f.Name]
 		switch {
 		case !found:
@@ -180,7 +182,7 @@ func checkSummary(summaryData, feedData []byte, given *artifacts.FeedHead, after
 		c.Figures = append(c.Figures, fc)
 	}
 	for name, r := range recounted {
-		c.Unstated = append(c.Unstated, fmt.Sprintf("%s (%s): %d", name, figureWords(name), r.Value))
+		c.Unstated = append(c.Unstated, fmt.Sprintf("%s (%s): %d", name, feedcount.FigureWords(name), r.Value))
 	}
 	sort.Strings(c.Unstated)
 	if c.Feed.ContinuityFrom != "start" {
@@ -273,123 +275,6 @@ func eventsAfterHead(p *artifacts.PeriodSummary, feed *SignalFeedCheck, to time.
 		return fmt.Sprintf("event %d, after the head of the summary (event %d), was sealed at %s, before the end of the period, %s, so the summary did not count it", s, p.HeadSequence, at[s], p.To)
 	}
 	return ""
-}
-
-// figureWords says a figure's name in plain words. A sign-off figure says a
-// registered approver key signed, never that a person approved.
-func figureWords(name string) string {
-	base, qualifier, _ := strings.Cut(name, ":")
-	by := func(v string) string {
-		switch v {
-		case "owner":
-			return "the owner"
-		case "verdifax_admin":
-			return "Verdifax"
-		case "unstated":
-			return "a decider the record does not state"
-		}
-		return v
-	}
-	words := map[string]string{
-		"runs.sealed":                            "runs sealed, each a successful run with its record",
-		"runs.sealed.job_steps":                  "runs sealed as steps of a job",
-		"runs.sealed.signoff_required":           "runs sealed whose rule requires a sign-off",
-		"runs.sealed.target_sealed":              "runs sealed with a response target sealed in the result",
-		"runs.refused":                           "runs refused",
-		"runs.refused.receipt":                   "runs refused with a " + qualifier,
-		"runs.refused.code":                      "runs refused with code " + qualifier,
-		"runs.refused.account_stopped":           "runs refused because the account was stopped",
-		"runs.refused.data_use_declared":         "runs refused that sealed a declared data use",
-		"runs.refused.target_sealed":             "runs refused with a response target sealed in the receipt",
-		"runs.halted":                            "runs halted",
-		"runs.halted.receipt":                    "runs halted with a " + qualifier,
-		"runs.halted.code":                       "runs halted with code " + qualifier,
-		"runs.halted.target_sealed":              "runs halted with a response target sealed in the receipt",
-		"runs.failed":                            "runs that failed with a server error",
-		"runs.failed.class":                      "runs that failed with error class " + qualifier,
-		"runs.failed.stage":                      "runs that failed at stage " + qualifier,
-		"signoffs.made":                          "sign-offs a registered approver key signed",
-		"signoffs.made.target":                   "sign-offs a registered approver key signed on a " + qualifier,
-		"signoffs.refused":                       "sign-offs refused because the account was stopped",
-		"results.signoff_required.none_in_force": "results whose rule requires a sign-off, with no sign-off in force at the period's end",
-		"policy.changed":                         "policy changes",
-		"policy.changed.signed":                  "policy changes signed by the owner's request key",
-		"policy.changed.chain":                   "policy changes to " + qualifier + " policies",
-		"keys.created":                           "keys created",
-		"keys.created.by":                        "keys created by " + by(qualifier),
-		"keys.revoked":                           "keys revoked",
-		"keys.revoked.by":                        "keys revoked by " + by(qualifier),
-		"approvers.registered":                   "approver keys registered",
-		"approvers.registered.by":                "approver keys registered by " + by(qualifier),
-		"approvers.revoked":                      "approver keys revoked",
-		"approvers.revoked.by":                   "approver keys revoked by " + by(qualifier),
-		"account.changed":                        "account changes",
-		"account.changed.by":                     "account changes by " + by(qualifier),
-		"runs.deleted":                           "records deleted",
-		"runs.deleted.by":                        "records deleted by " + by(qualifier),
-		"runs.published":                         "records made public",
-		"runs.published.by":                      "records made public by " + by(qualifier),
-		"runs.unpublished":                       "records withdrawn from public view",
-		"runs.unpublished.by":                    "records withdrawn from public view by " + by(qualifier),
-		"chain.gaps":                             "declared restore gaps",
-		"chain.interrupted":                      "entries the public log never confirmed, each closed by its own record",
-		"setup.changed":                          "setup changes the policy's watch saw",
-		"review.due":                             "declared policy review dates that passed",
-		"account.stops":                          "stops placed on the account",
-		"account.stops.by":                       "stops placed on the account by " + by(qualifier),
-		"account.resumes":                        "stops lifted",
-		"account.resumes.by":                     "stops lifted by " + by(qualifier),
-		"account.stopped_seconds":                "seconds the account was stopped inside the period, any stop standing",
-		"account.stopped_seconds.by":             "seconds the account was stopped inside the period by " + by(qualifier),
-		"signoff.target_passed":                  "response targets that passed with no sign-off of the compared kind on the public log",
-		"signoff.target_passed.result":           "response targets that passed on a " + qualifier,
-		"events.record_deleted.unplaced":         "events whose record was deleted, inside the period's span of events, whose sealed time can no longer be read",
-	}
-	if w, ok := words[base]; ok {
-		return w
-	}
-	switch {
-	case strings.HasPrefix(name, "signoffs.made."):
-		return "sign-offs in which a registered approver key signed " + strings.TrimPrefix(name, "signoffs.made.")
-	case strings.HasPrefix(name, "results.decision_in_force."):
-		return "results whose decision in force at the period's end is " + strings.TrimPrefix(name, "results.decision_in_force.") + ", as a registered approver key signed it"
-	case strings.HasPrefix(name, "response_times."):
-		return responseTimeFigureWords(strings.TrimPrefix(name, "response_times."))
-	}
-	return name
-}
-
-// responseTimeFigureWords says a response-time figure in plain words.
-func responseTimeFigureWords(rest string) string {
-	lists := map[string]string{
-		"results":                                "results measured for a response time",
-		"results_deleted":                        "results measured whose run was deleted",
-		"with_target":                            "results with a response target",
-		"unsigned_as_of_head":                    "results with no sign-off of the compared kind as of the head",
-		"longer_than_target.signed_after":        "results whose wait was longer than the target, signed after it",
-		"longer_than_target.unsigned_as_of_head": "results unsigned as of the head and longer than the target",
-	}
-	if w, ok := lists[rest]; ok {
-		return w
-	}
-	ends := map[string]string{"first_signoff": "the first sign-off", "first_approval": "the first approval", "decision_in_force": "the decision in force"}
-	parts := strings.Split(rest, ".")
-	end, known := ends[parts[0]]
-	if !known {
-		return "response_times." + rest
-	}
-	if len(parts) == 2 && parts[1] == "reached" {
-		return "results that reached " + end
-	}
-	if len(parts) == 3 {
-		clock := map[string]string{"log": "on the public log", "record": "on the sealed record times"}[parts[1]]
-		stat := map[string]string{"median_seconds": "median (lower middle) wait in seconds", "p90_seconds": "90th percentile wait in seconds",
-			"longest_seconds": "longest wait in seconds"}[parts[2]]
-		if clock != "" && stat != "" {
-			return stat + " to " + end + ", " + clock + ", as measured"
-		}
-	}
-	return "response_times." + rest
 }
 
 // runSummaryMode is --summary with --signals.

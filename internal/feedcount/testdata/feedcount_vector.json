@@ -1,6 +1,6 @@
 {
-  "note": "verdifax.period-summary-counting.v1 over a synthetic feed; each event's entry carries only the fields the counting rules read",
-  "counting_rules": "verdifax.period-summary-counting.v1",
+  "note": "verdifax.period-summary-counting.v2 over a synthetic feed; each event's entry carries only the fields the counting rules read",
+  "counting_rules": "verdifax.period-summary-counting.v2",
   "from": "2026-11-01T00:00:00Z",
   "to": "2026-11-02T00:00:00Z",
   "head": {
@@ -497,6 +497,13 @@
       ]
     },
     {
+      "name": "account.stopped_seconds.by:owner.unsigned",
+      "value": 3600,
+      "sequences": [
+        22
+      ]
+    },
+    {
       "name": "account.stopped_seconds.by:verdifax_admin",
       "value": 3600,
       "sequences": [
@@ -515,6 +522,13 @@
     },
     {
       "name": "account.stops.by:owner",
+      "value": 1,
+      "sequences": [
+        22
+      ]
+    },
+    {
+      "name": "account.stops.by:owner.unsigned",
       "value": 1,
       "sequences": [
         22

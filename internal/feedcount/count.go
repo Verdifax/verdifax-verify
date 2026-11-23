@@ -1,6 +1,7 @@
 package feedcount
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -54,6 +55,21 @@ func decider(by string) string {
 	return codePart(by)
 }
 
+// stopHolder names who placed a stop for its figures. Under v2 an owner's
+// stop is owner.signed when the owner's request-key signature came with it
+// and owner.unsigned when the record is the server's word (round 64, N32);
+// under v1, and for Verdifax's stops, it is the decider alone.
+func stopHolder(f *facts, rules string) string {
+	by := decider(f.decidedBy)
+	if rules == CountingRulesV1 || by != "owner" {
+		return by
+	}
+	if f.ownerSigned {
+		return "owner.signed"
+	}
+	return "owner.unsigned"
+}
+
 // Summarize counts the figures of the period from (included) to to
 // (excluded) over the feed up to the head. Every event is placed by its own
 // sealed time; an event whose record was deleted has none to read, and is
@@ -61,6 +77,16 @@ func decider(by string) string {
 // the first and the last event placed in the period. The figures are sorted
 // by name.
 func Summarize(events []Event, from, to time.Time, head Head) ([]Figure, error) {
+	return SummarizeByRules(CountingRules, events, from, to, head)
+}
+
+// SummarizeByRules counts as Summarize does, by the named counting rules:
+// a summary stated under v1 is recounted by v1, which has no signed and
+// unsigned stop figures.
+func SummarizeByRules(rules string, events []Event, from, to time.Time, head Head) ([]Figure, error) {
+	if !KnownCountingRules(rules) {
+		return nil, fmt.Errorf("%w: counting rules %q are not ones this package holds", errFeed, rules)
+	}
 	l, ledgerErr := readLedger(events, head)
 	if ledgerErr != nil {
 		return nil, ledgerErr
@@ -75,7 +101,7 @@ func Summarize(events []Event, from, to time.Time, head Head) ([]Figure, error) 
 			firstPlaced = f.ev.Sequence
 		}
 		lastPlaced = f.ev.Sequence
-		countEvent(fs, f)
+		countEvent(fs, f, rules)
 	}
 	for _, ev := range l.deleted {
 		if firstPlaced > 0 && ev.Sequence > firstPlaced && ev.Sequence < lastPlaced {
@@ -83,7 +109,7 @@ func Summarize(events []Event, from, to time.Time, head Head) ([]Figure, error) 
 		}
 	}
 	l.countDecisions(fs, from, to)
-	l.countStops(fs, from, to)
+	l.countStops(fs, from, to, rules)
 	l.countResponseTimes(fs, from, to, head)
 	out := make([]Figure, 0, len(fs.counts)+len(fs.values))
 	for name, refs := range fs.counts {
@@ -97,7 +123,7 @@ func Summarize(events []Event, from, to time.Time, head Head) ([]Figure, error) 
 }
 
 // countEvent counts one event placed in the period.
-func countEvent(fs *figures, f *facts) {
+func countEvent(fs *figures, f *facts, rules string) {
 	ref := f.ev.ref()
 	e := &f.e
 	switch f.ev.Kind {
@@ -180,6 +206,9 @@ func countEvent(fs *figures, f *facts) {
 	case kindAccountStopped:
 		fs.add("account.stops", ref)
 		fs.add("account.stops.by:"+decider(f.decidedBy), ref)
+		if by := stopHolder(f, rules); by != decider(f.decidedBy) {
+			fs.add("account.stops.by:"+by, ref)
+		}
 	case kindAccountResumed:
 		fs.add("account.resumes", ref)
 		fs.add("account.resumes.by:"+decider(f.decidedBy), ref)
@@ -215,9 +244,9 @@ func (l *ledger) countDecisions(fs *figures, from, to time.Time) {
 // countStops states how long the account was stopped inside the period, by
 // the stop and resume records' sealed times: in all (any hold standing) and
 // by each holder, with the stop and resume events that bound each stretch.
-func (l *ledger) countStops(fs *figures, from, to time.Time) {
+func (l *ledger) countStops(fs *figures, from, to time.Time, rules string) {
 	type stretch struct {
-		by         string
+		by, signed string
 		start, end time.Time
 		refs       []EventRef
 	}
@@ -229,7 +258,7 @@ func (l *ledger) countStops(fs *figures, from, to time.Time) {
 		}
 		switch f.ev.Kind {
 		case kindAccountStopped:
-			s := &stretch{by: decider(f.decidedBy), start: f.clock, end: to, refs: []EventRef{f.ev.ref()}}
+			s := &stretch{by: decider(f.decidedBy), signed: stopHolder(f, rules), start: f.clock, end: to, refs: []EventRef{f.ev.ref()}}
 			open[f.ev.Sequence] = s
 			stretches = append(stretches, s)
 		case kindAccountResumed:
@@ -261,6 +290,10 @@ func (l *ledger) countStops(fs *figures, from, to time.Time) {
 		}
 		byHolder[s.by] += end.Sub(start)
 		refsBy[s.by] = append(refsBy[s.by], s.refs...)
+		if s.signed != s.by {
+			byHolder[s.signed] += end.Sub(start)
+			refsBy[s.signed] = append(refsBy[s.signed], s.refs...)
+		}
 		all = append(all, s.refs...)
 		spans = append(spans, [2]time.Time{start, end})
 	}

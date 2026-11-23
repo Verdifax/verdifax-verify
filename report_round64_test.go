@@ -79,7 +79,7 @@ func TestAResponseTimeReportIsRecounted(t *testing.T) {
 		"a median":                          {func(p *responseTimesPack) { p.Aggregates.FirstSignOff.PublicLog.MedianSeconds = 1 }, nil, time.Time{}, time.Time{}, time.Minute, "median_seconds"},
 		"another target":                    {nil, func() *int64 { n := int64(30); return &n }(), time.Time{}, time.Time{}, time.Minute, "--target gives 30 seconds"},
 		"another period":                    {nil, nil, from.Add(time.Minute), to, time.Minute, "give another period"},
-		"other rules":                       {func(p *responseTimesPack) { p.CountingRules = "verdifax.period-summary-counting.v2" }, nil, time.Time{}, time.Time{}, time.Minute, "this verifier holds"},
+		"other rules":                       {func(p *responseTimesPack) { p.CountingRules = "verdifax.period-summary-counting.v9" }, nil, time.Time{}, time.Time{}, time.Minute, "this verifier holds"},
 		"a pending result over an old head": {nil, nil, time.Time{}, time.Time{}, 48 * time.Hour, "as of the head of the feed, and the head statement"},
 		"a head of another event":           {func(p *responseTimesPack) { p.HeadSequence-- }, nil, time.Time{}, time.Time{}, time.Minute, "carries is that of event"},
 		"no feed":                           {func(p *responseTimesPack) { p.Feed = nil }, nil, time.Time{}, time.Time{}, time.Minute, "pack=1"},
@@ -225,7 +225,7 @@ func TestABrokenPeriodSummaryFails(t *testing.T) {
 			p.To = time.Unix(h.Anchor.IntegratedTime, 0).Add(time.Minute).UTC().Format(time.RFC3339)
 		},
 			"not after the end of the period"},
-		"other counting rules": {func(p *artifacts.PeriodSummary) { p.CountingRules = "verdifax.period-summary-counting.v2" }, "this verifier holds"},
+		"other counting rules": {func(p *artifacts.PeriodSummary) { p.CountingRules = "verdifax.period-summary-counting.v9" }, "this verifier holds"},
 		"another head":         {func(p *artifacts.PeriodSummary) { p.HeadStatementHash = strings.Repeat("5", 64) }, "neither the head of the feed page"},
 	} {
 		c := checkSummary(summaryOf(t, f, h, from, to, stated, b.mutate), page, nil, nil, nil, nil)
@@ -342,5 +342,29 @@ func TestTheReportModesExit(t *testing.T) {
 				t.Errorf("%s (json %v): exit %d, want %d", name, asJSON, b.got, b.want)
 			}
 		}
+	}
+}
+
+// R376 (round 64, N32): a summary stated under the v1 counting rules, before
+// v2 split the owner's stops into signed and unsigned, still recounts by v1
+// and verifies, so every summary Verdifax published keeps verifying.
+func TestASummaryStatedByTheV1RulesStillVerifies(t *testing.T) {
+	f := reportFeed(t)
+	h := f.head()
+	from, to := feedStart, time.Unix(h.Anchor.IntegratedTime, 0).Add(-time.Minute)
+	stated := time.Unix(h.Anchor.IntegratedTime, 0).Add(time.Minute)
+	atCheck(t, stated.Add(30*24*time.Hour))
+	asV1 := func(p *artifacts.PeriodSummary) {
+		figs, err := feedcount.SummarizeByRules(feedcount.CountingRulesV1, countedEvents(f.events, h.Sequence), from, to, countHead(h))
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.CountingRules, p.Figures = feedcount.CountingRulesV1, nil
+		for _, fig := range figs {
+			p.Figures = append(p.Figures, artifacts.SummaryFigure{Name: fig.Name, Value: fig.Value, EventsDigest: figureDigest(fig)})
+		}
+	}
+	if c := checkSummary(summaryOf(t, f, h, from, to, stated, asV1), pageWithHead(t, f.events, h), nil, nil, nil, nil); !c.OK {
+		t.Fatalf("a v1 summary with v1 figures: %s", c.Reason)
 	}
 }

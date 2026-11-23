@@ -135,7 +135,7 @@ func buildVector(t *testing.T) vectorFile {
 		t.Fatal(err)
 	}
 	rt, _ := json.Marshal(rep)
-	v := vectorFile{Note: "verdifax.period-summary-counting.v1 over a synthetic feed; each event's entry carries only the fields the counting rules read",
+	v := vectorFile{Note: CountingRules + " over a synthetic feed; each event's entry carries only the fields the counting rules read",
 		CountingRules: CountingRules, From: "2026-11-01T00:00:00Z", To: "2026-11-02T00:00:00Z",
 		Head:    map[string]any{"sequence": vectorHead.Sequence, "integrated_time": vectorHead.Logged, "stated_at": "2026-11-02T01:00:00Z"},
 		Figures: figuresOf(figs), ResponseTimes: rt}
@@ -203,7 +203,9 @@ func TestTheFiguresCountWhatTheRulesSay(t *testing.T) {
 		// the account was stopped 30 minutes and then one hour.
 		"account.stopped_seconds": "5400 [2 3 22 30]", "account.stopped_seconds.by:verdifax_admin": "3600 [2 3 30]",
 		"account.stopped_seconds.by:owner": "3600 [22]",
-		"signoffs.refused":                 "1 [23]", "signoff.target_passed": "1 [24]", "signoff.target_passed.result:receipt": "1 [24]",
+		// v2 (R376): the owner's stop came with no request-key signature.
+		"account.stops.by:owner.unsigned": "1 [22]", "account.stopped_seconds.by:owner.unsigned": "3600 [22]",
+		"signoffs.refused": "1 [23]", "signoff.target_passed": "1 [24]", "signoff.target_passed.result:receipt": "1 [24]",
 		"setup.changed": "1 [14]", "review.due": "1 [15]",
 		"response_times.results": "4 [4 5 8 27]", "response_times.with_target": "3 [4 5 8]", "response_times.unsigned_as_of_head": "1 [5]",
 		"response_times.longer_than_target.signed_after": "1 [8]", "response_times.longer_than_target.unsigned_as_of_head": "1 [5]",
@@ -354,5 +356,56 @@ func TestACodeIsWrittenIntoANameOneWay(t *testing.T) {
 		if got := codePart(in); got != want {
 			t.Errorf("codePart(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// R376 (round 64, N32): under v2 an owner's stop is counted as signed only
+// when the owner's request-key signature came with it and no unsigned
+// statement; under v1 the same feed gives no signed or unsigned figure, so a
+// summary stated by v1 still recounts.
+func TestOwnerStopsAreSplitSignedAndUnsigned(t *testing.T) {
+	stop := func(seq int64, changedAt string, signed bool) Event {
+		entry := map[string]any{"action": "stop", "decided_by": "owner", "changed_at": changedAt}
+		if signed {
+			entry["owner_signature"] = map[string]any{"key_id": 7, "signature": "c2ln"}
+		} else {
+			entry["unsigned"] = "unsigned: the server's word that this account's key asked for the stop; no request-key signature came with it"
+		}
+		raw, _ := json.Marshal(entry)
+		return Event{Sequence: seq, Kind: kindAccountStopped, EventHash: hashOf(seq), Entry: raw}
+	}
+	resume := func(seq, lifts int64, changedAt string) Event {
+		raw, _ := json.Marshal(map[string]any{"action": "resume", "decided_by": "owner", "lifts_sequence": lifts, "changed_at": changedAt,
+			"owner_signature": map[string]any{"key_id": 7, "signature": "c2ln"}})
+		return Event{Sequence: seq, Kind: kindAccountResumed, EventHash: hashOf(seq), Entry: raw}
+	}
+	events := []Event{stop(1, "2026-11-01T01:00:00Z", true), resume(2, 1, "2026-11-01T02:00:00Z"),
+		stop(3, "2026-11-01T03:00:00Z", false), resume(4, 3, "2026-11-01T03:30:00Z")}
+	head := Head{Sequence: 4, Logged: unix("2026-11-02T01:00:00Z"), StatedAt: at("2026-11-02T01:00:00Z")}
+	values := func(rules string) map[string]int64 {
+		figs, err := SummarizeByRules(rules, events, vectorFrom, vectorTo, head)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]int64{}
+		for _, f := range figs {
+			out[f.Name] = f.Value
+		}
+		return out
+	}
+	v2 := values(CountingRules)
+	for name, want := range map[string]int64{"account.stops.by:owner": 2, "account.stops.by:owner.signed": 1, "account.stops.by:owner.unsigned": 1,
+		"account.stopped_seconds.by:owner": 5400, "account.stopped_seconds.by:owner.signed": 3600, "account.stopped_seconds.by:owner.unsigned": 1800} {
+		if v2[name] != want {
+			t.Errorf("v2 %s = %d, want %d (%v)", name, v2[name], want, v2)
+		}
+	}
+	for name := range values(CountingRulesV1) {
+		if strings.HasSuffix(name, ".signed") && strings.HasPrefix(name, "account.") || strings.HasSuffix(name, ".unsigned") {
+			t.Errorf("v1 gives %s, a figure v1 never stated", name)
+		}
+	}
+	if _, err := SummarizeByRules("verdifax.period-summary-counting.v9", events, vectorFrom, vectorTo, head); err == nil {
+		t.Error("rules this package does not hold were counted")
 	}
 }

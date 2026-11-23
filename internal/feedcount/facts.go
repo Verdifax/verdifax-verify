@@ -20,8 +20,14 @@ import (
 // The forms this package states.
 const (
 	// CountingRules names these counting rules. A change to what any figure
-	// counts is a new name.
-	CountingRules = "verdifax.period-summary-counting.v1"
+	// counts is a new name. v2 (round 64, N32, R376) adds, for the owner's
+	// stops, the signed and unsigned figures: account.stops.by:owner.signed
+	// and .unsigned, and the same for account.stopped_seconds. An unsigned
+	// owner stop is the server's word that the owner's key asked for it.
+	CountingRules = "verdifax.period-summary-counting.v2"
+	// CountingRulesV1 are the rules every summary stated before v2 was
+	// counted by; a verifier recounts such a summary by them.
+	CountingRulesV1 = "verdifax.period-summary-counting.v1"
 	// ResponseTimesForm is the form of the response-time report.
 	ResponseTimesForm = "verdifax.response-times.v1"
 )
@@ -165,8 +171,10 @@ type entry struct {
 	Decision string        `json:"decision"`
 	Target   signOffTarget `json:"target"`
 	// account.stopped, account.resumed
-	Action        string `json:"action"`
-	LiftsSequence int64  `json:"lifts_sequence"`
+	Action         string          `json:"action"`
+	LiftsSequence  int64           `json:"lifts_sequence"`
+	OwnerSignature json.RawMessage `json:"owner_signature"`
+	Unsigned       string          `json:"unsigned"`
 	// signoff.target_passed
 	ResultKind string  `json:"result_kind"`
 	Anchor     *anchor `json:"anchor"`
@@ -181,6 +189,9 @@ type facts struct {
 	// logged is the entry's public-log time, or 0.
 	logged    int64
 	decidedBy string
+	// ownerSigned is set on an owner's stop that carries the owner's
+	// request-key signature and no unsigned statement.
+	ownerSigned bool
 	// Receipts: the receipt kind and its code; a failure's class and stage.
 	receiptKind string
 	code        string
@@ -265,6 +276,7 @@ func readFacts(ev *Event) (*facts, error) {
 			}
 		case kindAccountChanged, kindRunDeleted, kindSetupChanged, kindAccountStopped, kindAccountResumed:
 			f.clockText = e.ChangedAt
+			f.ownerSigned = len(e.OwnerSignature) > 0 && string(e.OwnerSignature) != "null" && e.Unsigned == ""
 		case kindReviewDue, kindTargetPassed:
 			f.clockText = e.StatedAt
 		case kindSignOffRefused:
@@ -307,4 +319,9 @@ func names(t signOffTarget, runID int64, resultKind string) bool {
 		return t.Kind == "record" || t.Kind == "job"
 	}
 	return false
+}
+
+// KnownCountingRules reports rules this package counts by.
+func KnownCountingRules(rules string) bool {
+	return rules == CountingRules || rules == CountingRulesV1
 }
