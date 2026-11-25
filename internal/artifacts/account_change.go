@@ -42,6 +42,11 @@ const (
 	AccountOwnerKeyReplacement   = "owner_key.replacement_requested"
 	AccountSettingOwnerReplace   = "setting.owner_replacement"
 	AccountSettingVerdifaxDelete = "setting.verdifax_deletion"
+	// AccountSettingOwnerReads (R405, decided by Robert, November 25, 2026):
+	// whether the account's owner key opens every record, receipt and report
+	// of the account, or none but what is published. Blocked until the owner
+	// allows it, signed by the owner's request key and sealed in the feed.
+	AccountSettingOwnerReads = "setting.owner_reads"
 	// AccountWebhookSubscribed and AccountWebhookDeleted (round 62): the
 	// owner added or removed an address that receives a copy of the
 	// account's events. The value is WebhookValue: the SHA-256 of the
@@ -190,6 +195,7 @@ var accountChangeRules = map[string]accountChangeRule{
 	AccountSettingVerdifaxDelete: {ownerMay: true, values: []string{SettingAllowed, SettingBlocked}},
 	// Round 64: the owner's setting that allows or blocks Verdifax's stop.
 	AccountSettingVerdifaxStop: {ownerMay: true, values: []string{SettingAllowed, SettingBlocked}},
+	AccountSettingOwnerReads:   {ownerMay: true, values: []string{SettingAllowed, SettingBlocked}},
 	AccountWebhookSubscribed:   {ownerMay: true, webhookValue: true},
 	AccountWebhookDeleted:      {ownerMay: true, webhookValue: true},
 }
@@ -198,7 +204,7 @@ var accountChangeRules = map[string]accountChangeRule{
 var AccountChangeActions = []string{AccountCreated, AccountRequestKeyCleared, AccountKeyTierSet, AccountKeySubmitterClassSet,
 	AccountKeyBillingSet, AccountOwnerKeyReplacement, AccountSettingOwnerReplace, AccountSettingVerdifaxDelete,
 	AccountRequestKeyRegistered, AccountRequestKeyRotated, AccountWebhookSubscribed, AccountWebhookDeleted,
-	AccountSettingVerdifaxStop}
+	AccountSettingVerdifaxStop, AccountSettingOwnerReads}
 
 // IsRequestKeyAction reports a change to one key's request key: registered,
 // rotated or cleared.

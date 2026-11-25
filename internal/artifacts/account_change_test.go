@@ -53,6 +53,7 @@ func TestAccountChangeDeciders(t *testing.T) {
 		sealedAccountChange(AccountSettingOwnerReplace, DecidedByOwner, 0, SettingBlocked),
 		sealedAccountChange(AccountSettingVerdifaxDelete, DecidedByOwner, 0, SettingAllowed),
 		sealedAccountChange(AccountSettingVerdifaxStop, DecidedByOwner, 0, SettingBlocked),
+		sealedAccountChange(AccountSettingOwnerReads, DecidedByOwner, 0, SettingAllowed),
 		requestKeyChange(AccountRequestKeyRegistered, DecidedByOwner, publicOf(testHolderKey), nil),
 		requestKeyChange(AccountRequestKeyRotated, DecidedByOwner, publicOf(testNextKey), approve(testHolderKey, publicOf(testNextKey))),
 		requestKeyChange(AccountRequestKeyCleared, DecidedByOwner, "", approve(testHolderKey, "")),

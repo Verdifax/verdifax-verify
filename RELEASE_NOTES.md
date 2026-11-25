@@ -2,6 +2,23 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.40.0 (November 25, 2026): the owner-reads setting
+
+- An account's feed may hold one more account change, `setting.owner_reads`,
+  decided by the owner and signed by the owner key's request key, with the
+  value `allowed` or `blocked`: whether the owner key reads the account's
+  records. An earlier release refuses a feed that holds it.
+- No other check, exit code or verdict changed.
+
+### v0.39.0 (November 23, 2026): account stops counted by signature
+
+- Counting rules v2 count an owner's account stops apart by whether the
+  owner's request key signed them: `account.stops.by:owner.signed` and
+  `.unsigned`, and the same for `account.stopped_seconds`. A period summary
+  stated under v1 is recounted by v1, as it was stated.
+- Every figure's plain-English name comes from the shared counting package,
+  so the server's board summary and the verifier name it the same way.
+
 ### v0.38.1 (November 22, 2026): message wording and two production test records
 
 - The wording of the failure and report messages that formatted a value

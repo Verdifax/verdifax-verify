@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.39.0"
+const Version = "0.40.0"
 
 // buildFlavor is empty in every release build. The stand-in test build
 // (go build -tags standinlog, standinlog.go) sets it, so every version line
