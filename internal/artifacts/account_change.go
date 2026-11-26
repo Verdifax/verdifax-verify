@@ -43,8 +43,9 @@ const (
 	AccountSettingOwnerReplace   = "setting.owner_replacement"
 	AccountSettingVerdifaxDelete = "setting.verdifax_deletion"
 	// AccountSettingOwnerReads (R405, decided by Robert, November 25, 2026):
-	// whether the account's owner key opens every record, receipt and report
-	// of the account, or none but what is published. Blocked until the owner
+	// whether the account's owner key reads the record, receipts and reports
+	// of every run of the account, or none but what is published. It does
+	// not open attestation receipts (GET /attestations). Blocked until the owner
 	// allows it, signed by the owner's request key and sealed in the feed.
 	AccountSettingOwnerReads = "setting.owner_reads"
 	// AccountWebhookSubscribed and AccountWebhookDeleted (round 62): the

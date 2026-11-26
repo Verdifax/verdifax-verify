@@ -28,8 +28,9 @@ import (
 // The seeds the orchestrator's internal/standinlog derives its keys from;
 // R284 holds the two files' seeds equal.
 const (
-	standinLogSeed    = "verdifax stand-in public log key, test use only"
-	standinSignerSeed = "verdifax stand-in log entry signer, test use only"
+	standinLogSeed           = "verdifax stand-in public log key, test use only"
+	standinSignerSeed        = "verdifax stand-in log entry signer, test use only"
+	standinCopyStatementSeed = "verdifax stand-in hosted-copy statement key, test use only"
 )
 
 func standinKey(seed string) *ecdsa.PrivateKey {
@@ -71,4 +72,13 @@ func init() {
 	}
 	pinned[signerFP] = pinnedSigner{Name: "stand-in log entry signer (test build only)", PEM: signerPEM, TestOnly: true}
 	pinnedEntrySigners = pinned
+	// Round 65, N40: the rehearsal's hosted-copy statement key, so a
+	// rehearsal checks --copy-statement on the copy its server keeps.
+	statementPEM, statementFP := standinPEM(&standinKey(standinCopyStatementSeed).PublicKey)
+	statements := make(map[string]copyStatementKey, len(copyStatementKeys)+1)
+	for fp, k := range copyStatementKeys {
+		statements[fp] = k
+	}
+	statements[statementFP] = copyStatementKey{Label: "the stand-in copy-statement key (test build only)", PEM: statementPEM}
+	copyStatementKeys = statements
 }

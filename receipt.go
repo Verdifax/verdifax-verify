@@ -83,8 +83,10 @@ type ReceiptReport struct {
 	// review block (v0.27.0), or nil when it carries none.
 	AIReview *AIReviewCheck `json:"ai_review,omitempty"`
 	// The sign-off checks (v0.22.0), as on an allowed run's report.
-	SignOffs       *SignOffCheck `json:"signoffs,omitempty"`
-	SignOffHistory *SignOffCheck `json:"signoff_history,omitempty"`
+	SignOffs *SignOffCheck `json:"signoffs,omitempty"`
+	// CopyStatement is the --copy-statement check (round 65, N40).
+	CopyStatement  *CopyStatementCheck `json:"copy_statement,omitempty"`
+	SignOffHistory *SignOffCheck       `json:"signoff_history,omitempty"`
 	// SignalSequence is the receipt's sealed place in its account's signal
 	// feed (v0.23.0), or 0 when it seals none.
 	SignalSequence int64 `json:"signal_sequence,omitempty"`
@@ -624,6 +626,7 @@ func printReceiptReport(r *ReceiptReport) {
 	}
 	printAIReview(r.AIReview)
 	printSignOffs(r.SignOffs, r.SignOffHistory)
+	printCopyStatement(r.CopyStatement)
 	switch r.VerdictTier {
 	case "VERIFIED_ANCHORED":
 		fmt.Println("VERDICT: ✓ RECEIPT VERIFIED AND ANCHORED")

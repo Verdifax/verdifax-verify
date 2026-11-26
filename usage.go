@@ -89,6 +89,14 @@ FLAGS
                           SEV-SNP report has debug on or whose firmware
                           Verdifax does not pin; without it both are stated
                           on the record's hardware line
+  -copy-statement HEADER  with -copy-token, the X-Verdifax-Hosted-Copy-
+                          Statement header a hosted copy of a hardware-
+                          attested record was served with: its signature
+                          must verify with the pinned copy-statement key,
+                          and it must keep a copy of this record's bytes
+                          and run under that token
+  -copy-token TOKEN       with -copy-statement, the token of the public
+                          link the record was fetched from
   -signals FILE           check an account's signal feed, the body of
                           GET /signals: every event's entry must verify on
                           the public log as its kind, seal its place in the

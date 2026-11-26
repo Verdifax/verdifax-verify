@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.40.0"
+const Version = "0.41.0"
 
 // buildFlavor is empty in every release build. The stand-in test build
 // (go build -tags standinlog, standinlog.go) sets it, so every version line
@@ -178,8 +178,10 @@ type Report struct {
 	AccountPolicyHistory *PolicyHistoryCheck `json:"account_policy_history,omitempty"`
 	// SignOffs is the --signoff check (v0.22.0): the approvers' decisions on
 	// this record. SignOffHistory is the account's whole chain.
-	SignOffs       *SignOffCheck `json:"signoffs,omitempty"`
-	SignOffHistory *SignOffCheck `json:"signoff_history,omitempty"`
+	SignOffs *SignOffCheck `json:"signoffs,omitempty"`
+	// CopyStatement is the --copy-statement check (round 65, N40).
+	CopyStatement  *CopyStatementCheck `json:"copy_statement,omitempty"`
+	SignOffHistory *SignOffCheck       `json:"signoff_history,omitempty"`
 	// SignOffRequirement is the check of a sign-off the policy rule that
 	// allowed the run requires (round 58, B7): present only when the rules,
 	// run again from --policy or --account-policy, show such a rule fired.
@@ -236,6 +238,10 @@ type options struct {
 	signOffHistory  *string
 	strictSignOff   *bool
 	strictHardware  *bool
+	// copyStatement and copyToken (round 65, N40): a hosted copy's signed
+	// statement and the token of the link it was served at.
+	copyStatement   *string
+	copyToken       *string
 	signals         *string
 	signalsAfter    *string
 	ownerRequestKey *string
@@ -289,6 +295,8 @@ func defineFlags(fs *flag.FlagSet) options {
 		signOffHeadMaxAge: fs.String("signoff-head-max-age", "24h", "with --signoff-history, the oldest the history's head statement may be, as a duration such as 24h or 72h: its time on the public log is shown with its age, and a head older than this fails, since a later sign-off has had that long to exist unseen; fetch the history again, or raise the limit"),
 		feedHeadMaxAge:    fs.String("feed-head-max-age", "24h", "with --signals, the oldest the feed's head statement may be, as a duration such as 24h or 72h: its time on the public log is shown with its age, and a head older than this fails, since a later event has had that long to exist unseen; fetch the feed again, or raise the limit"),
 		signOffHistory:    fs.String("signoff-history", "", "a JSON list of an account's sign-offs, oldest first: every sign-off and link must verify, in one account; runs alone with no record"),
+		copyStatement:     fs.String("copy-statement", "", "with --copy-token, the X-Verdifax-Hosted-Copy-Statement header a hosted copy of a hardware-attested record was served with: its signature must verify with the copy-statement key this verifier pins, it must keep a copy under that token, and the record's SHA-256 and run must be the ones it states"),
+		copyToken:         fs.String("copy-token", "", "with --copy-statement, the token of the public link the record was fetched from (the part after /public/runs/)"),
 		strictHardware:    fs.Bool("strict-hardware", false, "fail a hardware-attested record whose AMD SEV-SNP report has debug on (the host could read the machine's memory) or whose launch measurement is not guest firmware Verdifax pins; without this flag both are stated on the record's hardware line and do not fail it"),
 		strictSignOff:     fs.Bool("strict-signoff", false, "fail (exit 1) a record whose rule requires a person's sign-off when no sign-offs are given; without this flag such a record, if every other check passes, reads ANCHORED, SIGN-OFF NOT SHOWN and exits 4"),
 		jobFolder:         fs.String("job", "", "a folder of one job's records: check each record, then the map of links between them; a step whose record was deleted is given as its tombstone (the run.deleted event's entry), which stands for the record hash it seals and whose sealed job links are checked as a present step's, and the job then reads complete except the deleted steps"),
@@ -337,6 +345,10 @@ func main() {
 	}
 	if (*o.signalsAfter != "" || *o.ownerRequestKey != "" || *o.signalsPolicy != "" || flagSet("feed-head-max-age")) && *o.signals == "" {
 		fmt.Fprintln(os.Stderr, "verdifax-verify: --signals-after, --owner-request-key, --signals-policy and --feed-head-max-age apply only with --signals")
+		os.Exit(2)
+	}
+	if (*o.copyStatement == "") != (*o.copyToken == "") {
+		fmt.Fprintln(os.Stderr, "verdifax-verify: --copy-statement and --copy-token are given together")
 		os.Exit(2)
 	}
 	if flagSet("signoff-head-max-age") && *o.signOffHistory == "" {
@@ -458,6 +470,12 @@ func main() {
 			rr.VerdictTier, rr.AllPassed, rr.Reason = "FAILED", false, rr.AIReview.Reason
 		}
 		applyReceiptSignOffFlags(rr, doc, *o.signOff, *o.approverKey, *o.signOffHistory)
+		if *o.copyStatement != "" {
+			rr.CopyStatement = checkCopyStatement(*o.copyStatement, *o.copyToken, data, copyStatementKeys)
+			if !rr.CopyStatement.OK {
+				rr.VerdictTier, rr.AllPassed, rr.Reason = "FAILED", false, rr.CopyStatement.Reason
+			}
+		}
 		applyReviewSetupHalt(rr)
 		if *jsonOutput {
 			emitReceiptJSON(rr)
@@ -529,6 +547,13 @@ func main() {
 		applyRequestFile(&report.RequestSignature, signed)
 		if !report.RequestSignature.RequestMatched {
 			report.AllPassed = false
+		}
+	}
+
+	if *o.copyStatement != "" {
+		report.CopyStatement = checkCopyStatement(*o.copyStatement, *o.copyToken, data, copyStatementKeys)
+		if !report.CopyStatement.OK {
+			report.AllPassed, report.VerdictTier, report.RecordCoverage = false, "FAILED", "failed"
 		}
 	}
 
@@ -933,7 +958,7 @@ const (
 var flagInputKinds = map[string]string{
 	"json": inputBoth, "version": inputBoth, "log-keys": inputBoth, "allow-unanchored": inputBoth,
 	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
-	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "strict-signoff": inputBundle, "strict-hardware": inputBundle, "signals": inputBoth, "signals-after": inputBoth, "owner-request-key": inputBoth, "signals-policy": inputBoth, "signoff-head-max-age": inputBoth, "feed-head-max-age": inputBoth,
+	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "strict-signoff": inputBundle, "strict-hardware": inputBundle, "copy-statement": inputBoth, "copy-token": inputBoth, "signals": inputBoth, "signals-after": inputBoth, "owner-request-key": inputBoth, "signals-policy": inputBoth, "signoff-head-max-age": inputBoth, "feed-head-max-age": inputBoth,
 	"response-times": inputBoth, "target": inputBoth, "from": inputBoth, "to": inputBoth, "summary": inputBoth, "summary-head": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
 	"self-hosted-receipt": inputReceipt,
 }
@@ -1594,6 +1619,7 @@ func printHumanReport(b *artifacts.AuditBundle, r *Report) {
 	printAccount(r.AccountID, r.AccountPolicyGate, r.AccountPolicyHistory)
 	printDeclared(r.Declared)
 	printSignOffs(r.SignOffs, r.SignOffHistory)
+	printCopyStatement(r.CopyStatement)
 	printSignOffRequirement(r.SignOffRequirement)
 	for _, f := range r.CrossChecks {
 		fmt.Printf("  Cross-check:      ✗ FAILED · %s\n", f)

@@ -14,8 +14,9 @@ import (
 // The stand-in log's seeds, as the orchestrator's internal/standinlog holds
 // them; R284 keeps the three copies equal.
 const (
-	testStandinLogSeed    = "verdifax stand-in public log key, test use only"
-	testStandinSignerSeed = "verdifax stand-in log entry signer, test use only"
+	testStandinLogSeed           = "verdifax stand-in public log key, test use only"
+	testStandinSignerSeed        = "verdifax stand-in log entry signer, test use only"
+	testStandinCopyStatementSeed = "verdifax stand-in hosted-copy statement key, test use only"
 )
 
 // standinTestLog is a test log with the stand-in's seed-derived keys.

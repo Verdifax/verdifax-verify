@@ -1343,6 +1343,16 @@ func printSignalFeed(c *SignalFeedCheck) {
 		if e.Change == artifacts.AccountWebhookSubscribed || e.Change == artifacts.AccountWebhookDeleted {
 			by += fmt.Sprintf(": %s, %s", e.Change, e.Value)
 		}
+		// Round 65, N44: every other account change reads with its name and
+		// new value, so a reader sees which setting changed and to what (for
+		// example setting.owner_reads = allowed), as --json already shows.
+		if e.Change != "" && !artifacts.IsRequestKeyAction(e.Change) && e.Change != artifacts.AccountWebhookSubscribed && e.Change != artifacts.AccountWebhookDeleted {
+			if e.Value != "" {
+				by += fmt.Sprintf(": %s = %s", e.Change, e.Value)
+			} else {
+				by += ": " + e.Change
+			}
+		}
 		if e.Setup != "" {
 			by += ": " + e.Setup
 		}

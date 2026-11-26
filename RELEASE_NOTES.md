@@ -2,6 +2,21 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.41.0 (November 26, 2026): hosted-copy statements and setting values
+
+- `--copy-statement HEADER --copy-token TOKEN` checks a hosted copy of a
+  record from the hardware-attested machine offline: the statement served in
+  the header `X-Verdifax-Hosted-Copy-Statement` must be signed by the
+  machine's copy-statement key, which this release pins and which Verdifax
+  uses for nothing else; it must keep, not withdraw, a copy under that
+  token; and the record file's SHA-256 and run must be the ones it names.
+  The two options are given together. The stated SHA-256 of the run's
+  sign-off file is printed, to compare with the one served at the same link.
+- A feed's account change prints its name and, when it has one, its new
+  value, for example `setting.owner_reads = allowed`, for every change that
+  is neither a request-key change nor a webhook change.
+- No other check, exit code or verdict changed.
+
 ### v0.40.0 (November 25, 2026): the owner-reads setting
 
 - An account's feed may hold one more account change, `setting.owner_reads`,
