@@ -92,11 +92,16 @@ FLAGS
   -copy-statement HEADER  with -copy-token, the X-Verdifax-Hosted-Copy-
                           Statement header a hosted copy of a hardware-
                           attested record was served with: its signature
-                          must verify with the pinned copy-statement key,
-                          and it must keep a copy of this record's bytes
-                          and run under that token
+                          must verify with the pinned copy-statement key
+                          within its period, and it must keep a copy of
+                          this record's bytes, run and kind under that
+                          token
   -copy-token TOKEN       with -copy-statement, the token of the public
                           link the record was fetched from
+  -copy-signoff FILE      with -copy-statement, the sign-off file served
+                          at the same link: its SHA-256 must be the one
+                          the statement names; when the statement names
+                          one and no file is given, -strict-signoff fails
   -signals FILE           check an account's signal feed, the body of
                           GET /signals: every event's entry must verify on
                           the public log as its kind, seal its place in the
@@ -189,9 +194,11 @@ FLAGS
                           and report any change the verifier accepts and
                           which checks caught the rest; exit 0 only if
                           every change fails verification
-  -log-keys               print the public log-signing keys this verifier
-                          trusts, one per line (fingerprint, name, when
-                          each is accepted), and exit
+  -keys                   print every key this verifier trusts, one per
+                          line: the log-signing keys and the copy-statement
+                          key, each with fingerprint, name, when it is
+                          accepted, custody, purpose and first use; exit
+  -log-keys               the same as -keys
   -version                print version and exit
 
 EXIT

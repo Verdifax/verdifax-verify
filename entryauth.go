@@ -61,6 +61,11 @@ type pinnedSigner struct {
 	PEM       string
 	NotBefore int64
 	NotAfter  int64
+	// Custody, Purpose and FirstUse are printed by --keys (round 66, N49),
+	// as the README's key table states them.
+	Custody  string
+	Purpose  string
+	FirstUse string
 	// TestOnly marks a key only the stand-in test build pins (R284); no
 	// release build has one.
 	TestOnly bool
@@ -121,6 +126,9 @@ pIA8djKUggfjIOOLQ25gtyrQNUk2JLbDvOM015SmWZyoB8cPG0LdO/0SSA==
 -----END PUBLIC KEY-----
 `,
 		NotAfter: keySwitchUnix,
+		Custody:  "a file on the production API server's volume, not in a hardware module; retired",
+		Purpose:  "signed the public-log entries of api.verdifax.com until the switch to key 3",
+		FirstUse: "2026-05-13, the first public-log entry",
 	},
 	verdifaxLogSigningKey2Fingerprint: {
 		Name: "Verdifax log-signing key 2 (October 2026 hardware evidence run)",
@@ -131,6 +139,9 @@ SjGPIXP3UGH1hTsdwx+uYHNJ5a0b6nsdiIf+Z0a4L5LWvfEQF1p8kev6Sw==
 `,
 		NotBefore: 1791039647 - 3600,
 		NotAfter:  1791039647 + 3600,
+		Custody:   "generated on the October 2026 AWS SEV-SNP instance and destroyed with it",
+		Purpose:   "signed the single public-log entry of the October 2026 hardware evidence run",
+		FirstUse:  "2026-10-03T15:00:47Z, its only entry",
 	},
 	verdifaxLogSigningKey3Fingerprint: {
 		Name: "Verdifax log-signing key 3 (AWS KMS)",
@@ -140,6 +151,9 @@ gK6+Bq6yDgRDbbisjdAwHGmcT6Mo/7xNFNuOlr1Z/SJzkU5xvpFPieYj2A==
 -----END PUBLIC KEY-----
 `,
 		NotBefore: keySwitchUnix,
+		Custody:   "AWS KMS us-east-2, ECC_NIST_P256; its private half never leaves KMS",
+		Purpose:   "signs the public-log entries of api.verdifax.com",
+		FirstUse:  "2026-10-24, three entries of private test runs, then every entry",
 	},
 	verdifaxLogSigningKey4Fingerprint: {
 		Name: "Verdifax log-signing key 4 (hardware-attested machine, AWS KMS)",
@@ -149,6 +163,9 @@ nVRgazluO4ZlR5VRDkYC5jLfT25PzywvkK5VUdo1e1ZSZKh5xaQlvbawiw==
 -----END PUBLIC KEY-----
 `,
 		NotBefore: key4CreatedUnix,
+		Custody:   "AWS KMS us-east-2, ECC_NIST_P256; its private half never leaves KMS, and the hardware-attested machine signs with it through its own role",
+		Purpose:   "signs the public-log entries of the hardware-attested machine, attested.verdifax.com",
+		FirstUse:  "2026-11-14, the machine's first run under it",
 	},
 }
 
@@ -386,10 +403,12 @@ func staleIndexReason(anchorErr error, logEntryID string, logIndex int64) (strin
 		"cannot be checked; download the record again from its public link", logIndex), true
 }
 
-// printLogKeys lists the pinned log-signing keys (--log-keys), one per
-// line: the fingerprint, the name, and the window in which entries it
-// signed are accepted. A client about to rely on a server's records can
-// check that the server's key is here before it starts (round 62).
+// printLogKeys lists every key this verifier trusts (--keys, and --log-keys,
+// its earlier name), one per line: the fingerprint, the name, the window in
+// which what it signed is accepted, its custody, its purpose and its first
+// use. The log-signing keys come first (round 62: a client about to rely on a
+// server's records can check that the server's key is here before it
+// starts), then the copy-statement keys (round 66, N49: one inventory).
 func printLogKeys(w io.Writer) {
 	fps := make([]string, 0, len(pinnedEntrySigners))
 	for fp := range pinnedEntrySigners {
@@ -405,6 +424,15 @@ func printLogKeys(w io.Writer) {
 		if k.NotAfter != 0 {
 			until = time.Unix(k.NotAfter, 0).UTC().Format(time.RFC3339)
 		}
-		fmt.Fprintf(w, "%s  %s  accepted from %s until %s\n", fp, k.Name, from, until)
+		fmt.Fprintf(w, "%s  %s  accepted from %s until %s  custody: %s; purpose: %s; first use: %s\n", fp, k.Name, from, until, k.Custody, k.Purpose, k.FirstUse)
+	}
+	cfps := make([]string, 0, len(copyStatementKeys))
+	for fp := range copyStatementKeys {
+		cfps = append(cfps, fp)
+	}
+	sort.Strings(cfps)
+	for _, fp := range cfps {
+		k := copyStatementKeys[fp]
+		fmt.Fprintf(w, "%s  %s  %s, by the signed time of each statement  custody: %s; purpose: %s; first use: %s\n", fp, k.Name, copyKeyPeriod(k), k.Custody, k.Purpose, k.FirstUse)
 	}
 }

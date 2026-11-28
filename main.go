@@ -67,7 +67,7 @@ import (
 // version because the verifier ships separately and a single verifier
 // version may verify bundles produced by multiple orchestrator versions
 // (within a single bundle schema major version).
-const Version = "0.41.0"
+const Version = "0.42.0"
 
 // buildFlavor is empty in every release build. The stand-in test build
 // (go build -tags standinlog, standinlog.go) sets it, so every version line
@@ -242,6 +242,8 @@ type options struct {
 	// statement and the token of the link it was served at.
 	copyStatement   *string
 	copyToken       *string
+	copySignOff     *string // round 66, N48
+	showKeys        *bool   // round 66, N49
 	signals         *string
 	signalsAfter    *string
 	ownerRequestKey *string
@@ -270,7 +272,8 @@ func defineFlags(fs *flag.FlagSet) options {
 		allowPartial:      fs.Bool("allow-partial", false, "exit 0 for a record whose public-log anchor binds only part of it (a record sealed before leaf v5, or one without a verified complete-record anchor); without this flag such a record exits 3, because its unanchored sections could have been rewritten together with their hashes. With --signals, exit 0 for a feed in which some events carry no public-log entry of their own and a later event's entry commits them; without this flag such a feed exits 3, because their time is proven only by the later entry"),
 		allowUnanchored:   fs.Bool("allow-unanchored", false, "exit 0 for a bundle with no public-log anchor; without this flag, unanchored bundles fail, because every sealing property this tool checks hangs off the anchor and an attacker can strip an anchor claim by editing one unprotected field (the documented downgrade attack)"),
 		showVersion:       fs.Bool("version", false, "print version and exit"),
-		showLogKeys:       fs.Bool("log-keys", false, "print the public log-signing keys this verifier trusts, one per line: fingerprint, name, and when each is accepted, then exit"),
+		showLogKeys:       fs.Bool("log-keys", false, "the same as --keys: print every key this verifier trusts, then exit"),
+		showKeys:          fs.Bool("keys", false, "print every key this verifier trusts, one per line: the log-signing keys and the copy-statement key, each with its fingerprint, name, when it is accepted, custody, purpose and first use, then exit"),
 		selfHosted:        fs.Bool("self-hosted-receipt", false, "the receipt was issued by a test or self-hosted deployment that does not anchor receipts on the public log, not by the Verdifax API; exempts it from the rules that receipts dated from run 241 on must carry a public-log anchor and receipts dated from run 242 on must seal anchor_required"),
 		policyFile:        fs.String("policy", "", "a policy document (JSON) to check against the policy decision the record or receipt seals: its hashes and sealed identity must match, and where the run sealed the inputs the rules read, this tool runs the rules itself and must reach the same rule and outcome, or verification fails"),
 		signerKeyFile:     fs.String("signer-key", "", "a file holding the base64 Ed25519 public key you expect signed the request; fails unless the record carries a valid request signature from that key"),
@@ -295,7 +298,8 @@ func defineFlags(fs *flag.FlagSet) options {
 		signOffHeadMaxAge: fs.String("signoff-head-max-age", "24h", "with --signoff-history, the oldest the history's head statement may be, as a duration such as 24h or 72h: its time on the public log is shown with its age, and a head older than this fails, since a later sign-off has had that long to exist unseen; fetch the history again, or raise the limit"),
 		feedHeadMaxAge:    fs.String("feed-head-max-age", "24h", "with --signals, the oldest the feed's head statement may be, as a duration such as 24h or 72h: its time on the public log is shown with its age, and a head older than this fails, since a later event has had that long to exist unseen; fetch the feed again, or raise the limit"),
 		signOffHistory:    fs.String("signoff-history", "", "a JSON list of an account's sign-offs, oldest first: every sign-off and link must verify, in one account; runs alone with no record"),
-		copyStatement:     fs.String("copy-statement", "", "with --copy-token, the X-Verdifax-Hosted-Copy-Statement header a hosted copy of a hardware-attested record was served with: its signature must verify with the copy-statement key this verifier pins, it must keep a copy under that token, and the record's SHA-256 and run must be the ones it states"),
+		copyStatement:     fs.String("copy-statement", "", "with --copy-token, the X-Verdifax-Hosted-Copy-Statement header a hosted copy of a hardware-attested record was served with: its signature must verify with the copy-statement key this verifier pins, within that key's period, it must keep a copy under that token, the record's SHA-256 and run must be the ones it states, and the record must be of the kind it names (a receipt or a bundle)"),
+		copySignOff:       fs.String("copy-signoff", "", "with --copy-statement, the sign-off file served at the same link (signoff.json): its SHA-256 must be the one the statement names, or verification fails; when the statement names one and this is not given, --strict-signoff fails the record and without it the report says the file was not checked"),
 		copyToken:         fs.String("copy-token", "", "with --copy-statement, the token of the public link the record was fetched from (the part after /public/runs/)"),
 		strictHardware:    fs.Bool("strict-hardware", false, "fail a hardware-attested record whose AMD SEV-SNP report has debug on (the host could read the machine's memory) or whose launch measurement is not guest firmware Verdifax pins; without this flag both are stated on the record's hardware line and do not fail it"),
 		strictSignOff:     fs.Bool("strict-signoff", false, "fail (exit 1) a record whose rule requires a person's sign-off when no sign-offs are given; without this flag such a record, if every other check passes, reads ANCHORED, SIGN-OFF NOT SHOWN and exits 4"),
@@ -329,7 +333,7 @@ func main() {
 		fmt.Println("verdifax-verify version", toolVersion())
 		return
 	}
-	if *o.showLogKeys {
+	if *o.showLogKeys || *o.showKeys {
 		printLogKeys(os.Stdout)
 		return
 	}
@@ -345,6 +349,10 @@ func main() {
 	}
 	if (*o.signalsAfter != "" || *o.ownerRequestKey != "" || *o.signalsPolicy != "" || flagSet("feed-head-max-age")) && *o.signals == "" {
 		fmt.Fprintln(os.Stderr, "verdifax-verify: --signals-after, --owner-request-key, --signals-policy and --feed-head-max-age apply only with --signals")
+		os.Exit(2)
+	}
+	if *o.copySignOff != "" && *o.copyStatement == "" {
+		fmt.Fprintln(os.Stderr, "verdifax-verify: --copy-signoff applies only with --copy-statement")
 		os.Exit(2)
 	}
 	if (*o.copyStatement == "") != (*o.copyToken == "") {
@@ -471,7 +479,7 @@ func main() {
 		}
 		applyReceiptSignOffFlags(rr, doc, *o.signOff, *o.approverKey, *o.signOffHistory)
 		if *o.copyStatement != "" {
-			rr.CopyStatement = checkCopyStatement(*o.copyStatement, *o.copyToken, data, copyStatementKeys)
+			rr.CopyStatement = checkCopyStatement(*o.copyStatement, *o.copyToken, data, readCopySignOff(*o.copySignOff, false), copyStatementKeys)
 			if !rr.CopyStatement.OK {
 				rr.VerdictTier, rr.AllPassed, rr.Reason = "FAILED", false, rr.CopyStatement.Reason
 			}
@@ -551,7 +559,7 @@ func main() {
 	}
 
 	if *o.copyStatement != "" {
-		report.CopyStatement = checkCopyStatement(*o.copyStatement, *o.copyToken, data, copyStatementKeys)
+		report.CopyStatement = checkCopyStatement(*o.copyStatement, *o.copyToken, data, readCopySignOff(*o.copySignOff, *o.strictSignOff), copyStatementKeys)
 		if !report.CopyStatement.OK {
 			report.AllPassed, report.VerdictTier, report.RecordCoverage = false, "FAILED", "failed"
 		}
@@ -958,7 +966,7 @@ const (
 var flagInputKinds = map[string]string{
 	"json": inputBoth, "version": inputBoth, "log-keys": inputBoth, "allow-unanchored": inputBoth,
 	"tamper-test": inputBoth, "recompute-hashes": inputBoth,
-	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "strict-signoff": inputBundle, "strict-hardware": inputBundle, "copy-statement": inputBoth, "copy-token": inputBoth, "signals": inputBoth, "signals-after": inputBoth, "owner-request-key": inputBoth, "signals-policy": inputBoth, "signoff-head-max-age": inputBoth, "feed-head-max-age": inputBoth,
+	"strict": inputBundle, "allow-partial": inputBundle, "policy": inputBoth, "policy-history": inputBoth, "account-policy": inputBoth, "aivp-trace": inputBoth, "aivp-traces": inputBoth, "account-policy-history": inputBoth, "signoff": inputBoth, "approver-key": inputBoth, "signoff-history": inputBoth, "strict-signoff": inputBundle, "strict-hardware": inputBundle, "copy-statement": inputBoth, "copy-token": inputBoth, "copy-signoff": inputBoth, "keys": inputBoth, "signals": inputBoth, "signals-after": inputBoth, "owner-request-key": inputBoth, "signals-policy": inputBoth, "signoff-head-max-age": inputBoth, "feed-head-max-age": inputBoth,
 	"response-times": inputBoth, "target": inputBoth, "from": inputBoth, "to": inputBoth, "summary": inputBoth, "summary-head": inputBoth, "signer-key": inputBoth, "request": inputBoth, "job": inputBoth, "show-evidence-summary": inputBundle,
 	"self-hosted-receipt": inputReceipt,
 }

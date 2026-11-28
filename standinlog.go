@@ -79,6 +79,9 @@ func init() {
 	for fp, k := range copyStatementKeys {
 		statements[fp] = k
 	}
-	statements[statementFP] = copyStatementKey{Label: "the stand-in copy-statement key (test build only)", PEM: statementPEM}
+	statements[statementFP] = copyStatementKey{Name: "Verdifax stand-in copy-statement key (test build only)",
+		Label: "the stand-in copy-statement key (test build only)", PEM: statementPEM,
+		Custody: "a key file of the stand-in test build; no release build pins it", Purpose: "signs the hosted-copy statements of a free rehearsal only",
+		FirstUse: "free rehearsals of round 65 on", NotBefore: copyStatementKeyCreatedUnix}
 	copyStatementKeys = statements
 }

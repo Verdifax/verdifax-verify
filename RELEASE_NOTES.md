@@ -2,6 +2,28 @@
 
 Newest first. The [README](./README.md) describes the current release.
 
+### v0.42.0 (November 28, 2026): hosted-copy sign-off files, kinds and one key list
+
+- `--copy-signoff FILE`, given with `--copy-statement`, checks the sign-off
+  file served at the same link: its SHA-256 must be the one the statement
+  names, or verification fails. A file given for a statement that names
+  none fails too. When the statement names one and no file is given,
+  `--strict-signoff` fails the record; without it the report says the
+  sign-off file was not checked, where v0.41.0 printed the hash to compare
+  by hand.
+- `--copy-statement` also requires the record to be of the kind the
+  statement names, read from the record itself: a receipt or a bundle.
+- The copy-statement key is accepted only for statements stated from
+  2026-11-26T20:42:42Z, the moment AWS KMS created it, as a log-signing key
+  is accepted only within its period. The time checked is the statement's
+  own signed time.
+- `--keys` lists every key this release trusts, the log-signing keys and
+  the copy-statement key, each with its fingerprint, name, period, custody,
+  purpose and first use. `--log-keys` is the same list; each line still
+  begins with the fingerprint and name, so a script that reads those keeps
+  working.
+- No other check, exit code or verdict changed.
+
 ### v0.41.0 (November 26, 2026): hosted-copy statements and setting values
 
 - `--copy-statement HEADER --copy-token TOKEN` checks a hosted copy of a

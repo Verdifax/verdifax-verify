@@ -27,8 +27,26 @@ func TestLogKeysListsEveryPinnedKey(t *testing.T) {
 	if !strings.Contains(text, verdifaxLogSigningKey3Fingerprint+"  Verdifax log-signing key 3 (AWS KMS)  accepted from 2026-10-24T15:59:19Z until always") {
 		t.Errorf("key 3's line is wrong:\n%s", text)
 	}
-	if strings.Count(strings.TrimSpace(text), "\n")+1 != len(pinnedEntrySigners) {
-		t.Errorf("%d lines for %d keys:\n%s", strings.Count(strings.TrimSpace(text), "\n")+1, len(pinnedEntrySigners), text)
+	if strings.Count(strings.TrimSpace(text), "\n")+1 != len(pinnedEntrySigners)+len(copyStatementKeys) {
+		t.Errorf("%d lines for %d keys:\n%s", strings.Count(strings.TrimSpace(text), "\n")+1, len(pinnedEntrySigners)+len(copyStatementKeys), text)
+	}
+	// Round 66, N49: one inventory. Every key is listed with its custody,
+	// purpose and first use, the copy-statement key among them.
+	for fp, k := range pinnedEntrySigners {
+		if k.TestOnly {
+			continue
+		}
+		if k.Custody == "" || k.Purpose == "" || k.FirstUse == "" {
+			t.Errorf("%s has no custody, purpose or first use for --keys", k.Name)
+		}
+		if !strings.Contains(text, fp+"  "+k.Name+"  accepted from ") {
+			t.Errorf("%s is not listed", k.Name)
+		}
+	}
+	for fp, k := range copyStatementKeys {
+		if !strings.Contains(text, fp+"  "+k.Name+"  accepted from ") || !strings.Contains(text, "custody: "+k.Custody) {
+			t.Errorf("copy-statement key %s is not listed with its period and custody:\n%s", fp, text)
+		}
 	}
 }
 

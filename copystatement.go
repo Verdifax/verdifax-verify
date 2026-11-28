@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 )
@@ -29,15 +30,46 @@ import (
 //
 // checks the signature with the pinned key, that the statement keeps (not
 // withdraws) a copy under TOKEN, that the record file's SHA-256 is the one
-// stated and that its run is the statement's, and prints the stated
-// sign-off file SHA-256 so it can be compared with what was served.
+// stated, that its run is the statement's and that the record is of the kind
+// the statement names (round 66, N48: read from the record itself, a receipt
+// or a bundle). With --copy-signoff FILE it also checks that the sign-off file
+// served at the same link has the SHA-256 the statement names; when the
+// statement names one and no file is given, --strict-signoff fails the check
+// and without it the report says the file was not checked (round 66, N48).
+//
+// The key is accepted only for statements stated within its period, as a
+// log-signing key is for entries (round 66, N49), and it is listed with the
+// log-signing keys by --keys (and --log-keys).
 
 const copyStatementFormat = "verdifax.hosted-copy-statement.v1"
 
-// copyStatementKey is one pinned copy-statement key.
+// copyStatementKey is one pinned copy-statement key and the period, in the
+// statement's own signed time, in which its statements are accepted: from
+// NotBefore inclusive to NotAfter exclusive (0 means open-ended), the form a
+// log-signing key's period takes (round 66, N49). The time checked is the
+// statement's stated_at, which the key itself signs, so the period stops a
+// key from vouching for statements dated outside it; a statement carries no
+// third party's time.
 type copyStatementKey struct {
-	Label string
-	PEM   string
+	Name      string // the name --keys lists it under
+	Label     string
+	PEM       string
+	Custody   string
+	Purpose   string
+	FirstUse  string
+	NotBefore int64
+	NotAfter  int64
+}
+
+// copyStatementKeyCreatedUnix is 2026-11-26T20:42:42Z, when AWS KMS created
+// the hardware machine's copy-statement key (aws kms describe-key, read on
+// November 28, 2026): the first moment its statements are accepted.
+const copyStatementKeyCreatedUnix = 1795725762
+
+// copyStatementKeyAcceptsAt reports whether k may vouch for a statement
+// stated at unix time t: NotBefore <= t < NotAfter.
+func copyStatementKeyAcceptsAt(k copyStatementKey, t int64) bool {
+	return (k.NotBefore == 0 || t >= k.NotBefore) && (k.NotAfter == 0 || t < k.NotAfter)
 }
 
 // copyStatementKeys are the copy-statement keys this verifier trusts, by the
@@ -48,7 +80,12 @@ var copyStatementKeys = map[string]copyStatementKey{
 	// 53aba6de-0b88-4f6b-b1de-3e74b25cc2b5, alias verdifax-copy-statements-prod,
 	// us-east-2, made November 26, 2026; ECC_NIST_P256, used for nothing else.
 	"93a6eb8db2b50f62c462cc92e588e9f3bd98668c81e8cffad4f7dd4f4c2afe7e": {
-		Label: "the hardware machine's copy-statement key",
+		Name:      "Verdifax copy-statement key (hardware-attested machine, AWS KMS)",
+		Label:     "the hardware machine's copy-statement key",
+		Custody:   "AWS KMS us-east-2, ECC_NIST_P256; its private half never leaves KMS, and the hardware-attested machine signs with it through its own role",
+		Purpose:   "signs only the statements that bind a hosted copy to its link; it signs no public-log entry and no record",
+		FirstUse:  "in use by 2026-11-27, when the paid readiness run checked the statements of all 131 hosted copies",
+		NotBefore: copyStatementKeyCreatedUnix,
 		PEM: `-----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtPFbzLooRiVB51wcsxrm926D8QUX
 2Yc/aiI1haThIIp4fTfAApEVmN3QjJmXJd4RdyYozPr++CY7oZZy8XmDug==
@@ -67,10 +104,21 @@ type CopyStatementCheck struct {
 	RunID         int64  `json:"run_id,omitempty"`
 	RecordSHA256  string `json:"record_sha256,omitempty"`
 	SignOffSHA256 string `json:"signoff_sha256,omitempty"`
-	Sequence      int64  `json:"sequence,omitempty"`
-	StatedAt      string `json:"stated_at,omitempty"`
-	Key           string `json:"key,omitempty"`
-	Reason        string `json:"reason,omitempty"`
+	// SignOffChecked is true when --copy-signoff gave the sign-off file and
+	// its SHA-256 is the one the statement names (round 66, N48).
+	SignOffChecked bool   `json:"signoff_checked"`
+	Sequence       int64  `json:"sequence,omitempty"`
+	StatedAt       string `json:"stated_at,omitempty"`
+	Key            string `json:"key,omitempty"`
+	Reason         string `json:"reason,omitempty"`
+}
+
+// copySignOff is the --copy-signoff input: the sign-off file's bytes, whether
+// one was given, and whether --strict-signoff requires it.
+type copySignOff struct {
+	Given  bool
+	Bytes  []byte
+	Strict bool
 }
 
 type copyStatement struct {
@@ -88,7 +136,7 @@ type copyStatement struct {
 
 // checkCopyStatement checks a served statement header against the record's
 // bytes, the token of the link it was served at and the pinned keys.
-func checkCopyStatement(header, token string, record []byte, keys map[string]copyStatementKey) *CopyStatementCheck {
+func checkCopyStatement(header, token string, record []byte, signoff copySignOff, keys map[string]copyStatementKey) *CopyStatementCheck {
 	c := &CopyStatementCheck{Performed: true, Token: token}
 	fail := func(reason string) *CopyStatementCheck {
 		c.Reason = reason
@@ -107,6 +155,7 @@ func checkCopyStatement(header, token string, record []byte, keys map[string]cop
 		return fail("this verifier pins no copy-statement key")
 	}
 	digest := sha256.Sum256(raw)
+	var signer copyStatementKey
 	for fp, k := range keys {
 		block, _ := pem.Decode([]byte(k.PEM))
 		if block == nil {
@@ -118,7 +167,7 @@ func checkCopyStatement(header, token string, record []byte, keys map[string]cop
 			continue
 		}
 		if ecdsa.VerifyASN1(pub, digest[:], sig) {
-			c.Key = k.Label + " (" + fp[:16] + "...)"
+			c.Key, signer = k.Label+" ("+fp[:16]+"...)", k
 			break
 		}
 	}
@@ -142,8 +191,12 @@ func checkCopyStatement(header, token string, record []byte, keys map[string]cop
 	if s.Token != token {
 		return fail(fmt.Sprintf("the statement is for token %s, not %s", s.Token, token))
 	}
-	if _, err := time.Parse(time.RFC3339Nano, s.StatedAt); err != nil || s.Sequence <= 0 || s.Origin == "" {
+	stated, timeErr := time.Parse(time.RFC3339Nano, s.StatedAt)
+	if timeErr != nil || s.Sequence <= 0 || s.Origin == "" {
 		return fail("the statement names no origin, sequence or time")
+	}
+	if !copyStatementKeyAcceptsAt(signer, stated.Unix()) {
+		return fail(fmt.Sprintf("the statement is stated %s, outside the period in which %s is accepted (%s)", s.StatedAt, signer.Label, copyKeyPeriod(signer)))
 	}
 	sum := sha256.Sum256(record)
 	if got := hex.EncodeToString(sum[:]); got != s.RecordSHA256 {
@@ -155,8 +208,61 @@ func checkCopyStatement(header, token string, record []byte, keys map[string]cop
 	if err := json.Unmarshal(record, &head); err != nil || head.RunID != s.OriginRunID {
 		return fail(fmt.Sprintf("the record is run %d, and the statement names run %d", head.RunID, s.OriginRunID))
 	}
+	// Round 66, N48: the kind is read from the record, never taken from the
+	// statement alone.
+	if kind := copyRecordKind(record); kind != s.Kind {
+		return fail(fmt.Sprintf("the record is a %s, and the statement names a %q", kind, s.Kind))
+	}
+	switch {
+	case signoff.Given && s.SignOffSHA256 == "":
+		return fail("a sign-off file was given with --copy-signoff, and the statement names none for this link")
+	case signoff.Given:
+		sum := sha256.Sum256(signoff.Bytes)
+		if got := hex.EncodeToString(sum[:]); got != s.SignOffSHA256 {
+			return fail(fmt.Sprintf("the SHA-256 of the sign-off file is %s, and the statement names %s", got, s.SignOffSHA256))
+		}
+		c.SignOffChecked = true
+	case s.SignOffSHA256 != "" && signoff.Strict:
+		return fail("the statement names a sign-off file (SHA-256 " + s.SignOffSHA256 + ") and none was given; --strict-signoff requires the file served at the same link with --copy-signoff")
+	}
 	c.OK = true
 	return c
+}
+
+// readCopySignOff reads the --copy-signoff file; a file that cannot be read
+// stops the run with exit 2, as every other input file does.
+func readCopySignOff(path string, strict bool) copySignOff {
+	if path == "" {
+		return copySignOff{Strict: strict}
+	}
+	b, readErr := os.ReadFile(path)
+	if readErr != nil {
+		fmt.Fprintln(os.Stderr, "verdifax-verify: read --copy-signoff:", readErr)
+		os.Exit(2)
+	}
+	return copySignOff{Given: true, Bytes: b, Strict: strict}
+}
+
+// copyRecordKind is the kind a hosted copy's record is, read from the record
+// as the verifier reads its input: "receipt" for a receipt document, "bundle"
+// otherwise.
+func copyRecordKind(record []byte) string {
+	if isReceiptDocument(record) {
+		return "receipt"
+	}
+	return "bundle"
+}
+
+// copyKeyPeriod prints a copy-statement key's acceptance period.
+func copyKeyPeriod(k copyStatementKey) string {
+	from, until := "always", "always"
+	if k.NotBefore != 0 {
+		from = time.Unix(k.NotBefore, 0).UTC().Format(time.RFC3339)
+	}
+	if k.NotAfter != 0 {
+		until = time.Unix(k.NotAfter, 0).UTC().Format(time.RFC3339)
+	}
+	return "accepted from " + from + " until " + until
 }
 
 // printCopyStatement prints the --copy-statement result as one report line.
@@ -169,8 +275,11 @@ func printCopyStatement(c *CopyStatementCheck) {
 		return
 	}
 	signoff := "no sign-off file"
-	if c.SignOffSHA256 != "" {
-		signoff = "sign-off file SHA-256 " + c.SignOffSHA256
+	switch {
+	case c.SignOffChecked:
+		signoff = "sign-off file checked, SHA-256 " + c.SignOffSHA256 + " as stated"
+	case c.SignOffSHA256 != "":
+		signoff = "sign-off file NOT CHECKED: the statement names SHA-256 " + c.SignOffSHA256 + "; pass the file served at the same link with --copy-signoff"
 	}
 	fmt.Printf("  %-18s✓ the statement signed by %s binds token %s to this record (run %d, %s), served for %s, sequence %d, stated %s; %s\n",
 		"Hosted copy:", c.Key, c.Token, c.RunID, c.Kind, c.Origin, c.Sequence, c.StatedAt, signoff)

@@ -92,6 +92,8 @@ verdifax-verify --signoff signoffs.json --approver-key approver.txt bundle.json 
 verdifax-verify --signoff-history signoff-history.json          # check an account's chain of sign-offs
 verdifax-verify --signer-key key.txt bundle.json  # also confirm the request was signed by this public key
 verdifax-verify --job job-folder/                 # check one job's records and the links between them
+verdifax-verify --copy-statement "$STATEMENT" --copy-token TOKEN --copy-signoff signoff.json bundle.json  # check a hosted copy of a hardware record and its sign-off file
+verdifax-verify --keys                            # list every key this verifier trusts
 verdifax-verify --allow-partial bundle.json       # exit 0 for a record the public log covers only in part
 verdifax-verify --tamper-test bundle.json         # change every sealed value one at a time and confirm each change fails
 verdifax-verify --tamper-test --recompute-hashes bundle.json  # the same, as a forger who also recomputes every hash the record stores
@@ -623,7 +625,9 @@ Every public-log entry Verdifax makes is a Rekor `hashedrekord` signed
 with one of these ECDSA P-256 keys. The fingerprint is the hex SHA-256
 of the key's DER SubjectPublicKeyInfo. The verifier embeds all four
 (`entryauth.go`), checks the fingerprints when it starts, and lists them
-with `--log-keys`. Each key is accepted from the start of its period up
+with `--keys` (or `--log-keys`, the same list), each with its period,
+custody, purpose and first use, followed by the one other key it trusts,
+the copy-statement key below. Each key is accepted from the start of its period up
 to, but not including, its end, so two keys that hand over at one moment
 never overlap. Keys of two separate deployments are accepted side by
 side: key 2 within key 1's period, and key 4 alongside key 3; every
@@ -679,6 +683,23 @@ are never signed by the same key.
     -----BEGIN PUBLIC KEY-----
     MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvYfDZ2vhFrFfpU6fawu9Ce+ur4pQ
     nVRgazluO4ZlR5VRDkYC5jLfT25PzywvkK5VUdo1e1ZSZKh5xaQlvbawiw==
+    -----END PUBLIC KEY-----
+
+**The copy-statement key** is not a log-signing key. The hardware-attested
+machine also holds a copy-statement key in AWS KMS (fingerprint
+93a6eb8d...), used only to sign the statements that bind a hosted copy to
+its link. It signs no public-log entry and no record. It is an
+ECC_NIST_P256 key in AWS Key Management Service (us-east-2) whose private
+half never leaves KMS; the machine signs with it through its own role.
+Accepted only for statements stated from 2026-11-26T20:42:42Z, the moment
+KMS created it (since v0.42.0; the time checked is the statement's own
+signed time), and in use by 2026-11-27. The verifier pins it in
+`copystatement.go`.
+
+    fingerprint 93a6eb8db2b50f62c462cc92e588e9f3bd98668c81e8cffad4f7dd4f4c2afe7e
+    -----BEGIN PUBLIC KEY-----
+    MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtPFbzLooRiVB51wcsxrm926D8QUX
+    2Yc/aiI1haThIIp4fTfAApEVmN3QjJmXJd4RdyYozPr++CY7oZZy8XmDug==
     -----END PUBLIC KEY-----
 
 A new key is added here with the moment it takes effect, and a retired
@@ -917,6 +938,37 @@ signed that decision on that result, and that Verdifax logged it. It does
 not show that the review was careful, that the result was right, or who the
 person is: a key is not an identity. It gates nothing on its own. Verdifax
 did not review the result. The verifier reads sign-offs since v0.22.0.
+
+### Hosted copies: `--copy-statement`, `--copy-token` and `--copy-signoff`
+
+The hardware-attested machine at `attested.verdifax.com` is off between
+evaluations, so `api.verdifax.com` serves an exact copy of each record it
+made public, at the same token link, with the machine's signed statement in
+the header `X-Verdifax-Hosted-Copy-Statement`:
+
+```bash
+curl -s -D headers.txt -o bundle.json https://api.verdifax.com/public/runs/TOKEN/bundle.json
+curl -s -o signoff.json https://api.verdifax.com/public/runs/TOKEN/signoff.json
+STATEMENT=$(grep -i '^x-verdifax-hosted-copy-statement:' headers.txt | cut -d' ' -f2 | tr -d '\r')
+verdifax-verify --copy-statement "$STATEMENT" --copy-token TOKEN --copy-signoff signoff.json bundle.json
+```
+
+- **Signature:** the statement must be signed by the copy-statement key
+  ([Log-signing keys](#log-signing-keys) lists it), stated within the key's
+  period.
+- **Link:** the statement must keep a copy under that token, not withdraw one.
+- **Record:** the file's SHA-256, run and kind (a receipt or a bundle, read
+  from the record) must be the ones the statement names.
+- **Sign-off file:** pass the file served at the same link with
+  `--copy-signoff`; the verifier fails if its SHA-256 is not the one the
+  statement names. When the statement names one and no file is given,
+  `--strict-signoff` fails the record; without it the report says the
+  sign-off file was not checked (since v0.42.0; v0.41.0 printed the hash to
+  compare by hand).
+
+The statement shows which record the machine put at which link; the record
+itself still proves where it was made, by its hardware report and its key 4
+entry.
 
 ### The signal feed: `--signals` and `--signals-after`
 
